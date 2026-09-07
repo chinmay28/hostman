@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // Knowing an app is healthy is only half of knowing where to open it, and the

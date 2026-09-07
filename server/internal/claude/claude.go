@@ -38,9 +38,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/claudecli"
-	"github.com/chinmay28/deployer/server/internal/sshx"
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/claudecli"
+	"github.com/chinmay28/hostman/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 const (
@@ -582,7 +582,7 @@ func (s *Session) request(ctx context.Context, build func(id string) []byte) (cl
 		return claudecli.Event{}, ErrClosed
 	}
 	s.nextReq++
-	id := "deployer-" + strconv.Itoa(s.nextReq)
+	id := "hostman-" + strconv.Itoa(s.nextReq)
 	ch := make(chan claudecli.Event, 1)
 	s.waiters[id] = ch
 	s.lastSeen = s.now()

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // selfView is what Settings needs to show "this machine" and offer an update.

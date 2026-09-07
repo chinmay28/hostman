@@ -24,13 +24,13 @@ import (
 // somebody else's software and can change under it.
 //
 // It starts a daemon that opens ports and speaks to the network, so it is
-// opt-in: DEPLOYER_DELUGE=1, and deluge installed.
+// opt-in: HOSTMAN_DELUGE=1, and deluge installed.
 //
-//	DEPLOYER_DELUGE=1 go test ./internal/hostops/ -run RealDeluge -v
+//	HOSTMAN_DELUGE=1 go test ./internal/hostops/ -run RealDeluge -v
 func requireDeluge(t *testing.T) {
 	t.Helper()
-	if os.Getenv("DEPLOYER_DELUGE") != "1" {
-		t.Skip("set DEPLOYER_DELUGE=1 to run against a real deluge")
+	if os.Getenv("HOSTMAN_DELUGE") != "1" {
+		t.Skip("set HOSTMAN_DELUGE=1 to run against a real deluge")
 	}
 	for _, piece := range torrentPieces {
 		if _, err := exec.LookPath(piece); err != nil {
@@ -132,7 +132,7 @@ func TestRealDelugeTakesWhatHostManSends(t *testing.T) {
 	}
 
 	// The file a phone would have picked, sent the way the API sends it.
-	body := base64.StdEncoding.EncodeToString(aTorrentFile("deployer-test-file"))
+	body := base64.StdEncoding.EncodeToString(aTorrentFile("hostman-test-file"))
 	folder := filepath.Join(work, "downloads")
 	out, code = runScript(t, torrentAddFor(root, "picked.torrent", "", folder), body, bin)
 	if code != 0 {
@@ -157,7 +157,7 @@ func TestRealDelugeTakesWhatHostManSends(t *testing.T) {
 	// through the parser rather than looked at.
 	added := waitForTorrent(t, root, bin, 1)
 	got := added.Torrents[0]
-	if got.Name != "deployer-test-file" {
+	if got.Name != "hostman-test-file" {
 		t.Errorf("name = %q, want the name inside the torrent file", got.Name)
 	}
 	if !torrentIDPattern.MatchString(got.ID) {

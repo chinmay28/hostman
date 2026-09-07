@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 func TestParseExitMarker(t *testing.T) {
@@ -199,7 +199,7 @@ func TestSelfUpdateOnAnotherHostRunsNormally(t *testing.T) {
 	e := newEnv(t) // host is not marked as self
 	app := e.app(t, &store.App{
 		Name:           "HostMan",
-		InstallCommand: "echo installing deployer elsewhere",
+		InstallCommand: "echo installing hostman elsewhere",
 		SelfUpdate:     true,
 	})
 	started, err := e.runner.Start(context.Background(), app.ID, e.host.ID, nil)
@@ -236,7 +236,7 @@ func TestResumeDetachedAfterRestart(t *testing.T) {
 
 	// The command kept running on the host while HostMan was down, and has
 	// since finished.
-	content := "==> installing\nbuilding the web app\nrestarting deployer.service\n\n" + exitMarker + "0\n"
+	content := "==> installing\nbuilding the web app\nrestarting hostman.service\n\n" + exitMarker + "0\n"
 	if err := os.WriteFile(logPath, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ func TestResumeDetachedAfterRestart(t *testing.T) {
 	if !strings.Contains(got.Log, "Reconnected after restart") {
 		t.Errorf("log should say it was picked back up:\n%s", got.Log)
 	}
-	if !strings.Contains(got.Log, "restarting deployer.service") {
+	if !strings.Contains(got.Log, "restarting hostman.service") {
 		t.Errorf("log written while HostMan was down was lost:\n%s", got.Log)
 	}
 	if strings.Contains(got.Log, exitMarker) {
@@ -345,7 +345,7 @@ func TestInterruptLeavesDetachedDeploymentsAlone(t *testing.T) {
 	}
 }
 
-// `systemctl restart deployer` reaches HostMan as a SIGTERM, which triggers a
+// `systemctl restart hostman` reaches HostMan as a SIGTERM, which triggers a
 // graceful shutdown. That must not cancel the very update doing the restarting.
 func TestShutdownLeavesDetachedDeploymentsRunning(t *testing.T) {
 	e := selfHostEnv(t)
@@ -530,5 +530,21 @@ func TestHealthIsNotFailedDuringADeployment(t *testing.T) {
 	reloaded, _ := e.db.GetInstallation(ctx, in.ID)
 	if reloaded.HealthStatus != store.HealthFailing {
 		t.Errorf("stored health = %q, want the previous result untouched", reloaded.HealthStatus)
+	}
+}
+
+// The binary from before the rename wrote its exit marker under the old name,
+// and the one self-update that replaces it is read to the end by this one.
+func TestExitMarkerFromBeforeTheRenameStillCounts(t *testing.T) {
+	log := "building\n" + legacyExitMarker + "0\n"
+	code, done := parseExitMarker(log)
+	if !done || code != 0 {
+		t.Fatalf("parseExitMarker(legacy) = %d, %v; want 0, true", code, done)
+	}
+	if got := stripExitMarker(log); got != "building" {
+		t.Errorf("stripExitMarker(legacy) = %q, want %q", got, "building")
+	}
+	if _, done := parseExitMarker("building\n" + legacyExitMarker); done {
+		t.Error("a legacy marker with no status yet counted as finished")
 	}
 }

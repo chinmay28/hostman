@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/chinmay28/deployer/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/sshx"
 )
 
 // sshKeyView tells the user how to trust HostMan on a new host.
@@ -26,7 +26,7 @@ func (s *Server) sshKeyView() sshKeyView {
 		AuthorizeCommand: fmt.Sprintf(
 			`mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '%s' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys`,
 			pub),
-		SudoCommand: `echo "$(whoami) ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/deployer >/dev/null && sudo chmod 440 /etc/sudoers.d/deployer`,
+		SudoCommand: `echo "$(whoami) ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/hostman >/dev/null && sudo chmod 440 /etc/sudoers.d/hostman`,
 	}
 }
 

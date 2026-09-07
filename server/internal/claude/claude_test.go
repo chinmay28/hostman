@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/claudecli"
+	"github.com/chinmay28/hostman/server/internal/claudecli"
 )
 
 // What is worth proving here is the bookkeeping a real CLI would not exercise:

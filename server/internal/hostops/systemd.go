@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chinmay28/deployer/server/internal/sshx"
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // A machine runs hundreds of systemd services and cares about a handful. The
@@ -443,7 +443,7 @@ p="$dir/$u"
 if systemctl cat -- "$u" >/dev/null 2>&1; then
   printf 'this host already has a service called %s\n' "$u" >&2; exit 5
 fi
-tmp=$(mktemp "$dir/.deployer.XXXXXX") || { printf 'cannot write in %s\n' "$dir" >&2; exit 6; }
+tmp=$(mktemp "$dir/.hostman.XXXXXX") || { printf 'cannot write in %s\n' "$dir" >&2; exit 6; }
 trap 'rm -f "$tmp"' EXIT
 base64 -d > "$tmp" || { printf 'could not decode the unit file\n' >&2; exit 7; }
 chmod 644 -- "$tmp" 2>/dev/null || true
@@ -644,7 +644,7 @@ u=$1
 n=$2
 cap=$3
 command -v journalctl >/dev/null 2>&1 || { printf 'journalctl is not installed on this host\n' >&2; exit 2; }
-tmp=$(mktemp /tmp/deployer-log.XXXXXX) || { printf 'cannot write a temporary file\n' >&2; exit 3; }
+tmp=$(mktemp /tmp/hostman-log.XXXXXX) || { printf 'cannot write a temporary file\n' >&2; exit 3; }
 trap 'rm -f "$tmp"' EXIT
 journalctl --no-pager --no-hostname -o short-iso -n "$n" -u "$u" >"$tmp" 2>/dev/null ||
   journalctl --no-pager -o short-iso -n "$n" -u "$u" >"$tmp" || exit 4

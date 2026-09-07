@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // fakeCron is a stand-in for the crontab command, doing the parts these scripts

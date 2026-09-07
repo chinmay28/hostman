@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/hosts"
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/hosts"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // Health check cadence and bounds.

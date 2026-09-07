@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/hosts"
-	"github.com/chinmay28/deployer/server/internal/sshx"
-	"github.com/chinmay28/deployer/server/internal/store"
-	"github.com/chinmay28/deployer/server/internal/testutil"
+	"github.com/chinmay28/hostman/server/internal/hosts"
+	"github.com/chinmay28/hostman/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/testutil"
 )
 
 // env is a HostMan wired up against a throwaway sshd on localhost, so
@@ -33,7 +33,7 @@ func newEnv(t *testing.T) *env {
 	t.Helper()
 	testutil.RequireSSHD(t)
 
-	db, err := store.Open(filepath.Join(t.TempDir(), "deployer.db"))
+	db, err := store.Open(filepath.Join(t.TempDir(), "hostman.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

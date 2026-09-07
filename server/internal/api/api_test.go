@@ -13,18 +13,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/claude"
-	"github.com/chinmay28/deployer/server/internal/deploy"
-	"github.com/chinmay28/deployer/server/internal/hostops"
-	"github.com/chinmay28/deployer/server/internal/hosts"
-	"github.com/chinmay28/deployer/server/internal/shell"
-	"github.com/chinmay28/deployer/server/internal/sshx"
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/claude"
+	"github.com/chinmay28/hostman/server/internal/deploy"
+	"github.com/chinmay28/hostman/server/internal/hostops"
+	"github.com/chinmay28/hostman/server/internal/hosts"
+	"github.com/chinmay28/hostman/server/internal/shell"
+	"github.com/chinmay28/hostman/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 func testServer(t *testing.T, pin string) (*Server, http.Handler) {
 	t.Helper()
-	db, err := store.Open(filepath.Join(t.TempDir(), "deployer.db"))
+	db, err := store.Open(filepath.Join(t.TempDir(), "hostman.db"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

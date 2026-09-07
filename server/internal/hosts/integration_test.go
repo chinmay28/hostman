@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/metrics"
-	"github.com/chinmay28/deployer/server/internal/selfhost"
-	"github.com/chinmay28/deployer/server/internal/sshx"
-	"github.com/chinmay28/deployer/server/internal/store"
-	"github.com/chinmay28/deployer/server/internal/testutil"
+	"github.com/chinmay28/hostman/server/internal/metrics"
+	"github.com/chinmay28/hostman/server/internal/selfhost"
+	"github.com/chinmay28/hostman/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/testutil"
 )
 
 // These tests drive the real SSH path against a throwaway sshd on localhost:
@@ -25,7 +25,7 @@ func testEnv(t *testing.T) (*store.DB, *Service, *store.Host) {
 	t.Helper()
 	testutil.RequireSSHD(t)
 
-	db, err := store.Open(filepath.Join(t.TempDir(), "deployer.db"))
+	db, err := store.Open(filepath.Join(t.TempDir(), "hostman.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func TestPinnedHostKeyMismatchIsRejected(t *testing.T) {
 
 func TestUnreachableHostIsMarkedOffline(t *testing.T) {
 	testutil.RequireSSHD(t)
-	db, err := store.Open(filepath.Join(t.TempDir(), "deployer.db"))
+	db, err := store.Open(filepath.Join(t.TempDir(), "hostman.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,12 +9,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chinmay28/deployer/server/internal/claude"
-	"github.com/chinmay28/deployer/server/internal/deploy"
-	"github.com/chinmay28/deployer/server/internal/hostops"
-	"github.com/chinmay28/deployer/server/internal/hosts"
-	"github.com/chinmay28/deployer/server/internal/shell"
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/claude"
+	"github.com/chinmay28/hostman/server/internal/deploy"
+	"github.com/chinmay28/hostman/server/internal/hostops"
+	"github.com/chinmay28/hostman/server/internal/hosts"
+	"github.com/chinmay28/hostman/server/internal/shell"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // SelfManager is the slice of selfhost the API needs.

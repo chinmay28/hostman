@@ -231,7 +231,7 @@ func writeFile(t *testing.T, path, content string) int {
 
 func TestReadScript(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "deployer.conf")
+	path := filepath.Join(dir, "hostman.conf")
 	const content = "# a config\nkey = value\n"
 	if err := os.WriteFile(path, []byte(content), 0o640); err != nil {
 		t.Fatal(err)

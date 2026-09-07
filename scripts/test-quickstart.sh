@@ -38,7 +38,7 @@ cat > "$SANDBOX/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
 STUB_DIR="$STUB_DIR"
-UNIT_FILE="$DEPLOYER_UNIT"
+UNIT_FILE="$HOSTMAN_UNIT"
 
 stop_it() {
   if [ -f "$STUB_DIR/pid" ]; then
@@ -71,7 +71,7 @@ STUB
 
 # The stub needs those two paths baked in; it runs without the caller's env.
 sed -i "s|STUB_DIR=\"\$STUB_DIR\"|STUB_DIR=\"$SANDBOX/stub\"|" "$SANDBOX/bin/systemctl"
-sed -i "s|UNIT_FILE=\"\$DEPLOYER_UNIT\"|UNIT_FILE=\"$SANDBOX/deployer.service\"|" "$SANDBOX/bin/systemctl"
+sed -i "s|UNIT_FILE=\"\$HOSTMAN_UNIT\"|UNIT_FILE=\"$SANDBOX/hostman.service\"|" "$SANDBOX/bin/systemctl"
 
 cat > "$SANDBOX/bin/journalctl" <<STUB
 #!/usr/bin/env bash
@@ -95,13 +95,13 @@ run_installer() {
   [ "${1:-}" = "--" ] && shift
 
   env \
-    DEPLOYER_REPO="$SANDBOX/origin.git" \
-    DEPLOYER_REF="$(git -C "$SANDBOX/origin.git" rev-parse --abbrev-ref HEAD)" \
-    DEPLOYER_INSTALL_DIR="$SANDBOX/opt" \
-    DEPLOYER_DATA_DIR="$SANDBOX/data" \
-    DEPLOYER_UNIT="$SANDBOX/deployer.service" \
-    DEPLOYER_SERVICE_USER=root \
-    DEPLOYER_PORT="$PORT" \
+    HOSTMAN_REPO="$SANDBOX/origin.git" \
+    HOSTMAN_REF="$(git -C "$SANDBOX/origin.git" rev-parse --abbrev-ref HEAD)" \
+    HOSTMAN_INSTALL_DIR="$SANDBOX/opt" \
+    HOSTMAN_DATA_DIR="$SANDBOX/data" \
+    HOSTMAN_UNIT="$SANDBOX/hostman.service" \
+    HOSTMAN_SERVICE_USER=root \
+    HOSTMAN_PORT="$PORT" \
     STUB_DIR="$SANDBOX/stub" \
     "${extra_env[@]}" \
     bash "$REPO_ROOT/scripts/quickstart.sh" "$@"
@@ -132,7 +132,7 @@ go_download_fails() {
   printf '%s' "$stub" > "$SANDBOX/failbin/curl"
   chmod +x "$SANDBOX/failbin/curl"
 
-  if run_installer PATH="$SANDBOX/failbin:$PATH" DEPLOYER_GO_DIR="$SANDBOX/goroot" \
+  if run_installer PATH="$SANDBOX/failbin:$PATH" HOSTMAN_GO_DIR="$SANDBOX/goroot" \
        -- > "$SANDBOX/gofail.log" 2>&1; then
     cat "$SANDBOX/gofail.log"
     fail "$name: the installer should stop when Go cannot be installed"
@@ -182,8 +182,8 @@ chmod +x "$SANDBOX/failbin/curl"
 
 # Pointed at a ref that does not exist, so the run stops at the clone just after
 # the Go step instead of going on to build with a toolchain that cannot compile.
-if run_installer PATH="$SANDBOX/failbin:$PATH" DEPLOYER_GO_DIR="$SANDBOX/goroot" \
-     DEPLOYER_REF=no-such-ref -- > "$SANDBOX/goswap.log" 2>&1; then
+if run_installer PATH="$SANDBOX/failbin:$PATH" HOSTMAN_GO_DIR="$SANDBOX/goroot" \
+     HOSTMAN_REF=no-such-ref -- > "$SANDBOX/goswap.log" 2>&1; then
   cat "$SANDBOX/goswap.log"
   fail "the run should have stopped at the missing ref"
 fi
@@ -208,11 +208,11 @@ run_installer > "$SANDBOX/install.log" 2>&1 || {
   fail "fresh install exited non-zero"
 }
 
-[ -x "$SANDBOX/opt/deployer" ] || fail "binary not installed"
-[ -f "$SANDBOX/deployer.service" ] || fail "unit file not written"
-grep -q "ExecStart=$SANDBOX/opt/deployer -addr :$PORT" "$SANDBOX/deployer.service" ||
+[ -x "$SANDBOX/opt/hostman" ] || fail "binary not installed"
+[ -f "$SANDBOX/hostman.service" ] || fail "unit file not written"
+grep -q "ExecStart=$SANDBOX/opt/hostman -addr :$PORT" "$SANDBOX/hostman.service" ||
   fail "unit file has the wrong ExecStart"
-grep -q 'NoNewPrivileges=yes' "$SANDBOX/deployer.service" || fail "unit file lost its hardening"
+grep -q 'NoNewPrivileges=yes' "$SANDBOX/hostman.service" || fail "unit file lost its hardening"
 curl -fsS --max-time 3 "http://127.0.0.1:$PORT/api/health" >/dev/null ||
   fail "the installed service is not answering"
 pass "installs, writes a hardened unit, and the service answers"
@@ -239,10 +239,10 @@ run_installer > "$SANDBOX/upgrade.log" 2>&1 || {
 }
 
 grep -q 'Snapshotting the database' "$SANDBOX/upgrade.log" || fail "no database snapshot was taken"
-ls "$SANDBOX/data/backups"/deployer-*.db >/dev/null 2>&1 || fail "snapshot file missing"
+ls "$SANDBOX/data/backups"/hostman-*.db >/dev/null 2>&1 || fail "snapshot file missing"
 curl -fsS --max-time 3 "http://127.0.0.1:$PORT/api/hosts" | grep -q upgrade-canary ||
   fail "data did not survive the upgrade"
-[ ! -e "$SANDBOX/opt/deployer.prev" ] || fail "the previous binary was left behind"
+[ ! -e "$SANDBOX/opt/hostman.prev" ] || fail "the previous binary was left behind"
 pass "upgrades in place, snapshots the database, and keeps the data"
 
 # -------------------------------------------------------------------- rollback
@@ -256,13 +256,13 @@ grep -q 'Rolling back' "$SANDBOX/rollback.log" || {
   cat "$SANDBOX/rollback.log"
   fail "no rollback was attempted"
 }
-[ ! -e "$SANDBOX/opt/deployer.prev" ] || fail "rollback left deployer.prev in place"
-[ -x "$SANDBOX/opt/deployer" ] || fail "rollback did not restore a runnable binary"
+[ ! -e "$SANDBOX/opt/hostman.prev" ] || fail "rollback left hostman.prev in place"
+[ -x "$SANDBOX/opt/hostman" ] || fail "rollback did not restore a runnable binary"
 pass "a failed upgrade rolls back to the previous version"
 
 # The rollback restarts the old binary through the stub, which was told not to
 # start anything — so bring it back up the way the stub would have.
-STUB_DIR="$SANDBOX/stub" DEPLOYER_UNIT="$SANDBOX/deployer.service" systemctl start deployer.service
+STUB_DIR="$SANDBOX/stub" HOSTMAN_UNIT="$SANDBOX/hostman.service" systemctl start hostman.service
 for _ in $(seq 1 20); do
   if curl -fsS --max-time 2 "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then break; fi
   sleep 0.5
@@ -277,8 +277,8 @@ info "Uninstall"
 run_installer -- --uninstall > "$SANDBOX/uninstall.log" 2>&1 ||
   fail "uninstall exited non-zero"
 [ ! -e "$SANDBOX/opt" ] || fail "uninstall left the install directory"
-[ ! -e "$SANDBOX/deployer.service" ] || fail "uninstall left the unit file"
-[ -f "$SANDBOX/data/deployer.db" ] || fail "uninstall deleted the database — it must be kept"
+[ ! -e "$SANDBOX/hostman.service" ] || fail "uninstall left the unit file"
+[ -f "$SANDBOX/data/hostman.db" ] || fail "uninstall deleted the database — it must be kept"
 pass "uninstall removes the service but keeps the data"
 
 echo

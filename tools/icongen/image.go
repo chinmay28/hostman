@@ -7,7 +7,8 @@ import (
 	"golang.org/x/image/draw"
 )
 
-// Matte paints the paper around the artwork in the given colour: every
+// Matte paints the paper around the artwork in the given colour (which may be
+// transparent, leaving the artwork on nothing): every
 // near-white pixel reachable from the image's edge through other near-white
 // pixels, plus the one-pixel fringe where the artwork's outline was
 // anti-aliased against the paper. White inside the artwork (a laptop screen,

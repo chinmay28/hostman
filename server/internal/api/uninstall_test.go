@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // An app that never said how to remove itself cannot be removed, and says so

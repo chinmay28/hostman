@@ -16,7 +16,7 @@ const BUSY_POLL_MS = 4000
 
 /** The last folder and model used, remembered on the phone: the next session
  *  on the same host usually wants the same ones. */
-const PREFS_KEY = 'deployer.claude.start'
+const PREFS_KEY = 'hostman.claude.start'
 
 /**
  * Claude Code on a host.

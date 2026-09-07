@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/sshx"
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
-const testKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKeyForTests000000000000000000 deployer"
+const testKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKeyForTests000000000000000000 hostman"
 
 // runAuthorize executes the real authorize script over a real SSH connection,
 // with HOME pointed at a directory the test owns, and returns what it printed.
@@ -121,7 +121,7 @@ func TestAuthorizeScriptKeepsExistingKeysIntact(t *testing.T) {
 }
 
 func TestProvisionRefusesAnEmptyPassword(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "deployer.db"))
+	db, err := store.Open(filepath.Join(t.TempDir(), "hostman.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

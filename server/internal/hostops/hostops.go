@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/chinmay28/deployer/server/internal/sshx"
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // Connector opens SSH connections to hosts. hosts.Service satisfies it.
@@ -31,14 +31,14 @@ type Service struct {
 // NewService builds a Service that connects through c.
 func NewService(c Connector) *Service { return &Service{conn: c} }
 
-// asUser builds `sh -c SCRIPT deployer ARGS...`, so every value the user
+// asUser builds `sh -c SCRIPT hostman ARGS...`, so every value the user
 // supplied arrives as "$1", "$2" — a quoted argument the script reads, never
 // text the shell parses. A path can therefore never become a command.
 func asUser(script string, args ...string) string {
 	var b strings.Builder
 	b.WriteString("sh -c ")
 	b.WriteString(sshx.Quote(script))
-	b.WriteString(" deployer")
+	b.WriteString(" hostman")
 	for _, a := range args {
 		b.WriteString(" ")
 		b.WriteString(sshx.Quote(a))

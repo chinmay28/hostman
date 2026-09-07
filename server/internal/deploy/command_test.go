@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 func TestShellQuote(t *testing.T) {
@@ -89,7 +89,7 @@ func TestParamsCannotInjectCommands(t *testing.T) {
 // The quoting has to survive a real shell, not just look right.
 func TestQuotedParamsSurviveARealShell(t *testing.T) {
 	nasty := []string{
-		"8787; touch /tmp/deployer-pwned",
+		"8787; touch /tmp/hostman-pwned",
 		"$(id)",
 		"`id`",
 		"a'; id; echo '",

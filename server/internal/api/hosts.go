@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // summaryWindow is how far back the CPU and memory ranges reach. It matches

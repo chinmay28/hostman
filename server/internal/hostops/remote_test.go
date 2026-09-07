@@ -136,7 +136,7 @@ func TestSetupScriptWritesTheSessionAndStartsTheInstall(t *testing.T) {
 	}
 	// The session script reads no configuration of its own: systemd hands it
 	// everything, which is what keeps a file on the host from being run.
-	wantExec := fmt.Sprintf("ExecStart=%s/remote-session.sh 1280x800 %d %d 6080 %s %s/home/pi/.config/deployer-remote %s/home/pi/Downloads",
+	wantExec := fmt.Sprintf("ExecStart=%s/remote-session.sh 1280x800 %d %d 6080 %s %s/home/pi/.config/hostman-remote %s/home/pi/Downloads",
 		remoteLibDir, remoteDisplay, remoteVNCPort, root+remoteConfDir, root, root)
 	if !strings.Contains(unit, wantExec) {
 		t.Errorf("unit runs the wrong command:\n%s\nwant it to contain:\n%s", unit, wantExec)
@@ -476,7 +476,7 @@ func TestRemoveScriptLeavesTheDownloadsAndTakesTheProfileOnlyWhenAsked(t *testin
 			filepath.Join(root, remoteLibDir),
 			filepath.Join(root, "etc/systemd/system"),
 			filepath.Join(root, "home/pi/Downloads"),
-			filepath.Join(root, "home/pi/.config/deployer-remote/Default"),
+			filepath.Join(root, "home/pi/.config/hostman-remote/Default"),
 		}
 		for _, dir := range dirs {
 			if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -488,7 +488,7 @@ func TestRemoveScriptLeavesTheDownloadsAndTakesTheProfileOnlyWhenAsked(t *testin
 			filepath.Join(root, remoteLibDir, "remote-session.sh"),
 			filepath.Join(root, remoteConfDir, "password"),
 			filepath.Join(root, "home/pi/Downloads/statement.pdf"),
-			filepath.Join(root, "home/pi/.config/deployer-remote/Default/Cookies"),
+			filepath.Join(root, "home/pi/.config/hostman-remote/Default/Cookies"),
 		} {
 			if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
 				t.Fatal(err)
@@ -517,7 +517,7 @@ func TestRemoveScriptLeavesTheDownloadsAndTakesTheProfileOnlyWhenAsked(t *testin
 		}
 		for _, kept := range []string{
 			filepath.Join(root, "home/pi/Downloads/statement.pdf"),
-			filepath.Join(root, "home/pi/.config/deployer-remote/Default/Cookies"),
+			filepath.Join(root, "home/pi/.config/hostman-remote/Default/Cookies"),
 		} {
 			if _, err := os.Stat(kept); err != nil {
 				t.Errorf("%s should have been left alone: %v", kept, err)
@@ -530,7 +530,7 @@ func TestRemoveScriptLeavesTheDownloadsAndTakesTheProfileOnlyWhenAsked(t *testin
 		if _, code := runScript(t, asUser(script, root, "pi", "1"), "", bin); code != 0 {
 			t.Fatalf("remove exited %d", code)
 		}
-		if _, err := os.Stat(filepath.Join(root, "home/pi/.config/deployer-remote")); !os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(root, "home/pi/.config/hostman-remote")); !os.IsNotExist(err) {
 			t.Error("the profile should have gone with a purge")
 		}
 		// The files somebody went to the trouble of downloading are not part of
@@ -915,7 +915,7 @@ func TestInstallScriptFetchesAPackageBrowserWhereOnlySnapsExist(t *testing.T) {
 		// what was wrong the first time this ran on a real host.
 		filepath.Join(bin, "curl"): "#!/bin/sh\nprintf '%s\\n' \"$3\" >> " +
 			filepath.Join(bin, "..", "downloaded") + "\n: > \"$3\"\n",
-		filepath.Join(bin, "apt-get"): "#!/bin/sh\ncase \"$*\" in *.deb*|*/tmp/deployer-chrome*) " +
+		filepath.Join(bin, "apt-get"): "#!/bin/sh\ncase \"$*\" in *.deb*|*/tmp/hostman-chrome*) " +
 			"printf '#!/bin/sh\\nexit 0\\n' > " + filepath.Join(bin, "google-chrome") +
 			"; chmod +x " + filepath.Join(bin, "google-chrome") + ";; esac\nexit 0\n",
 	} {

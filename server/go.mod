@@ -1,4 +1,4 @@
-module github.com/chinmay28/deployer/server
+module github.com/chinmay28/hostman/server
 
 go 1.25.0
 

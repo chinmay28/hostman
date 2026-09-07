@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // Claude Code on a host is three things HostMan looks after before a
@@ -46,7 +46,7 @@ const (
 	// sign-in on the host, relative to the user's home. It is HostMan's,
 	// and holds nothing secret: logs, exit statuses, and the link a sign-in
 	// is waiting on.
-	claudeStateDir = ".local/state/deployer-claude"
+	claudeStateDir = ".local/state/hostman-claude"
 
 	// MaxClaudeLogBytes is how much of an install or login log comes back.
 	MaxClaudeLogBytes = 16 << 10
@@ -106,6 +106,11 @@ const claudeStatusScript = `set -u
 max=%d
 state="$HOME/%s"
 PATH="$HOME/.local/bin:$PATH"; export PATH
+# State kept under the name this had before the rename moves across, so a
+# sign-in from then is still a sign-in now.
+if [ -d "$HOME/.local/state/deployer-claude" ] && [ ! -e "$state" ]; then
+  mv "$HOME/.local/state/deployer-claude" "$state" 2>/dev/null || true
+fi
 
 printf '@@home\n%%s\n' "$HOME"
 printf '@@arch\n%%s\n' "$(uname -m 2>/dev/null)"
@@ -347,6 +352,11 @@ func (s *Service) InstallClaude(ctx context.Context, h *store.Host) (*ClaudeHost
 const claudeLoginScript = `set -u
 state="$HOME/%s"
 PATH="$HOME/.local/bin:$PATH"; export PATH
+# State kept under the name this had before the rename moves across, so a
+# sign-in from then is still a sign-in now.
+if [ -d "$HOME/.local/state/deployer-claude" ] && [ ! -e "$state" ]; then
+  mv "$HOME/.local/state/deployer-claude" "$state" 2>/dev/null || true
+fi
 command -v claude >/dev/null 2>&1 || { printf 'claude is not installed for this user\n' >&2; exit 4; }
 mkdir -p "$state" || exit 2
 if [ -f "$state/login.pid" ] && kill -0 "$(cat "$state/login.pid" 2>/dev/null)" 2>/dev/null; then

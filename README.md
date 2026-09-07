@@ -23,14 +23,17 @@ curl -fsSL https://raw.githubusercontent.com/chinmay28/hostman/main/scripts/quic
 Then open `http://<that machine>:8899` on your phone and add it to the home
 screen.
 
-Re-run the same command to upgrade. Upgrades build first and only then touch the
+Re-run the same command to upgrade. If the install dates from when this was
+called Deployer, that same run moves it to its new name: the data directory,
+database, service, service account and build tree all come across, and the old
+`deployer.service` is retired. Upgrades build first and only then touch the
 running service: the database is snapshotted, the new binary is health-checked
 after it starts, and if it doesn't come up the previous binary and database are
 restored automatically.
 
 ```sh
 # a PIN for the web UI, a different port, a specific version
-curl -fsSL .../quickstart.sh | sudo DEPLOYER_PIN=1234 DEPLOYER_PORT=9000 DEPLOYER_REF=v1.0 bash
+curl -fsSL .../quickstart.sh | sudo HOSTMAN_PIN=1234 HOSTMAN_PORT=9000 HOSTMAN_REF=v1.0 bash
 
 # remove the service (your data and SSH key are kept)
 curl -fsSL .../quickstart.sh | sudo bash -s -- --uninstall
@@ -87,7 +90,7 @@ end in `| sudo bash`.
 
 **The add-host form will do both for you.** Give it the SSH user's password and
 HostMan signs in with it once, appends its own key, writes
-`/etc/sudoers.d/deployer` through `sudo -S`, and then reconnects with the key
+`/etc/sudoers.d/hostman` through `sudo -S`, and then reconnects with the key
 alone to prove it worked — reporting each step as it goes. Every step is
 idempotent, so a partial run is simply repeated: hosts added earlier, or a
 first attempt that failed, get the same thing from **Set up access** on the
@@ -106,10 +109,10 @@ user HostMan will connect as.
 
 ```sh
 # 1. trust HostMan's key
-mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo 'ssh-ed25519 AAAA... deployer' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys
+mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo 'ssh-ed25519 AAAA... hostman' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys
 
 # 2. allow unattended installs, since install scripts end in `| sudo bash`
-echo "$(whoami) ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/deployer >/dev/null && sudo chmod 440 /etc/sudoers.d/deployer
+echo "$(whoami) ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/hostman >/dev/null && sudo chmod 440 /etc/sudoers.d/hostman
 ```
 
 That is also the route for a host with password logins turned off, which is what
@@ -484,7 +487,7 @@ to run, copyable, and nothing else until it has been run: `sudo apt install -y
 deluged deluge-console`.
 
 **The daemon HostMan sets up is HostMan's own.** Its state lives in
-`/var/lib/deployer-torrent`, it runs as the SSH user, and it answers on port
+`/var/lib/hostman-torrent`, it runs as the SSH user, and it answers on port
 58946 rather than deluge's own 58846 — so a `deluged` the host already runs
 carries on untouched, with its own torrents and its own client attached, instead
 of one of the two losing a race to bind a port. There is still no agent: adding
@@ -788,9 +791,9 @@ it accordingly:
   A shell left open holds an SSH connection until it is closed or is left alone
   for fifteen minutes.
 - It runs **unauthenticated by default**. Set a PIN with `-pin` /
-  `DEPLOYER_PIN` if anything less trusted can reach it.
+  `HOSTMAN_PIN` if anything less trusted can reach it.
 - The **database contains the SSH private key**. The installer keeps it at mode
-  700 under `/var/lib/deployer`; back it up like a secret.
+  700 under `/var/lib/hostman`; back it up like a secret.
 - A **host password given during setup is never stored** — not in the database,
   not in the log. It exists for one request. It does cross the network to
   HostMan in the clear if you are on plain `http`, so set a host up from a
@@ -856,15 +859,15 @@ Server flags:
 
 | Flag    | Env             | Default            | Meaning                    |
 | ------- | --------------- | ------------------ | -------------------------- |
-| `-addr` | `DEPLOYER_ADDR` | `:8899`            | listen address             |
-| `-db`   | `DEPLOYER_DB`   | `data/deployer.db` | SQLite path                |
-| `-pin`  | `DEPLOYER_PIN`  | _(empty)_          | optional PIN; empty = open |
+| `-addr` | `HOSTMAN_ADDR` | `:8899`            | listen address             |
+| `-db`   | `HOSTMAN_DB`   | `data/hostman.db` | SQLite path                |
+| `-pin`  | `HOSTMAN_PIN`  | _(empty)_          | optional PIN; empty = open |
 | `-v`    |                 | `false`            | verbose logging            |
-| `-self-user` | `DEPLOYER_SELF_USER` | _(the account HostMan runs as)_ | SSH user for the home host |
-| `-self-repo` | `DEPLOYER_REPO` | `chinmay28/hostman` | repository a self-update builds from |
-| `-self-ref`  | `DEPLOYER_REF`  | `main`             | default ref for a self-update |
+| `-self-user` | `HOSTMAN_SELF_USER` | _(the account HostMan runs as)_ | SSH user for the home host |
+| `-self-repo` | `HOSTMAN_REPO` | `chinmay28/hostman` | repository a self-update builds from |
+| `-self-ref`  | `HOSTMAN_REF`  | `main`             | default ref for a self-update |
 
-The installer sets `DEPLOYER_SELF_USER` to whoever ran it, since the service
+The installer sets `HOSTMAN_SELF_USER` to whoever ran it, since the service
 account is a `nologin` user and cannot be SSHed to.
 
 Tests cover the probe parser against realistic and degraded `/proc` output, the
@@ -1001,7 +1004,7 @@ Quoting is tested the same way — every path a person could type is handed to
 
 ```
 server/
-  cmd/deployer/      entrypoint: flags, wiring, graceful shutdown
+  cmd/hostman/      entrypoint: flags, wiring, graceful shutdown
   internal/store/    SQLite schema, append-only migrations, queries
   internal/sshx/     HostMan's keypair and SSH connections
   internal/metrics/  the agentless /proc probe and its parser

@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/hosts"
-	"github.com/chinmay28/deployer/server/internal/sshx"
-	"github.com/chinmay28/deployer/server/internal/store"
-	"github.com/chinmay28/deployer/server/internal/testutil"
+	"github.com/chinmay28/hostman/server/internal/hosts"
+	"github.com/chinmay28/hostman/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/testutil"
 )
 
 // The bookkeeping is covered against a fake terminal elsewhere in this package.
@@ -26,7 +26,7 @@ func sshManager(t *testing.T) (*Manager, *store.Host) {
 	t.Helper()
 	testutil.RequireSSHD(t)
 
-	db, err := store.Open(filepath.Join(t.TempDir(), "deployer.db"))
+	db, err := store.Open(filepath.Join(t.TempDir(), "hostman.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestShellRunsACommandOverSSH(t *testing.T) {
 	if err := s.Write([]byte("echo dep''loyer-was-here\n")); err != nil {
 		t.Fatalf("type at the shell: %v", err)
 	}
-	awaitScreen(t, s, "deployer-was-here")
+	awaitScreen(t, s, "hostman-was-here")
 
 	if info := s.Info(); !info.Running || info.Offset == 0 {
 		t.Fatalf("session says running=%v offset=%d", info.Running, info.Offset)

@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/sshx"
-	"github.com/chinmay28/deployer/server/internal/store"
-	"github.com/chinmay28/deployer/server/internal/testutil"
+	"github.com/chinmay28/hostman/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/testutil"
 )
 
 // The whole of provisioning against a real sshd that accepts passwords: the
@@ -21,16 +21,16 @@ import (
 // proves they worked.
 //
 // It is opt-in because it changes the machine it runs on — it creates a
-// throwaway user and writes /etc/sudoers.d/deployer, exactly as it would on a
+// throwaway user and writes /etc/sudoers.d/hostman, exactly as it would on a
 // host. Both are removed afterwards, but don't point it at a machine HostMan
 // already manages. Run it with `make test-provision`.
 func TestProvisionEndToEnd(t *testing.T) {
-	if os.Getenv("DEPLOYER_E2E") != "1" {
-		t.Skip("set DEPLOYER_E2E=1 to run the provisioning end-to-end test")
+	if os.Getenv("HOSTMAN_E2E") != "1" {
+		t.Skip("set HOSTMAN_E2E=1 to run the provisioning end-to-end test")
 	}
 	testutil.RequireSSHD(t)
 
-	const user = "deployere2e"
+	const user = "hostmane2e"
 	// A quote and a shell metacharacter, to show the password never reaches a
 	// shell: it goes over the SSH handshake and sudo's stdin, nowhere else.
 	const password = `s3cret-p@ss'w$ord`
@@ -40,7 +40,7 @@ func TestProvisionEndToEnd(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		exec.Command("userdel", "-r", user).Run()
-		os.Remove("/etc/sudoers.d/deployer")
+		os.Remove("/etc/sudoers.d/hostman")
 	})
 	chpasswd := exec.Command("chpasswd")
 	chpasswd.Stdin = strings.NewReader(user + ":" + password + "\n")
@@ -49,7 +49,7 @@ func TestProvisionEndToEnd(t *testing.T) {
 	}
 
 	port := startPasswordSSHD(t)
-	db, err := store.Open(filepath.Join(t.TempDir(), "deployer.db"))
+	db, err := store.Open(filepath.Join(t.TempDir(), "hostman.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,14 +103,14 @@ func TestProvisionEndToEnd(t *testing.T) {
 	if strings.TrimSpace(string(authorized)) != id.AuthorizedKey() {
 		t.Errorf("authorized_keys = %q, want HostMan's key", authorized)
 	}
-	sudoers, err := os.ReadFile("/etc/sudoers.d/deployer")
+	sudoers, err := os.ReadFile("/etc/sudoers.d/hostman")
 	if err != nil {
 		t.Fatalf("read the sudoers drop-in: %v", err)
 	}
 	if string(sudoers) != user+" ALL=(ALL) NOPASSWD:ALL\n" {
 		t.Errorf("sudoers = %q", sudoers)
 	}
-	if info, err := os.Stat("/etc/sudoers.d/deployer"); err == nil && info.Mode().Perm() != 0o440 {
+	if info, err := os.Stat("/etc/sudoers.d/hostman"); err == nil && info.Mode().Perm() != 0o440 {
 		t.Errorf("sudoers mode = %o, want 440", info.Mode().Perm())
 	}
 
