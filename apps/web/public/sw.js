@@ -3,14 +3,14 @@
 // stale host list or, worse, a stale deployment status would be actively
 // misleading.
 
-const SHELL_CACHE = 'deployer-shell-v1'
+const SHELL_CACHE = 'hostman-shell-v1'
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(SHELL_CACHE).then((cache) =>
       cache.addAll([
         '/',
-        '/icon.svg',
+        '/icon-192.png',
         '/manifest.webmanifest',
         // Part of the chrome, so it must not be a hole when the app opens offline.
         '/dev-badge.png',

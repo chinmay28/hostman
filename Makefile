@@ -11,7 +11,7 @@ VERSION_PKG := github.com/chinmay28/deployer/server/internal/version
 PATCH := $(shell node scripts/version.mjs --patch 2>/dev/null)
 LDFLAGS := -s -w $(if $(PATCH),-X $(VERSION_PKG).Patch=$(PATCH))
 
-.PHONY: build server web test test-web test-installer test-provision test-torrent vet run clean version bump-version
+.PHONY: build server web icons test test-web test-icongen test-installer test-provision test-torrent vet run clean version bump-version
 
 ## build: PWA into the embed directory, then the single binary
 build: web server
@@ -42,8 +42,16 @@ web:
 		echo "apps/web not present yet — keeping the placeholder in $(WEB_DIST)"; \
 	fi
 
+## icons: cut the PNG app icons from art/hostman-logo.png (run after the logo changes)
+icons:
+	cd tools/icongen && $(GO) run . -in ../../art/hostman-logo.png -out ../../apps/web/public
+
 test:
 	cd server && $(GO) test ./...
+
+## test-icongen: the icon generator's own tests (it is a separate Go module)
+test-icongen:
+	cd tools/icongen && $(GO) test ./...
 
 ## test-web: the PWA's unit tests (needs node; installs apps/web's dependencies)
 test-web:
