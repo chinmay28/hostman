@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/deploy"
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/deploy"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // withDerived fills in the ports each installation answers on, the address to

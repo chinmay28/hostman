@@ -1,12 +1,56 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { APP_VERSION } from '../version'
 
-/** How long the developer badge stays on screen when the header mark is
- * tapped. Kept in sync with the `dev-flash*` animations in styles.css — the CSS
- * fades out on its own clock, this unmounts it afterwards. */
-const DEV_FLASH_MS = 3000
+/** How long a badge thrown over the app stays on screen. Kept in sync with
+ * the `dev-flash*` animations in styles.css — the CSS fades out on its own
+ * clock, this unmounts it afterwards. */
+const FLASH_MS = 3000
+
+/** Two taps closer together than this are one double tap. Browsers use about
+ * 300ms for their own; a little more forgives a thumb. */
+const DOUBLE_TAP_MS = 400
+
+/** A flash is a badge shown over the whole app for a moment: on until FLASH_MS
+ * runs out, a tap on it, or Escape. Both marks in the header have one. */
+function useFlash(): [boolean, () => void, () => void] {
+  const [flash, setFlash] = useState(false)
+
+  useEffect(() => {
+    if (!flash) return
+
+    const timer = window.setTimeout(() => setFlash(false), FLASH_MS)
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFlash(false)
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [flash])
+
+  return [flash, () => setFlash(true), () => setFlash(false)]
+}
+
+/** The veil and lockup a flash is shown in. Portalled to the body on purpose.
+ * The header carries a backdrop-filter of its own, and an element with one
+ * becomes the backdrop root for its descendants and the containing block for
+ * their fixed positioning — so nested there the overlay blurred nothing and
+ * grew out of the header instead of the middle of the screen. At the body it
+ * covers the viewport, blurs the app behind it, and expands from the centre. */
+function Flash({ onDismiss, children }: { onDismiss: () => void; children: ReactNode }) {
+  return createPortal(
+    <div className="dev-flash" role="presentation" onClick={onDismiss}>
+      {/* Text rather than links inside: the overlay clears itself after three
+          seconds, so anything you could tap here would be a trap. */}
+      <div className="dev-flash-lockup">{children}</div>
+    </div>,
+    document.body,
+  )
+}
 
 /** The header the four tabs share. App renders it once, outside the routes, so
  * moving between tabs leaves the brand lockup and the developer mark exactly
@@ -17,7 +61,7 @@ const DEV_FLASH_MS = 3000
 export function AppHeader() {
   return (
     <header className="header">
-      <img className="brand-logo" src="/icon-192.png" alt="" aria-hidden="true" />
+      <BrandMark />
       {/* Name over version, as a lockup — the version reads as part of the
           name rather than as another thing on the screen. */}
       <div className="brand">
@@ -79,26 +123,51 @@ export function Page({
   )
 }
 
+/** HostMan's own mark at the start of the header. Double-tapping it throws the
+ * whole logo over the app, the way the developer mark does on one tap. Two
+ * taps rather than one because this corner is where a thumb lands while
+ * reaching for the first card; a single tap does nothing, as it always has. */
+function BrandMark() {
+  const [flash, show, hide] = useFlash()
+  const lastTap = useRef(0)
+
+  const onClick = () => {
+    const now = performance.now()
+    if (now - lastTap.current < DOUBLE_TAP_MS) {
+      lastTap.current = 0
+      show()
+    } else {
+      lastTap.current = now
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className="brand-mark"
+        title="HostMan"
+        aria-label="Show the HostMan logo (double tap)"
+        onClick={onClick}
+      >
+        <img className="brand-logo" src="/icon-192.png" alt="" aria-hidden="true" />
+      </button>
+
+      {flash && (
+        <Flash onDismiss={hide}>
+          <img className="brand-flash-logo" src="/logo.png" alt="HostMan" />
+          <span className="dev-flash-handle">All your hosts in good hands</span>
+        </Flash>
+      )}
+    </>
+  )
+}
+
 /** The developer mark at the end of the shared header: a small dark disk that
  * throws the full badge over the app for a moment when it is tapped.
  * Deliberately a button rather than a link — it goes nowhere. */
 function DevMark() {
-  const [flash, setFlash] = useState(false)
-
-  useEffect(() => {
-    if (!flash) return
-
-    const timer = window.setTimeout(() => setFlash(false), DEV_FLASH_MS)
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setFlash(false)
-    }
-
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.clearTimeout(timer)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [flash])
+  const [flash, show, hide] = useFlash()
 
   return (
     <>
@@ -107,33 +176,17 @@ function DevMark() {
         className="dev"
         title="Built by CM Hegday · 0x434d"
         aria-label="Show the developer badge"
-        onClick={() => setFlash(true)}
+        onClick={show}
       >
         <img className="dev-logo" src="/dev-badge.png" alt="" aria-hidden="true" />
       </button>
 
-      {/* Portalled to the body on purpose. The header carries a backdrop-filter
-          of its own, and an element with one becomes the backdrop root for its
-          descendants and the containing block for their fixed positioning — so
-          nested here the overlay blurred nothing and grew out of the header
-          instead of the middle of the screen. At the body it covers the
-          viewport, blurs the app behind it, and expands from the centre. */}
-      {flash &&
-        createPortal(
-          <div className="dev-flash" role="presentation" onClick={() => setFlash(false)}>
-            {/* Text rather than a link: the overlay clears itself after three
-                seconds, so anything you could tap here would be a trap. */}
-            <div className="dev-flash-lockup">
-              <img
-                className="dev-flash-logo"
-                src="/dev-badge-full.png"
-                alt="Built by CM Hegday — 0x434d"
-              />
-              <span className="dev-flash-handle">github.com/chinmay28</span>
-            </div>
-          </div>,
-          document.body,
-        )}
+      {flash && (
+        <Flash onDismiss={hide}>
+          <img className="dev-flash-logo" src="/dev-badge-full.png" alt="Built by CM Hegday — 0x434d" />
+          <span className="dev-flash-handle">github.com/chinmay28</span>
+        </Flash>
+      )}
     </>
   )
 }

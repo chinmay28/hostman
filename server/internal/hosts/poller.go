@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // Poll cadence. Hosts are polled slowly in the background and quickly while

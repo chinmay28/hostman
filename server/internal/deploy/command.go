@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/chinmay28/deployer/server/internal/sshx"
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // placeholder matches {{name}} in a command or health target.

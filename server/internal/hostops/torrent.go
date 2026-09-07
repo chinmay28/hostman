@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // A torrent downloader is deluged running on the host, with HostMan driving it
@@ -32,7 +32,7 @@ import (
 // screen's own words, and setup refuses until it is there.
 //
 // **The daemon HostMan runs is HostMan's own.** Its state lives in
-// /var/lib/deployer-torrent and it answers on a port of its own rather than
+// /var/lib/hostman-torrent and it answers on a port of its own rather than
 // deluge's default, so a host that already runs deluged keeps running it,
 // untouched, with its own torrents and its own client attached. Two daemons on
 // one machine is not tidy, but it is honest — the alternative is guessing at
@@ -61,12 +61,12 @@ const (
 	// TorrentUnit is the daemon's systemd unit. It is an ordinary unit file in
 	// the administrator's own directory, so the Services screen lists it, shows
 	// its journal and can stop it, like anything else installed by hand.
-	TorrentUnit = "deployer-torrent.service"
+	TorrentUnit = "hostman-torrent.service"
 
 	// torrentStateDir is deluged's config directory: its settings, its auth
 	// file, and the state that lets it pick a half-finished download back up.
 	// /var/lib is where a daemon's own state belongs.
-	torrentStateDir = "/var/lib/deployer-torrent"
+	torrentStateDir = "/var/lib/hostman-torrent"
 
 	// torrentPort is where deluged listens for its client. It is deluge's
 	// default plus a hundred, on purpose: a host that already runs deluged is
@@ -79,7 +79,7 @@ const (
 	// torrentAccount is the account HostMan's scripts authenticate as. deluged
 	// keeps its own "localclient" alongside it, so a thin client somebody
 	// already uses on this host carries on working.
-	torrentAccount = "deployer"
+	torrentAccount = "hostman"
 
 	// MaxTorrentFileBytes is the largest .torrent file HostMan will carry to a
 	// host. A torrent file is a list of hashes: a few kilobytes is ordinary and
@@ -336,7 +336,7 @@ if command -v deluged >/dev/null 2>&1; then
 fi
 
 printf '@@config\n'
-cat "$conf/deployer.conf" 2>/dev/null
+cat "$conf/hostman.conf" 2>/dev/null
 
 printf '@@home\n'
 home=$(getent passwd "$u" 2>/dev/null | cut -d: -f6)
@@ -348,7 +348,7 @@ if command -v systemctl >/dev/null 2>&1; then
   systemctl show --no-pager -p LoadState -p ActiveState -p SubState -p UnitFileState -- %[4]s 2>/dev/null
 fi
 
-dl=$(sed -n 's/^DOWNLOADS=//p' "$conf/deployer.conf" 2>/dev/null | head -1)
+dl=$(sed -n 's/^DOWNLOADS=//p' "$conf/hostman.conf" 2>/dev/null | head -1)
 [ -n "$dl" ] || dl="$home/Downloads/torrents"
 printf '@@downloads\n%%s\n' "$dl"
 
@@ -363,7 +363,7 @@ df -Pk -- "$d" 2>/dev/null | tail -1
 # running, and systemd already knows.
 list=""
 ask="not-set-up"
-if [ -f "$conf/deployer.conf" ]; then
+if [ -f "$conf/hostman.conf" ]; then
   if ! command -v deluge-console >/dev/null 2>&1; then
     ask="no-console"
   elif command -v systemctl >/dev/null 2>&1 && ! systemctl is-active --quiet -- %[4]s 2>/dev/null; then
@@ -831,6 +831,25 @@ home=$(getent passwd "$u" 2>/dev/null | cut -d: -f6)
 
 conf="$r%[1]s"
 units="$r/etc/systemd/system"
+
+# A downloader set up when HostMan was Deployer: same daemon, same state, under
+# the old names. It is moved rather than set up again, so half-finished
+# downloads and the auth file's password carry on, and the old unit is retired
+# before the new one can contend with it for the port.
+old="$r/var/lib/deployer-torrent"
+if [ -d "$old" ] && [ ! -d "$conf" ]; then
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl disable --now -- deployer-torrent.service >/dev/null 2>&1 || true
+  fi
+  rm -f "$units/deployer-torrent.service"
+  mv "$old" "$conf" || exit 6
+  if [ -f "$conf/deployer.conf" ]; then
+    mv "$conf/deployer.conf" "$conf/hostman.conf" || exit 6
+  fi
+  if [ -f "$conf/auth" ]; then
+    sed -i 's/^deployer:/%[5]s:/' "$conf/auth" 2>/dev/null || true
+  fi
+fi
 mkdir -p "$conf" "$units" "$r$dl" || { printf 'could not write to %%s\n' "$conf" >&2; exit 4; }
 # The daemon runs as the SSH user: the directory holding its password and its
 # state is that user's, and so is the folder the files land in.
@@ -869,8 +888,8 @@ chown "$u" "$conf/auth" 2>/dev/null || true
   printf 'DOWNLOADS=%%s\n' "$dl"
   printf 'USER=%%s\n' "$u"
   printf 'REVISION=%%s\n' "$rev"
-} > "$conf/deployer.conf" || exit 6
-chown "$u" "$conf/deployer.conf" 2>/dev/null || true
+} > "$conf/hostman.conf" || exit 6
+chown "$u" "$conf/hostman.conf" 2>/dev/null || true
 
 # Unlike the remote browser session, this unit has an [Install] section and is
 # enabled. A browser holding your logins should run for the two minutes you are
@@ -1022,11 +1041,11 @@ path=$4
 conf="$r%[1]s"
 %[2]s
 
-[ -f "$conf/deployer.conf" ] || { printf 'this host has no downloader set up yet\n' >&2; exit 3; }
+[ -f "$conf/hostman.conf" ] || { printf 'this host has no downloader set up yet\n' >&2; exit 3; }
 command -v deluge-console >/dev/null 2>&1 || { printf 'deluge is not installed on this host\n' >&2; exit 8; }
 
 if [ -z "$path" ]; then
-  path=$(sed -n 's/^DOWNLOADS=//p' "$conf/deployer.conf" | head -1)
+  path=$(sed -n 's/^DOWNLOADS=//p' "$conf/hostman.conf" | head -1)
 fi
 [ -n "$path" ] || { printf 'the downloader has no folder to download into\n' >&2; exit 3; }
 
@@ -1142,7 +1161,7 @@ data=$4
 conf="$r%[1]s"
 %[2]s
 
-[ -f "$conf/deployer.conf" ] || { printf 'this host has no downloader set up yet\n' >&2; exit 3; }
+[ -f "$conf/hostman.conf" ] || { printf 'this host has no downloader set up yet\n' >&2; exit 3; }
 
 flag=""
 case "$action" in
@@ -1228,7 +1247,7 @@ remove=$4
 conf="$r%[1]s"
 %[2]s
 
-[ -f "$conf/deployer.conf" ] || { printf 'this host has no downloader set up yet\n' >&2; exit 3; }
+[ -f "$conf/hostman.conf" ] || { printf 'this host has no downloader set up yet\n' >&2; exit 3; }
 if command -v systemctl >/dev/null 2>&1; then
   systemctl is-active --quiet -- %[3]s 2>/dev/null || exit 4
 fi
@@ -1316,7 +1335,7 @@ limit=$2
 conf="$r%[1]s"
 %[2]s
 
-[ -f "$conf/deployer.conf" ] || { printf 'this host has no downloader set up yet\n' >&2; exit 3; }
+[ -f "$conf/hostman.conf" ] || { printf 'this host has no downloader set up yet\n' >&2; exit 3; }
 if command -v systemctl >/dev/null 2>&1; then
   systemctl is-active --quiet -- %[3]s 2>/dev/null || exit 4
 fi

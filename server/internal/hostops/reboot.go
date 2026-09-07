@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // Rebooting is offered; shutting down is not. HostMan can watch a machine come

@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/chinmay28/deployer/server/internal/hostops"
+	"github.com/chinmay28/hostman/server/internal/hostops"
 )
 
 // The downloader is deluge running on the host, driven from a phone. The

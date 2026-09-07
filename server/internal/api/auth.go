@@ -11,7 +11,7 @@ import (
 )
 
 // sessionCookie holds the token issued after a successful PIN login.
-const sessionCookie = "deployer_session"
+const sessionCookie = "hostman_session"
 
 const sessionTTL = 30 * 24 * time.Hour
 

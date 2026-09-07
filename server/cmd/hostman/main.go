@@ -1,4 +1,4 @@
-// Command deployer runs the HostMan server: REST API plus the PWA, from a
+// Command hostman runs the HostMan server: REST API plus the PWA, from a
 // single binary.
 package main
 
@@ -15,17 +15,17 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/api"
-	"github.com/chinmay28/deployer/server/internal/claude"
-	"github.com/chinmay28/deployer/server/internal/deploy"
-	"github.com/chinmay28/deployer/server/internal/hostops"
-	"github.com/chinmay28/deployer/server/internal/hosts"
-	"github.com/chinmay28/deployer/server/internal/selfhost"
-	"github.com/chinmay28/deployer/server/internal/shell"
-	"github.com/chinmay28/deployer/server/internal/sshx"
-	"github.com/chinmay28/deployer/server/internal/store"
-	"github.com/chinmay28/deployer/server/internal/version"
-	"github.com/chinmay28/deployer/server/internal/web"
+	"github.com/chinmay28/hostman/server/internal/api"
+	"github.com/chinmay28/hostman/server/internal/claude"
+	"github.com/chinmay28/hostman/server/internal/deploy"
+	"github.com/chinmay28/hostman/server/internal/hostops"
+	"github.com/chinmay28/hostman/server/internal/hosts"
+	"github.com/chinmay28/hostman/server/internal/selfhost"
+	"github.com/chinmay28/hostman/server/internal/shell"
+	"github.com/chinmay28/hostman/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/version"
+	"github.com/chinmay28/hostman/server/internal/web"
 )
 
 func main() {
@@ -37,12 +37,12 @@ func main() {
 
 func run() error {
 	var (
-		addr    = flag.String("addr", envOr("DEPLOYER_ADDR", ":8899"), "listen address (host:port)")
-		dbPath  = flag.String("db", envOr("DEPLOYER_DB", "data/deployer.db"), "path to the SQLite database")
-		pin     = flag.String("pin", os.Getenv("DEPLOYER_PIN"), "optional PIN required to use the UI; empty disables authentication")
-		sshUser = flag.String("self-user", os.Getenv("DEPLOYER_SELF_USER"), "SSH user HostMan connects as on its own machine")
-		repo    = flag.String("self-repo", envOr("DEPLOYER_REPO", "chinmay28/hostman"), "repository a self-update builds from")
-		ref     = flag.String("self-ref", envOr("DEPLOYER_REF", "main"), "git ref a self-update builds from by default")
+		addr    = flag.String("addr", envOr("HOSTMAN_ADDR", ":8899"), "listen address (host:port)")
+		dbPath  = flag.String("db", envOr("HOSTMAN_DB", "data/hostman.db"), "path to the SQLite database")
+		pin     = flag.String("pin", os.Getenv("HOSTMAN_PIN"), "optional PIN required to use the UI; empty disables authentication")
+		sshUser = flag.String("self-user", os.Getenv("HOSTMAN_SELF_USER"), "SSH user HostMan connects as on its own machine")
+		repo    = flag.String("self-repo", envOr("HOSTMAN_REPO", "chinmay28/hostman"), "repository a self-update builds from")
+		ref     = flag.String("self-ref", envOr("HOSTMAN_REF", "main"), "git ref a self-update builds from by default")
 		verbose = flag.Bool("v", false, "verbose logging")
 	)
 	flag.Parse()
@@ -129,7 +129,7 @@ func run() error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("deployer listening", "version", apiSrv.Version, "addr", *addr, "db", *dbPath, "auth", authMode(auth))
+		log.Info("hostman listening", "version", apiSrv.Version, "addr", *addr, "db", *dbPath, "auth", authMode(auth))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}

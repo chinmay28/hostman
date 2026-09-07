@@ -114,12 +114,28 @@ body {
 
 /* The brand lockup the tabs share: the app icon, then the name over the running
    build. `brand` takes over the h1's job of soaking up the free space. */
+.header .brand-mark {
+  padding: 0;
+  border: 0;
+  background: none;
+  flex: none;
+  cursor: default;
+  /* A double tap must not zoom the page or wait for the browser to rule
+     out one; the viewport already forbids zooming, this removes the delay. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .header .brand-logo {
   width: 30px;
   height: 30px;
   border-radius: 8px;
   display: block;
   flex: none;
+}
+
+.header .brand-mark:active .brand-logo {
+  transform: scale(0.94);
 }
 
 .header .brand {
@@ -195,7 +211,7 @@ body {
 
 /* Tapping the mark throws the full badge over the app, dead centre of the
    screen, with everything behind it blurred back. The veil and the badge run
-   their own fade-out; DEV_FLASH_MS in Layout.tsx unmounts the pair when they
+   their own fade-out; FLASH_MS in Layout.tsx unmounts the pair when they
    are done, and a tap or Escape ends it early.
 
    The veil is deliberately thin — the blur is what pushes the app back, so
@@ -232,6 +248,14 @@ body {
   box-shadow:
     0 0 0 1px var(--border),
     0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+/* The whole logo, on nothing: it has its own badge shape, so the shadow follows
+   the drawing rather than a box around it. */
+.brand-flash-logo {
+  width: min(80vmin, 420px);
+  height: auto;
+  filter: drop-shadow(0 24px 60px rgba(0, 0, 0, 0.35));
 }
 
 /* Monospace to echo the badge's own wordmark, and tracked out so it reads as a

@@ -13,7 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // Limits. A phone is reading these over a home network, and the whole file
@@ -296,7 +296,7 @@ if [ -L "$p" ]; then r=$(readlink -f -- "$p" 2>/dev/null || printf ''); [ -n "$r
 if [ -d "$p" ]; then printf '%s is a directory\n' "$p" >&2; exit 2; fi
 d=$(dirname -- "$p")
 [ -d "$d" ] || { printf 'no such directory: %s\n' "$d" >&2; exit 3; }
-tmp=$(mktemp "$d/.deployer.XXXXXX") || { printf 'cannot write in %s\n' "$d" >&2; exit 4; }
+tmp=$(mktemp "$d/.hostman.XXXXXX") || { printf 'cannot write in %s\n' "$d" >&2; exit 4; }
 trap 'rm -f "$tmp"' EXIT
 base64 -d > "$tmp" || { printf 'could not decode the file contents\n' >&2; exit 5; }
 if [ -e "$p" ]; then

@@ -10,7 +10,7 @@ import (
 	"os/user"
 	"strings"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // Settings keys recording one-time setup, so that deleting the home host or the
@@ -152,7 +152,7 @@ func (m *Manager) EnsureUpdaterApp(ctx context.Context) error {
 	// The script and the build come from the same ref, so pinning a tag pins
 	// both halves of the upgrade.
 	command := fmt.Sprintf(
-		"curl -fsSL https://raw.githubusercontent.com/%s/{{ref}}/scripts/quickstart.sh | sudo DEPLOYER_REF={{ref}} bash",
+		"curl -fsSL https://raw.githubusercontent.com/%s/{{ref}}/scripts/quickstart.sh | sudo HOSTMAN_REF={{ref}} bash",
 		repo)
 
 	port := m.cfg.Port

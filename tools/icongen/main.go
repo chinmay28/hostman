@@ -33,6 +33,11 @@ var focus = image.Point{X: 630, Y: 365}
 // The corner radius of an iOS-style tile, as a fraction of its side.
 const tileRadius = 0.2237
 
+// logoSize is the side of logo.png, the whole drawing on a transparent
+// background: the app throws it over a blurred screen when the header's mark
+// is double-tapped, and nothing larger than this is ever shown.
+const logoSize = 800
+
 // targets are the files written. Each shape suits a different consumer:
 // browsers take the rounded tile as-is, iOS masks a full square itself, and
 // Android's maskable icons are cropped wider so a circular launcher mask
@@ -70,6 +75,11 @@ func run(in, out string) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", in, err)
 	}
+
+	if err := write(filepath.Join(out, "logo.png"), Scale(Matte(logo, color.RGBA{}), logoSize)); err != nil {
+		return err
+	}
+	fmt.Println("wrote", filepath.Join(out, "logo.png"))
 
 	matted := Matte(logo, badge)
 	for _, t := range targets {

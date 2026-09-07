@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/chinmay28/deployer/server/internal/sshx"
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // Provisioning is the one-time setup that a host otherwise needs done by hand:
@@ -43,13 +43,15 @@ fi
 const sudoersScript = `set -e
 mkdir -p /etc/sudoers.d
 chmod 750 /etc/sudoers.d
-tmp=/etc/sudoers.d/.deployer.new
+tmp=/etc/sudoers.d/.hostman.new
 printf '%%s ALL=(ALL) NOPASSWD:ALL\n' %[1]s > "$tmp"
 if command -v visudo >/dev/null 2>&1; then
   visudo -cqf "$tmp" >/dev/null
 fi
 chmod 440 "$tmp"
-mv "$tmp" /etc/sudoers.d/deployer
+mv "$tmp" /etc/sudoers.d/hostman
+# The same grant under the name this was written as before the rename.
+rm -f /etc/sudoers.d/deployer
 `
 
 // ProvisionStep is one action taken during setup, in the order it was tried.

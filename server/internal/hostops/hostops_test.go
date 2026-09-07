@@ -48,8 +48,8 @@ func TestScriptArgumentsStartAtOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if got := string(out); got != "deployer\n2\n" {
-		t.Errorf("got %q, want the script to see $0=deployer and two arguments", got)
+	if got := string(out); got != "hostman\n2\n" {
+		t.Errorf("got %q, want the script to see $0=hostman and two arguments", got)
 	}
 }
 

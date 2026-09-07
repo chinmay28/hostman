@@ -142,7 +142,7 @@ func TestTorrentSetupWritesTheDaemon(t *testing.T) {
 		t.Fatalf("setup exited %d: %s", code, out)
 	}
 
-	config := read(t, filepath.Join(stateDir(root), "deployer.conf"))
+	config := read(t, filepath.Join(stateDir(root), "hostman.conf"))
 	for _, want := range []string{
 		"PORT=" + fmt.Sprint(torrentPort),
 		"DOWNLOADS=/home/pi/Downloads/torrents",
@@ -197,7 +197,7 @@ func TestTorrentSetupKeepsThePasswordOnTheHost(t *testing.T) {
 		t.Fatalf("the password is %d characters, not 32", len(fields[1]))
 	}
 
-	config := read(t, filepath.Join(stateDir(root), "deployer.conf"))
+	config := read(t, filepath.Join(stateDir(root), "hostman.conf"))
 	unit := read(t, filepath.Join(root, "etc/systemd/system", TorrentUnit))
 	if strings.Contains(config, fields[1]) || strings.Contains(unit, fields[1]) {
 		t.Error("the password leaked into a file HostMan reads back")
@@ -211,7 +211,7 @@ func TestTorrentSetupKeepsThePasswordOnTheHost(t *testing.T) {
 	if again := strings.TrimSpace(read(t, filepath.Join(stateDir(root), "auth"))); again != auth {
 		t.Error("setting up again replaced the password")
 	}
-	if config := read(t, filepath.Join(stateDir(root), "deployer.conf")); !strings.Contains(config, "DOWNLOADS=/srv/torrents") {
+	if config := read(t, filepath.Join(stateDir(root), "hostman.conf")); !strings.Contains(config, "DOWNLOADS=/srv/torrents") {
 		t.Errorf("the folder was not changed:\n%s", config)
 	}
 

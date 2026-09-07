@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/chinmay28/deployer/server/internal/sshx"
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // A crontab is edited whole, the way `crontab -e` edits it: HostMan reads the
@@ -41,7 +41,7 @@ type Crontab struct {
 // prepend a warning to someone's crontab.
 const readCronScript = `set -u
 u=$1
-err=$(mktemp /tmp/deployer-cron.XXXXXX) || { printf 'cannot write a temporary file\n' >&2; exit 2; }
+err=$(mktemp /tmp/hostman-cron.XXXXXX) || { printf 'cannot write a temporary file\n' >&2; exit 2; }
 trap 'rm -f "$err"' EXIT
 if [ -n "$u" ]; then out=$(crontab -l -u "$u" 2>"$err"); status=$?
 else out=$(crontab -l 2>"$err"); status=$?; fi
@@ -99,7 +99,7 @@ func parseCrontab(out, user string) (*Crontab, error) {
 // keeps the old one if it cannot.
 const writeCronScript = `set -u
 u=$1
-tmp=$(mktemp /tmp/deployer-cron.XXXXXX) || { printf 'cannot write a temporary file\n' >&2; exit 2; }
+tmp=$(mktemp /tmp/hostman-cron.XXXXXX) || { printf 'cannot write a temporary file\n' >&2; exit 2; }
 trap 'rm -f "$tmp"' EXIT
 base64 -d > "$tmp" || { printf 'could not decode the crontab\n' >&2; exit 3; }
 if [ -n "$u" ]; then crontab -u "$u" -- "$tmp" || exit 4

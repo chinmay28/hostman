@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/claude"
-	"github.com/chinmay28/deployer/server/internal/hostops"
+	"github.com/chinmay28/hostman/server/internal/claude"
+	"github.com/chinmay28/hostman/server/internal/hostops"
 )
 
 // Claude on a host is two things with two shapes of endpoint.

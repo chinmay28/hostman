@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // Nothing on a host reports back which version of an app is running there, but

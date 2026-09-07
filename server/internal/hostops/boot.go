@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // Why did it restart?
@@ -314,8 +314,8 @@ if command -v journalctl >/dev/null 2>&1; then
   journalctl --list-boots --no-pager 2>/dev/null | tail -n 40 || true
 fi
 
-prev=$(mktemp /tmp/deployer-boot.XXXXXX) || { printf 'cannot write a temporary file\n' >&2; exit 2; }
-warn=$(mktemp /tmp/deployer-boot.XXXXXX) || { printf 'cannot write a temporary file\n' >&2; exit 2; }
+prev=$(mktemp /tmp/hostman-boot.XXXXXX) || { printf 'cannot write a temporary file\n' >&2; exit 2; }
+warn=$(mktemp /tmp/hostman-boot.XXXXXX) || { printf 'cannot write a temporary file\n' >&2; exit 2; }
 trap 'rm -f "$prev" "$warn"' EXIT
 
 src=none

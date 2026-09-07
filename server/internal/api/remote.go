@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/hostops"
+	"github.com/chinmay28/hostman/server/internal/hostops"
 )
 
 // A remote session is a browser running on the host, driven from the phone. The

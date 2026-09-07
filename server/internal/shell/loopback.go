@@ -5,7 +5,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/chinmay28/deployer/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/sshx"
 )
 
 // Loopback is a terminal that never leaves the process: the test prints what

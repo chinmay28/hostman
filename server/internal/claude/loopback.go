@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/sshx"
 )
 
 // Loopback is a Claude Code process that never leaves the process: the test

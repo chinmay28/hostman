@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/hosts"
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/hosts"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // Timeout bounds a single deployment. Installs that build from source on a Pi
@@ -388,7 +388,7 @@ func (rn *Runner) Cancel(deploymentID int64) error {
 // outcome.
 //
 // Detached deployments are deliberately left alone. `systemctl restart
-// deployer` — which is what a self-update does — arrives here as a SIGTERM,
+// hostman` — which is what a self-update does — arrives here as a SIGTERM,
 // and cancelling then would mark an update that is running perfectly well on
 // the host as canceled. Leaving the row running is what lets the next process
 // pick it back up.

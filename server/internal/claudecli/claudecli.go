@@ -26,7 +26,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/chinmay28/deployer/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/sshx"
 )
 
 // Modes are the permission modes a session can run in, in the words the CLI
@@ -134,7 +134,7 @@ func Command(o Options) (string, error) {
 	var b strings.Builder
 	b.WriteString("sh -c ")
 	b.WriteString(sshx.Quote(launch))
-	b.WriteString(" deployer ")
+	b.WriteString(" hostman ")
 	b.WriteString(sshx.Quote(o.Dir))
 	for _, a := range args {
 		b.WriteString(" ")

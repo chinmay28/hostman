@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/hosts"
-	"github.com/chinmay28/deployer/server/internal/sshx"
-	"github.com/chinmay28/deployer/server/internal/store"
-	"github.com/chinmay28/deployer/server/internal/testutil"
+	"github.com/chinmay28/hostman/server/internal/hosts"
+	"github.com/chinmay28/hostman/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/testutil"
 )
 
 // The scripts are covered against a real filesystem elsewhere in this package.
@@ -25,7 +25,7 @@ func sshEnv(t *testing.T) (*Service, *store.Host) {
 	t.Helper()
 	testutil.RequireSSHD(t)
 
-	db, err := store.Open(filepath.Join(t.TempDir(), "deployer.db"))
+	db, err := store.Open(filepath.Join(t.TempDir(), "hostman.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestFilesOverSSH(t *testing.T) {
 	if err := os.Chmod(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(dir, "deployer.conf")
+	path := filepath.Join(dir, "hostman.conf")
 
 	// Content chosen to break anything that treats the body as shell text.
 	const content = "# written from a phone\nname = 'it''s fine'\npath = \"$HOME/x\"\n☕\n"
@@ -92,7 +92,7 @@ func TestFilesOverSSH(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
-	if len(listing.Entries) != 1 || listing.Entries[0].Name != "deployer.conf" {
+	if len(listing.Entries) != 1 || listing.Entries[0].Name != "hostman.conf" {
 		t.Fatalf("entries = %+v, want just the one file", listing.Entries)
 	}
 	if listing.Path != dir {

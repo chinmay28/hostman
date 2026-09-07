@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
-// Updating HostMan restarts deployer.service, which kills the process running
+// Updating HostMan restarts hostman.service, which kills the process running
 // the deployment and, with it, the SSH session carrying the install script —
 // sshd hangs up the remote command when its client disappears. So the script is
 // started detached, writing to a file on the host, and HostMan follows that
@@ -19,11 +19,29 @@ import (
 
 // detachedLogPath is where a detached deployment writes on the host.
 func detachedLogPath(deploymentID int64) string {
-	return "/tmp/deployer-selfupdate-" + strconv.FormatInt(deploymentID, 10) + ".log"
+	return "/tmp/hostman-selfupdate-" + strconv.FormatInt(deploymentID, 10) + ".log"
 }
 
 // exitMarker is how the detached script reports its exit status through a file.
-const exitMarker = "__deployer_exit__:"
+const exitMarker = "__hostman_exit__:"
+
+// legacyExitMarker is what the binary from before the rename wrote. The one
+// self-update that replaces it is started by that binary and finished by this
+// one, reading a log that ends the old way.
+const legacyExitMarker = "__deployer_exit__:"
+
+// cutExitMarker returns what follows the marker on a line, if it is one.
+func cutExitMarker(line string) (rest string, ok bool) {
+	if rest, ok = strings.CutPrefix(line, exitMarker); ok {
+		return rest, true
+	}
+	return strings.CutPrefix(line, legacyExitMarker)
+}
+
+// lastExitMarker is the index of the last marker in the log, either spelling.
+func lastExitMarker(log string) int {
+	return max(strings.LastIndex(log, exitMarker), strings.LastIndex(log, legacyExitMarker))
+}
 
 // pollInterval is how often a resumed follower re-reads the log if `tail -f`
 // is unavailable.
@@ -56,8 +74,7 @@ func readScript(logPath string) string {
 // very last thing, so anything printed after it means the command is still
 // going and the "marker" was just output that happened to look like one.
 func parseExitMarker(log string) (code int, done bool) {
-	last := lastNonEmptyLine(log)
-	rest, ok := strings.CutPrefix(last, exitMarker)
+	rest, ok := cutExitMarker(lastNonEmptyLine(log))
 	if !ok {
 		return 0, false
 	}
@@ -82,7 +99,7 @@ func lastNonEmptyLine(s string) string {
 //
 // It hides the marker as soon as its prefix appears at the start of the last
 // line, without waiting for the exit status to follow it. A read that lands
-// mid-printf sees `__deployer_exit__:` with no digits yet, and that must not
+// mid-printf sees `__hostman_exit__:` with no digits yet, and that must not
 // reach the log — once written it would never be taken back, because the
 // follower only ever appends what is new.
 //
@@ -90,11 +107,10 @@ func lastNonEmptyLine(s string) string {
 // output: a command that happens to print the marker mid-stream keeps
 // everything after it, and parseExitMarker still refuses to call it finished.
 func stripExitMarker(log string) string {
-	if !strings.HasPrefix(lastNonEmptyLine(log), exitMarker) {
+	if _, ok := cutExitMarker(lastNonEmptyLine(log)); !ok {
 		return log
 	}
-	idx := strings.LastIndex(log, exitMarker)
-	return strings.TrimRight(log[:idx], "\n")
+	return strings.TrimRight(log[:lastExitMarker(log)], "\n")
 }
 
 // ResumeDetached picks up detached deployments that were still running when

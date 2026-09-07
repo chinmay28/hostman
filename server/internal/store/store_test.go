@@ -10,7 +10,7 @@ import (
 
 func testDB(t *testing.T) *DB {
 	t.Helper()
-	db, err := Open(filepath.Join(t.TempDir(), "nested", "deployer.db"))
+	db, err := Open(filepath.Join(t.TempDir(), "nested", "hostman.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -19,7 +19,7 @@ func testDB(t *testing.T) *DB {
 }
 
 func TestMigrationsAreIdempotent(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "deployer.db")
+	path := filepath.Join(t.TempDir(), "hostman.db")
 	db, err := Open(path)
 	if err != nil {
 		t.Fatalf("first Open: %v", err)

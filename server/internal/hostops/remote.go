@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // A remote session is a browser running on the host that you drive from your
@@ -55,14 +55,14 @@ const (
 	// RemoteUnit is the session's systemd unit. It is an ordinary unit file in
 	// the administrator's own directory, so the Services screen lists it, shows
 	// its journal and can stop it, like anything else installed by hand.
-	RemoteUnit = "deployer-remote.service"
+	RemoteUnit = "hostman-remote.service"
 
 	// remoteConfDir holds everything HostMan writes that is not a unit file:
 	// the VNC password, the settings, the page to open, and the setup log.
-	remoteConfDir = "/etc/deployer-remote"
+	remoteConfDir = "/etc/hostman-remote"
 	// remoteLibDir holds the two generated scripts. /usr/local is where things
 	// that are not the package manager's belong.
-	remoteLibDir = "/usr/local/lib/deployer"
+	remoteLibDir = "/usr/local/lib/hostman"
 
 	// DefaultRemoteGeometry is the virtual screen's size. A desktop-width
 	// screen is what makes sites lay out the way their author meant, and noVNC
@@ -278,7 +278,7 @@ home=$(getent passwd "$u" 2>/dev/null | cut -d: -f6)
 [ -n "$home" ] || home="/home/$u"
 dl="$r$home/Downloads"
 printf '@@downloads\n%%s\n' "$dl"
-printf '@@profile\n%%s\n' "$r$home/.config/deployer-remote"
+printf '@@profile\n%%s\n' "$r$home/.config/hostman-remote"
 
 printf '@@files\n'
 now=$(date +%%s 2>/dev/null || echo 0)
@@ -488,6 +488,18 @@ fi
 etc="$r%[1]s"
 lib="$r%[2]s"
 units="$r/etc/systemd/system"
+# A session set up when HostMan was Deployer keeps its password and its
+# browser profile (the logins in it are the point) under the old names; they
+# are moved across and the old unit retired before the new one is written.
+oldetc="$r/etc/deployer-remote"
+if [ -d "$oldetc" ] && [ ! -d "$etc" ]; then
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl disable --now -- deployer-remote.service >/dev/null 2>&1 || true
+  fi
+  rm -f "$units/deployer-remote.service"
+  rm -rf "$r/usr/local/lib/deployer"
+  mv "$oldetc" "$etc" || exit 4
+fi
 mkdir -p "$etc" "$lib" "$units" || { printf 'could not write to %%s\n' "$etc" >&2; exit 4; }
 # The session runs as the SSH user and has to read the password x11vnc
 # authenticates against, so the directory is theirs and nobody else's.
@@ -496,7 +508,10 @@ chmod 750 "$etc" 2>/dev/null || true
 
 home=$(getent passwd "$u" 2>/dev/null | cut -d: -f6)
 [ -n "$home" ] || home="/home/$u"
-profile="$r$home/.config/deployer-remote"
+profile="$r$home/.config/hostman-remote"
+if [ -d "$r$home/.config/deployer-remote" ] && [ ! -d "$profile" ]; then
+  mv "$r$home/.config/deployer-remote" "$profile" || exit 4
+fi
 dl="$r$home/Downloads"
 
 cat > "$lib/remote-session.sh" <<'SESSION'
@@ -610,7 +625,7 @@ if [ -z "$browser" ]; then
   # A directory rather than mktemp's own name, because apt refuses a package
   # whose filename does not end in .deb — "Unsupported file ... given on
   # commandline" — and mktemp has no portable way to put a suffix on one.
-  tmp=$(mktemp -d /tmp/deployer-chrome.XXXXXX) || exit 16
+  tmp=$(mktemp -d /tmp/hostman-chrome.XXXXXX) || exit 16
   deb="$tmp/google-chrome-stable.deb"
   if ! curl -fsSL -o "$deb" https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb; then
     rm -rf "$tmp"
@@ -722,24 +737,24 @@ fi
 pick_browser || true
 if [ -z "$browser" ]; then
   if [ -n "$snap_browsers" ] || [ -n "$broken_browsers" ]; then
-    printf 'deployer-remote: no browser here can run%%s%%s\n' \
+    printf 'hostman-remote: no browser here can run%%s%%s\n' \
       "${snap_browsers:+ — snaps: $snap_browsers}" "${broken_browsers:+ — will not start: $broken_browsers}"
-    printf 'deployer-remote: set the session up again — HostMan will fetch one that is a package\n'
+    printf 'hostman-remote: set the session up again — HostMan will fetch one that is a package\n'
     exit 4
   fi
-  printf 'deployer-remote: no browser installed\n'
+  printf 'hostman-remote: no browser installed\n'
   exit 3
 fi
 
 # Which browser, and what it really is. A distribution that ships its browser as
 # a snap wrapper leaves a binary that is on the PATH and cannot run, and the
 # resolved path is what says so.
-printf 'deployer-remote: %%s is %%s, on %%s at %%sx%%s\n' \
+printf 'hostman-remote: %%s is %%s, on %%s at %%sx%%s\n' \
   "$browser" "$(command -v "$browser")" "$DISPLAY" "$w" "$h"
 # Asking it its version is the cheapest way to find out whether it can run at
 # all: a browser that is really a wrapper around a snap that is not there fails
 # this the same way it fails everything else, and says so in one line.
-printf 'deployer-remote: %%s\n' "$("$browser" --version 2>&1 | head -1)"
+printf 'hostman-remote: %%s\n' "$("$browser" --version 2>&1 | head -1)"
 
 # Chromium leaves these behind when it dies, and every launch after that refuses
 # with "the profile appears to be in use" — which, on a screen with nothing else
@@ -794,7 +809,7 @@ while :; do
   # infer it from a screen that stays empty.
   if [ "$((ended - started))" -lt 5 ]; then
     fails=$((fails + 1))
-    printf 'deployer-remote: %%s exited after %%ss (%%s in a row) — its own output is above\n' \
+    printf 'hostman-remote: %%s exited after %%ss (%%s in a row) — its own output is above\n' \
       "$browser" "$((ended - started))" "$fails"
 
     # Chromium will not start on a host whose kernel refuses it a sandbox, which
@@ -808,12 +823,12 @@ while :; do
     if [ "$fails" -eq 2 ] && [ "$sandboxed" = 1 ]; then
       sandboxed=0
       set -- --no-sandbox "$@"
-      printf 'deployer-remote: this host will not give %%s a sandbox — retrying without one\n' "$browser"
+      printf 'hostman-remote: this host will not give %%s a sandbox — retrying without one\n' "$browser"
       printf 'no-sandbox\n' > "$conf/degraded" 2>/dev/null || true
     fi
 
     if [ "$fails" -ge 4 ]; then
-      printf 'deployer-remote: giving it room — retrying every 20s\n'
+      printf 'hostman-remote: giving it room — retrying every 20s\n'
       sleep 20
     fi
   else
@@ -965,7 +980,7 @@ fi
 if [ "$purge" = 1 ]; then
   home=$(getent passwd "$u" 2>/dev/null | cut -d: -f6)
   [ -n "$home" ] || home="/home/$u"
-  rm -rf -- "$r$home/.config/deployer-remote" || exit 4
+  rm -rf -- "$r$home/.config/hostman-remote" || exit 4
 fi
 printf 'removed\n'
 `

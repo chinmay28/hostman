@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/claude"
+	"github.com/chinmay28/hostman/server/internal/claude"
 )
 
 // A Claude endpoint that could not be reached without a host on the other end

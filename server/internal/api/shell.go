@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/shell"
+	"github.com/chinmay28/hostman/server/internal/shell"
 )
 
 // A shell is a login shell on a host with a pty behind it, and it outlives the

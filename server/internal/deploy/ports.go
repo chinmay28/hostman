@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // Nothing ever tells HostMan which ports an app serves on, but an app that

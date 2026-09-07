@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chinmay28/deployer/server/internal/hostops"
+	"github.com/chinmay28/hostman/server/internal/hostops"
 )
 
 // What a torrent request carries reaches a daemon on somebody's machine and a

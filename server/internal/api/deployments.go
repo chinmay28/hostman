@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/deploy"
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/deploy"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // deployRequest is the body of a deploy call: which host, and the parameter

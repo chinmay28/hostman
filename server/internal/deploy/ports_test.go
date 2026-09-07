@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 func TestInstallationPorts(t *testing.T) {

@@ -1,13 +1,13 @@
 SHELL := /bin/bash
 GO ?= go
-BIN := bin/deployer
+BIN := bin/hostman
 WEB_DIST := server/internal/web/dist
 
 ## The version's patch number is the repository's commit count, which a compiled
 ## binary can't ask git for — scripts/version.mjs works it out and the linker
 ## stamps it in. Empty (no node, no git, a shallow clone) leaves the Go package's
 ## default of 0, which reads as "unstamped build" rather than as a release.
-VERSION_PKG := github.com/chinmay28/deployer/server/internal/version
+VERSION_PKG := github.com/chinmay28/hostman/server/internal/version
 PATCH := $(shell node scripts/version.mjs --patch 2>/dev/null)
 LDFLAGS := -s -w $(if $(PATCH),-X $(VERSION_PKG).Patch=$(PATCH))
 
@@ -17,7 +17,7 @@ LDFLAGS := -s -w $(if $(PATCH),-X $(VERSION_PKG).Patch=$(PATCH))
 build: web server
 
 server: | $(WEB_DIST)/index.html
-	cd server && $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o ../$(BIN) ./cmd/deployer
+	cd server && $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o ../$(BIN) ./cmd/hostman
 
 ## version: print the version this tree would build as
 version:
@@ -62,14 +62,14 @@ test-installer:
 	./scripts/test-quickstart.sh
 
 ## test-provision: set a host up over SSH for real (needs root and sshd; makes a
-## throwaway user and writes /etc/sudoers.d/deployer, then removes both)
+## throwaway user and writes /etc/sudoers.d/hostman, then removes both)
 test-provision:
-	cd server && DEPLOYER_E2E=1 $(GO) test ./internal/hosts/ -run ProvisionEndToEnd -v
+	cd server && HOSTMAN_E2E=1 $(GO) test ./internal/hosts/ -run ProvisionEndToEnd -v
 
 ## test-torrent: drive a real deluge (needs deluged and deluge-console; starts a
 ## daemon on 58946 that talks to the network for as long as the test runs)
 test-torrent:
-	cd server && DEPLOYER_DELUGE=1 $(GO) test ./internal/hostops/ -run RealDeluge -v
+	cd server && HOSTMAN_DELUGE=1 $(GO) test ./internal/hostops/ -run RealDeluge -v
 
 vet:
 	cd server && $(GO) vet ./...

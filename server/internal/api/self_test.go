@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // fakeSelf stands in for the selfhost manager.

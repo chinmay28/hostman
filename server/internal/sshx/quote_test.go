@@ -15,10 +15,10 @@ func TestQuoteSurvivesARealShell(t *testing.T) {
 	}
 	values := []string{
 		"pi",
-		"ssh-ed25519 AAAAC3Nza deployer",
+		"ssh-ed25519 AAAAC3Nza hostman",
 		`it's mine`,
 		"a b\tc",
-		"$(touch /tmp/deployer-injection-test)",
+		"$(touch /tmp/hostman-injection-test)",
 		"`id`",
 		"$HOME",
 		`"; rm -rf / ;"`,

@@ -14,7 +14,7 @@
 // from git, which a compiled binary has no access to, so it is stamped at link
 // time instead:
 //
-//	go build -ldflags "-X github.com/chinmay28/deployer/server/internal/version.Patch=$(git rev-list --count HEAD)"
+//	go build -ldflags "-X github.com/chinmay28/hostman/server/internal/version.Patch=$(git rev-list --count HEAD)"
 //
 // `make build` does this for you via scripts/version.mjs, which is also where
 // the PWA's build reads Year/Month from — keep the two constants below in a

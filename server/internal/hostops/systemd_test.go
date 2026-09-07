@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/sshx"
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // systemd is not on every build machine, and where it is, a test has no

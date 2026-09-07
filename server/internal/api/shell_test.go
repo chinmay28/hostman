@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/shell"
+	"github.com/chinmay28/hostman/server/internal/shell"
 )
 
 // A shell endpoint that could not be reached without a host on the other end

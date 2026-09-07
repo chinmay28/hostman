@@ -94,8 +94,8 @@ const THEMES = {
 /** Font sizes the size buttons step through. The smallest fits 80 columns on a
  *  phone held sideways, which is the width most command output assumes. */
 const SIZES = [8, 9, 10, 11, 12, 13, 14, 16, 18]
-const SIZE_KEY = 'deployer.terminal.fontSize'
-const EXTRAS_KEY = 'deployer.terminal.extraKeys'
+const SIZE_KEY = 'hostman.terminal.fontSize'
+const EXTRAS_KEY = 'hostman.terminal.extraKeys'
 
 /** How close to the top or bottom edge a finger has to get, while picking
  *  text, before the screen starts scrolling under it. */

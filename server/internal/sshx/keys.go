@@ -16,7 +16,7 @@ import (
 const SettingPrivateKey = "ssh_private_key"
 
 // KeyComment identifies HostMan's key in a host's authorized_keys file.
-const KeyComment = "deployer"
+const KeyComment = "hostman"
 
 // keyStore is the slice of the database that sshx needs.
 type keyStore interface {

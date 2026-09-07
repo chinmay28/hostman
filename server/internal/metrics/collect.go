@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/sshx"
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/sshx"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // probeScript writes marker-delimited sections so one round trip yields

@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/chinmay28/deployer/server/internal/hostops"
-	"github.com/chinmay28/deployer/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/hostops"
+	"github.com/chinmay28/hostman/server/internal/store"
 )
 
 // Managing a host — its files, its services, its crontab, restarting it — is

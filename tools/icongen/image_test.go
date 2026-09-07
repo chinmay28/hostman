@@ -56,6 +56,16 @@ func TestMattePaintsThePageButNotTheArtwork(t *testing.T) {
 	}
 }
 
+func TestMatteCanCutTheArtworkOut(t *testing.T) {
+	out := Matte(artwork(), color.RGBA{})
+	if got := out.RGBAAt(0, 0); got.A != 0 {
+		t.Errorf("page corner is %v, want transparent", got)
+	}
+	if got := out.RGBAAt(3, 3); got != ink {
+		t.Errorf("artwork is %v, want ink", got)
+	}
+}
+
 func TestMatteLeavesTheSourceAlone(t *testing.T) {
 	src := artwork()
 	Matte(src, navy)

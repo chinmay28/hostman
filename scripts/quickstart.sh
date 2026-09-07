@@ -9,37 +9,40 @@
 # previous binary and database.
 #
 # Environment overrides:
-#   DEPLOYER_PORT   port to listen on              (default 8899)
-#   DEPLOYER_PIN    optional PIN for the web UI    (default none)
-#   DEPLOYER_REF    git branch, tag or commit      (default main)
-#   DEPLOYER_REPO   repository to build from
-#   DEPLOYER_SELF_USER  account HostMan SSHes to this machine as (default: the
+#   HOSTMAN_PORT   port to listen on              (default 8899)
+#   HOSTMAN_PIN    optional PIN for the web UI    (default none)
+#   HOSTMAN_REF    git branch, tag or commit      (default main)
+#   HOSTMAN_REPO   repository to build from
+#   HOSTMAN_SELF_USER  account HostMan SSHes to this machine as (default: the
 #                       user running the installer), for updating itself
 #
-# Paths can be moved with DEPLOYER_INSTALL_DIR, DEPLOYER_DATA_DIR,
-# DEPLOYER_SERVICE_USER, DEPLOYER_UNIT and DEPLOYER_GO_DIR.
+# Paths can be moved with HOSTMAN_INSTALL_DIR, HOSTMAN_DATA_DIR,
+# HOSTMAN_SERVICE_USER, HOSTMAN_UNIT and HOSTMAN_GO_DIR.
 #
 set -euo pipefail
 
-PORT="${DEPLOYER_PORT:-8899}"
-PIN="${DEPLOYER_PIN:-}"
-REF="${DEPLOYER_REF:-main}"
-REPO="${DEPLOYER_REPO:-https://github.com/chinmay28/hostman.git}"
+# HostMan used to be called Deployer. The DEPLOYER_* names are still honoured
+# because an install from then carries its own update command, which runs this
+# script with DEPLOYER_REF set — and that is the very run that renames it.
+PORT="${HOSTMAN_PORT:-${DEPLOYER_PORT:-8899}}"
+PIN="${HOSTMAN_PIN:-${DEPLOYER_PIN:-}}"
+REF="${HOSTMAN_REF:-${DEPLOYER_REF:-main}}"
+REPO="${HOSTMAN_REPO:-${DEPLOYER_REPO:-https://github.com/chinmay28/hostman.git}}"
 
-SERVICE_USER="${DEPLOYER_SERVICE_USER:-deployer}"
+SERVICE_USER="${HOSTMAN_SERVICE_USER:-hostman}"
 # The account HostMan connects to *this* machine as when updating itself. The
 # service user is a nologin account, so the person running the installer is the
 # sensible default.
-SELF_USER="${DEPLOYER_SELF_USER:-${SUDO_USER:-}}"
-INSTALL_DIR="${DEPLOYER_INSTALL_DIR:-/opt/deployer}"
+SELF_USER="${HOSTMAN_SELF_USER:-${DEPLOYER_SELF_USER:-${SUDO_USER:-}}}"
+INSTALL_DIR="${HOSTMAN_INSTALL_DIR:-/opt/hostman}"
 BUILD_DIR="$INSTALL_DIR/src"
-DATA_DIR="${DEPLOYER_DATA_DIR:-/var/lib/deployer}"
+DATA_DIR="${HOSTMAN_DATA_DIR:-/var/lib/hostman}"
 BACKUP_DIR="$DATA_DIR/backups"
-DB_PATH="$DATA_DIR/deployer.db"
-UNIT="${DEPLOYER_UNIT:-/etc/systemd/system/deployer.service}"
+DB_PATH="$DATA_DIR/hostman.db"
+UNIT="${HOSTMAN_UNIT:-/etc/systemd/system/hostman.service}"
 # Where the build-time Go toolchain is installed. Overridable so the installer's
 # own tests can exercise the upgrade without touching the machine's Go.
-GO_DIR="${DEPLOYER_GO_DIR:-/usr/local/go}"
+GO_DIR="${HOSTMAN_GO_DIR:-/usr/local/go}"
 GO_VERSION=1.24.7
 NODE_MAJOR=22
 KEEP_BACKUPS=5
@@ -58,7 +61,7 @@ esac
 
 if [ "$UNINSTALL" = 1 ]; then
   log "Stopping and removing the HostMan service"
-  systemctl disable --now deployer.service 2>/dev/null || true
+  systemctl disable --now hostman.service 2>/dev/null || true
   rm -f "$UNIT"
   systemctl daemon-reload
   rm -rf "$INSTALL_DIR"
@@ -78,10 +81,45 @@ case "$(uname -m)" in
   *) die "Unsupported architecture: $(uname -m)" ;;
 esac
 
+# ------------------------------------------------------------- the old name
+
+# An install made when this was Deployer lives at the old paths under the old
+# service. It is moved, not reinstalled: the database (hosts, apps, the SSH key)
+# and the build directory come along, and the old unit goes away so two copies
+# never fight over the port. Only the default locations are moved — anyone who
+# placed things by hand can move them by hand.
+OLD_INSTALL_DIR=/opt/deployer
+OLD_DATA_DIR=/var/lib/deployer
+if [ "$INSTALL_DIR" = /opt/hostman ] && [ "$DATA_DIR" = /var/lib/hostman ] &&
+   [ -d "$OLD_DATA_DIR" ] && [ ! -d "$DATA_DIR" ]; then
+  log "Moving the Deployer install to its new name, HostMan"
+  systemctl disable --now deployer.service 2>/dev/null || true
+  rm -f /etc/systemd/system/deployer.service
+  mv "$OLD_DATA_DIR" "$DATA_DIR"
+  for suffix in "" -wal -shm; do
+    if [ -f "$DATA_DIR/deployer.db$suffix" ]; then
+      mv "$DATA_DIR/deployer.db$suffix" "$DATA_DIR/hostman.db$suffix"
+    fi
+  done
+  if [ -d "$OLD_INSTALL_DIR" ] && [ ! -d "$INSTALL_DIR" ]; then
+    mv "$OLD_INSTALL_DIR" "$INSTALL_DIR"
+    if [ -x "$INSTALL_DIR/deployer" ]; then
+      mv "$INSTALL_DIR/deployer" "$INSTALL_DIR/hostman"
+    fi
+    rm -f "$INSTALL_DIR/deployer.prev" "$INSTALL_DIR/deployer.new"
+  fi
+  # The service account keeps its uid, so everything it owns stays its own.
+  if id deployer >/dev/null 2>&1 && ! id "$SERVICE_USER" >/dev/null 2>&1; then
+    usermod --login "$SERVICE_USER" --home "$DATA_DIR" deployer
+    groupmod --new-name "$SERVICE_USER" deployer 2>/dev/null || true
+  fi
+  systemctl daemon-reload
+fi
+
 # A bare `[ test ] && cmd` would abort the script under `set -e` whenever the
 # test is false, so every conditional below is a full if statement.
 UPGRADE=0
-if [ -x "$INSTALL_DIR/deployer" ]; then
+if [ -x "$INSTALL_DIR/hostman" ]; then
   UPGRADE=1
 fi
 
@@ -221,10 +259,10 @@ log "Building the web app"
   die "Web build failed."
 
 log "Building the server $VERSION"
-VERSION_PKG=github.com/chinmay28/deployer/server/internal/version
+VERSION_PKG=github.com/chinmay28/hostman/server/internal/version
 ( cd "$BUILD_DIR/server" &&
   go build -trimpath -ldflags "-s -w -X $VERSION_PKG.Patch=$PATCH" \
-    -o "$INSTALL_DIR/deployer.new" ./cmd/deployer ) ||
+    -o "$INSTALL_DIR/hostman.new" ./cmd/hostman ) ||
   die "Server build failed."
 
 # ------------------------------------------------------------------- accounts
@@ -242,12 +280,12 @@ chmod 700 "$DATA_DIR" "$BACKUP_DIR"
 
 if [ "$UPGRADE" = 1 ]; then
   log "Stopping HostMan for the upgrade"
-  systemctl stop deployer.service || true
+  systemctl stop hostman.service || true
 fi
 
 BACKUP=""
 if [ -f "$DB_PATH" ]; then
-  BACKUP="$BACKUP_DIR/deployer-$(date +%Y%m%d-%H%M%S).db"
+  BACKUP="$BACKUP_DIR/hostman-$(date +%Y%m%d-%H%M%S).db"
   log "Snapshotting the database to $BACKUP"
   # The service is stopped, so a plain copy is consistent. The -wal and -shm
   # files are checkpointed into the database on clean shutdown.
@@ -260,16 +298,16 @@ fi
 
 PREVIOUS=""
 if [ "$UPGRADE" = 1 ]; then
-  PREVIOUS="$INSTALL_DIR/deployer.prev"
-  cp "$INSTALL_DIR/deployer" "$PREVIOUS"
+  PREVIOUS="$INSTALL_DIR/hostman.prev"
+  cp "$INSTALL_DIR/hostman" "$PREVIOUS"
 fi
-mv "$INSTALL_DIR/deployer.new" "$INSTALL_DIR/deployer"
-chmod 755 "$INSTALL_DIR/deployer"
+mv "$INSTALL_DIR/hostman.new" "$INSTALL_DIR/hostman"
+chmod 755 "$INSTALL_DIR/hostman"
 
 log "Writing $UNIT"
 cat > "$UNIT" <<UNIT_EOF
 [Unit]
-Description=HostMan — host manager for machines on a network
+Description=HostMan — all your hosts in good hands
 Documentation=https://github.com/chinmay28/hostman
 After=network-online.target
 Wants=network-online.target
@@ -279,12 +317,12 @@ Type=simple
 User=$SERVICE_USER
 Group=$SERVICE_USER
 WorkingDirectory=$DATA_DIR
-ExecStart=$INSTALL_DIR/deployer -addr :$PORT -db $DB_PATH
-Environment=DEPLOYER_PIN=$PIN
+ExecStart=$INSTALL_DIR/hostman -addr :$PORT -db $DB_PATH
+Environment=HOSTMAN_PIN=$PIN
 # Used to register this machine as a host so HostMan can update itself.
-Environment=DEPLOYER_SELF_USER=$SELF_USER
-Environment=DEPLOYER_REPO=$REPO
-Environment=DEPLOYER_REF=$REF
+Environment=HOSTMAN_SELF_USER=$SELF_USER
+Environment=HOSTMAN_REPO=$REPO
+Environment=HOSTMAN_REF=$REF
 Restart=on-failure
 RestartSec=3
 # The database holds an SSH private key: keep it readable only by this user.
@@ -318,10 +356,10 @@ WantedBy=multi-user.target
 UNIT_EOF
 
 systemctl daemon-reload
-systemctl enable deployer.service >/dev/null 2>&1 || true
+systemctl enable hostman.service >/dev/null 2>&1 || true
 
 log "Starting HostMan"
-systemctl restart deployer.service
+systemctl restart hostman.service
 
 # ------------------------------------------------------------- health & rollback
 
@@ -336,12 +374,12 @@ done
 
 if [ "$healthy" = 0 ]; then
   warn "HostMan did not come up. Recent log:"
-  journalctl -u deployer.service -n 25 --no-pager || true
+  journalctl -u hostman.service -n 25 --no-pager || true
 
   if [ -n "$PREVIOUS" ] && [ -x "$PREVIOUS" ]; then
     warn "Rolling back to the previous version"
-    systemctl stop deployer.service || true
-    mv "$PREVIOUS" "$INSTALL_DIR/deployer"
+    systemctl stop hostman.service || true
+    mv "$PREVIOUS" "$INSTALL_DIR/hostman"
     if [ -n "$BACKUP" ] && [ -f "$BACKUP" ]; then
       cp "$BACKUP" "$DB_PATH"
       if [ -f "$BACKUP-wal" ]; then
@@ -351,15 +389,15 @@ if [ "$healthy" = 0 ]; then
       fi
       chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR"
     fi
-    systemctl start deployer.service || true
+    systemctl start hostman.service || true
     die "Upgrade failed and was rolled back. The previous version is running again."
   fi
-  die "HostMan failed to start. Check: journalctl -u deployer -f"
+  die "HostMan failed to start. Check: journalctl -u hostman -f"
 fi
 
 rm -f "$PREVIOUS"
 # Keep the most recent snapshots and drop the rest.
-find "$BACKUP_DIR" -maxdepth 1 -name 'deployer-*.db' -printf '%T@ %p\n' 2>/dev/null |
+find "$BACKUP_DIR" -maxdepth 1 -name 'hostman-*.db' -printf '%T@ %p\n' 2>/dev/null |
   sort -rn | tail -n +$((KEEP_BACKUPS + 1)) | cut -d' ' -f2- | while read -r old; do
     rm -f "$old" "$old-wal"
   done
@@ -376,7 +414,7 @@ echo
 if [ -z "$PIN" ]; then
   echo "     No PIN is set: anyone who can reach that address can deploy to your hosts."
   echo "     Keep it on your LAN or Tailscale network. To require a PIN:"
-  echo "       curl -fsSL .../quickstart.sh | sudo DEPLOYER_PIN=1234 bash"
+  echo "       curl -fsSL .../quickstart.sh | sudo HOSTMAN_PIN=1234 bash"
   echo
 fi
 if [ -n "$SELF_USER" ]; then
@@ -385,6 +423,6 @@ if [ -n "$SELF_USER" ]; then
   echo
 fi
 echo "     Open Settings in the app for the two commands to run on each host you add."
-echo "     Logs:    journalctl -u deployer -f"
+echo "     Logs:    journalctl -u hostman -f"
 echo "     Upgrade: re-run this script"
 echo

@@ -1,7 +1,7 @@
 {
   "name": "HostMan",
   "short_name": "HostMan",
-  "description": "A general-purpose host manager for machines on a network",
+  "description": "All your hosts in good hands",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
