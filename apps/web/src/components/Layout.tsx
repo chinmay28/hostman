@@ -17,7 +17,7 @@ const DEV_FLASH_MS = 3000
 export function AppHeader() {
   return (
     <header className="header">
-      <img className="brand-logo" src="/icon.svg" alt="" aria-hidden="true" />
+      <img className="brand-logo" src="/icon-192.png" alt="" aria-hidden="true" />
       {/* Name over version, as a lockup — the version reads as part of the
           name rather than as another thing on the screen. */}
       <div className="brand">

@@ -1,6 +1,8 @@
+<p align="center"><img src="art/hostman-logo.png" width="320" alt="HostMan"></p>
+
 # HostMan
 
-A general-purpose host manager for machines on a network. Add a host by
+**All your hosts in good hands.** A general-purpose host manager for machines on a network. Add a host by
 address (`nakedpi.local` or `192.168.2.123`), point HostMan at an app's
 one-line install command, and deploy, watch, and redeploy it later from your
 phone in one tap.
@@ -1000,7 +1002,6 @@ Quoting is tested the same way — every path a person could type is handed to
 ```
 server/
   cmd/deployer/      entrypoint: flags, wiring, graceful shutdown
-  cmd/icongen/       draws the app icons
   internal/store/    SQLite schema, append-only migrations, queries
   internal/sshx/     HostMan's keypair and SSH connections
   internal/metrics/  the agentless /proc probe and its parser
@@ -1020,4 +1021,6 @@ server/
   internal/web/      serves the embedded PWA
 apps/web/            the PWA: React, Vite, no UI framework
 scripts/             the installer, its test harness, and version.mjs
+art/                 the logo; tools/icongen cuts the app icons from it
+tools/icongen/       the icon cutter (its own Go module)
 ```
