@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# Installs or upgrades Deployer as a systemd service.
+# Installs or upgrades HostMan as a systemd service.
 #
-#   curl -fsSL https://raw.githubusercontent.com/chinmay28/deployer/main/scripts/quickstart.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/chinmay28/hostman/main/scripts/quickstart.sh | sudo bash
 #
 # Re-running upgrades in place: the database is snapshotted, the new build is
 # health-checked after it starts, and a failed upgrade rolls back to the
@@ -13,7 +13,7 @@
 #   DEPLOYER_PIN    optional PIN for the web UI    (default none)
 #   DEPLOYER_REF    git branch, tag or commit      (default main)
 #   DEPLOYER_REPO   repository to build from
-#   DEPLOYER_SELF_USER  account Deployer SSHes to this machine as (default: the
+#   DEPLOYER_SELF_USER  account HostMan SSHes to this machine as (default: the
 #                       user running the installer), for updating itself
 #
 # Paths can be moved with DEPLOYER_INSTALL_DIR, DEPLOYER_DATA_DIR,
@@ -24,10 +24,10 @@ set -euo pipefail
 PORT="${DEPLOYER_PORT:-8899}"
 PIN="${DEPLOYER_PIN:-}"
 REF="${DEPLOYER_REF:-main}"
-REPO="${DEPLOYER_REPO:-https://github.com/chinmay28/deployer.git}"
+REPO="${DEPLOYER_REPO:-https://github.com/chinmay28/hostman.git}"
 
 SERVICE_USER="${DEPLOYER_SERVICE_USER:-deployer}"
-# The account Deployer connects to *this* machine as when updating itself. The
+# The account HostMan connects to *this* machine as when updating itself. The
 # service user is a nologin account, so the person running the installer is the
 # sensible default.
 SELF_USER="${DEPLOYER_SELF_USER:-${SUDO_USER:-}}"
@@ -57,13 +57,13 @@ case "${1:-}" in
 esac
 
 if [ "$UNINSTALL" = 1 ]; then
-  log "Stopping and removing the Deployer service"
+  log "Stopping and removing the HostMan service"
   systemctl disable --now deployer.service 2>/dev/null || true
   rm -f "$UNIT"
   systemctl daemon-reload
   rm -rf "$INSTALL_DIR"
   echo
-  log "Removed. Your data is still at $DATA_DIR (it holds Deployer's SSH key)."
+  log "Removed. Your data is still at $DATA_DIR (it holds HostMan's SSH key)."
   log "Delete it with: sudo rm -rf $DATA_DIR && sudo userdel $SERVICE_USER"
   exit 0
 fi
@@ -183,7 +183,7 @@ fi
 # of it cheap — every commit, none of the historical file contents — and a plain
 # clone is the fallback for a remote that won't serve one. Either way, never
 # shallow.
-log "Fetching Deployer ($REF)"
+log "Fetching HostMan ($REF)"
 mkdir -p "$INSTALL_DIR"
 if [ -d "$BUILD_DIR/.git" ]; then
   git -C "$BUILD_DIR" remote set-url origin "$REPO"
@@ -235,13 +235,13 @@ if ! id "$SERVICE_USER" >/dev/null 2>&1; then
 fi
 mkdir -p "$DATA_DIR" "$BACKUP_DIR"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR"
-# The database holds Deployer's SSH private key.
+# The database holds HostMan's SSH private key.
 chmod 700 "$DATA_DIR" "$BACKUP_DIR"
 
 # --------------------------------------------------------------------- deploy
 
 if [ "$UPGRADE" = 1 ]; then
-  log "Stopping Deployer for the upgrade"
+  log "Stopping HostMan for the upgrade"
   systemctl stop deployer.service || true
 fi
 
@@ -269,8 +269,8 @@ chmod 755 "$INSTALL_DIR/deployer"
 log "Writing $UNIT"
 cat > "$UNIT" <<UNIT_EOF
 [Unit]
-Description=Deployer — deploys apps onto home servers
-Documentation=https://github.com/chinmay28/deployer
+Description=HostMan — host manager for machines on a network
+Documentation=https://github.com/chinmay28/hostman
 After=network-online.target
 Wants=network-online.target
 
@@ -281,7 +281,7 @@ Group=$SERVICE_USER
 WorkingDirectory=$DATA_DIR
 ExecStart=$INSTALL_DIR/deployer -addr :$PORT -db $DB_PATH
 Environment=DEPLOYER_PIN=$PIN
-# Used to register this machine as a host so Deployer can update itself.
+# Used to register this machine as a host so HostMan can update itself.
 Environment=DEPLOYER_SELF_USER=$SELF_USER
 Environment=DEPLOYER_REPO=$REPO
 Environment=DEPLOYER_REF=$REF
@@ -290,7 +290,7 @@ RestartSec=3
 # The database holds an SSH private key: keep it readable only by this user.
 UMask=0077
 
-# Deployer only needs to read its own data directory and reach the network.
+# HostMan only needs to read its own data directory and reach the network.
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
@@ -320,7 +320,7 @@ UNIT_EOF
 systemctl daemon-reload
 systemctl enable deployer.service >/dev/null 2>&1 || true
 
-log "Starting Deployer"
+log "Starting HostMan"
 systemctl restart deployer.service
 
 # ------------------------------------------------------------- health & rollback
@@ -335,7 +335,7 @@ for _ in $(seq 1 30); do
 done
 
 if [ "$healthy" = 0 ]; then
-  warn "Deployer did not come up. Recent log:"
+  warn "HostMan did not come up. Recent log:"
   journalctl -u deployer.service -n 25 --no-pager || true
 
   if [ -n "$PREVIOUS" ] && [ -x "$PREVIOUS" ]; then
@@ -354,7 +354,7 @@ if [ "$healthy" = 0 ]; then
     systemctl start deployer.service || true
     die "Upgrade failed and was rolled back. The previous version is running again."
   fi
-  die "Deployer failed to start. Check: journalctl -u deployer -f"
+  die "HostMan failed to start. Check: journalctl -u deployer -f"
 fi
 
 rm -f "$PREVIOUS"
@@ -370,7 +370,7 @@ if [ -z "$ADDRESS" ]; then
 fi
 
 echo
-log "Deployer $VERSION ($REVISION) is running"
+log "HostMan $VERSION ($REVISION) is running"
 echo "     http://$ADDRESS:$PORT  (also http://$(hostname).local:$PORT if mDNS is set up)"
 echo
 if [ -z "$PIN" ]; then
@@ -380,7 +380,7 @@ if [ -z "$PIN" ]; then
   echo
 fi
 if [ -n "$SELF_USER" ]; then
-  echo "     This machine is registered as a host so Deployer can update itself."
+  echo "     This machine is registered as a host so HostMan can update itself."
   echo "     Authorize its key for $SELF_USER with the first command in Settings."
   echo
 fi

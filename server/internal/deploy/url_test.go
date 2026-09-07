@@ -93,7 +93,7 @@ func TestInstallationURL(t *testing.T) {
 		},
 		want: "http://[fd00::1]:8080/",
 	}, {
-		name: "a placeholder Deployer cannot fill offers no link",
+		name: "a placeholder HostMan cannot fill offers no link",
 		in: store.Installation{
 			HealthType:   store.HealthHTTP,
 			HealthTarget: "http://{{host}}:{{port}}/",
@@ -137,7 +137,7 @@ func TestInstallationURL(t *testing.T) {
 	}
 }
 
-// Deployer's own installation is the one every user has, and its link is the
+// HostMan's own installation is the one every user has, and its link is the
 // one that has to work.
 func TestInstallationURLForSelfUpdateApp(t *testing.T) {
 	in := &store.Installation{

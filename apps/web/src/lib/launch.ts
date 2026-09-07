@@ -1,7 +1,7 @@
 import type { Installation } from '../types'
 
 /** Loopback names an app on the machine asking, which is exactly wrong when the
- *  machine asking is a phone. Deployer registers itself as 127.0.0.1 because
+ *  machine asking is a phone. HostMan registers itself as 127.0.0.1 because
  *  that is how it reaches itself over SSH, so any app on the home host inherits
  *  an address only the home host can use. */
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '0.0.0.0', '::1', '::'])
@@ -13,7 +13,7 @@ const LOOPBACK = new Set(['127.0.0.1', 'localhost', '0.0.0.0', '::1', '::'])
  * The server does the working out; the one thing it cannot know is which of a
  * machine's addresses the phone used to get here. Where it answered with a
  * loopback address, the hostname this page was loaded from is the same machine
- * by a name that travels — Deployer is served from it. That applies to anything
+ * by a name that travels — HostMan is served from it. That applies to anything
  * on the home host: an app's own page, and equally the remote session's.
  */
 export function reachable(address: string | undefined | null): string | null {
@@ -30,7 +30,7 @@ export function reachable(address: string | undefined | null): string | null {
 }
 
 /**
- * launchUrl is where "Open" should send the browser, or null where Deployer
+ * launchUrl is where "Open" should send the browser, or null where HostMan
  * has nothing solid to send it to.
  */
 export function launchUrl(installation: Installation | undefined | null): string | null {

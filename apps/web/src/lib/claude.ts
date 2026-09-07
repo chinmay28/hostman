@@ -3,7 +3,7 @@ import type { ClaudeEntry, ClaudeSession } from '../types'
 /**
  * Following a conversation that lives on the server.
  *
- * Events arrive on an EventSource that Deployer can be asked to resume from an
+ * Events arrive on an EventSource that HostMan can be asked to resume from an
  * offset, so a phone that locked its screen for ten minutes reconnects and
  * gets exactly what it missed. Messages and answers go the other way as
  * ordinary POSTs, which need no connection to have stayed up.
@@ -12,12 +12,12 @@ import type { ClaudeEntry, ClaudeSession } from '../types'
 export type ConnectionState = 'connecting' | 'live' | 'reconnecting' | 'ended'
 
 export interface StreamHandlers {
-  /** The session as Deployer sees it: first on every connect, and again after
+  /** The session as HostMan sees it: first on every connect, and again after
    *  every batch of entries, so busy, pending and cost never lag the screen. */
   onSession: (session: ClaudeSession) => void
   onEntries: (entries: ClaudeEntry[]) => void
   /** Events happened while nobody was watching and have fallen off the end of
-   *  what Deployer keeps. */
+   *  what HostMan keeps. */
   onGap: (missed: number) => void
   onState: (state: ConnectionState) => void
   onExit: (reason: string) => void

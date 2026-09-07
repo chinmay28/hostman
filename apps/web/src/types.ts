@@ -78,7 +78,7 @@ export interface Host {
   arch: string
   sudoOk: boolean
   createdAt: string
-  /** True for the machine Deployer itself runs on. */
+  /** True for the machine HostMan itself runs on. */
   isSelf: boolean
   latest: Sample | null
 }
@@ -100,7 +100,7 @@ export interface ProvisionStep {
   detail?: string
 }
 
-/** The outcome of the one-time setup that authorizes Deployer on a host. */
+/** The outcome of the one-time setup that authorizes HostMan on a host. */
 export interface ProvisionResult {
   ok: boolean
   error?: string
@@ -176,7 +176,7 @@ export interface Crontab {
   exists: boolean
 }
 
-/** One systemd service, as `systemctl show` describes it. Deployer lists the
+/** One systemd service, as `systemctl show` describes it. HostMan lists the
  *  ones an administrator installed by hand, not the distribution's own. */
 export interface ServiceUnit {
   name: string
@@ -230,7 +230,7 @@ export interface ServiceList {
   units: ServiceUnit[]
   /** Who the commands ran as — root wherever passwordless sudo is set up. */
   asUser: string
-  /** The host has more hand-installed units than Deployer will list. */
+  /** The host has more hand-installed units than HostMan will list. */
   truncated: boolean
 }
 
@@ -238,19 +238,19 @@ export interface ServiceLog {
   name: string
   lines: number
   content: string
-  /** The log was longer than Deployer will carry and lost its beginning. */
+  /** The log was longer than HostMan will carry and lost its beginning. */
   truncated: boolean
   asUser: string
 }
 
-/** Everything Deployer will ask systemd to do. */
+/** Everything HostMan will ask systemd to do. */
 export type ServiceAction = 'start' | 'stop' | 'restart' | 'reload' | 'enable' | 'disable'
 
 /** An action answers with the service as it now is — or, where reading it back
  *  afterwards failed, with just what was done. */
 export type ServiceActionResult = ServiceUnit | { name: string; action: string }
 
-/** What Deployer thinks took a host down the last time it restarted. */
+/** What HostMan thinks took a host down the last time it restarted. */
 export type BootCause =
   | 'clean'
   | 'panic'
@@ -324,7 +324,7 @@ export interface Watchdog {
   flags?: string[]
 }
 
-/** Deployer's answer to "why did it restart?", with everything it looked at. */
+/** HostMan's answer to "why did it restart?", with everything it looked at. */
 export interface BootReport {
   cause: BootCause
   confidence: BootConfidence
@@ -375,7 +375,7 @@ export interface BootReport {
 /** The state of persistent logging on a host, and what came of turning it on. */
 export interface JournalStorage {
   enabled: boolean
-  /** True where it was already on and Deployer changed nothing. */
+  /** True where it was already on and HostMan changed nothing. */
   already: boolean
   /** What journald.conf says about Storage=, where it says anything. */
   configured?: string
@@ -435,8 +435,8 @@ export interface RemoteSession {
    *  host would not give it one. A weaker browser than the phone's, and worth
    *  saying so on the screen rather than only in the journal. */
   noSandbox?: boolean
-  /** True where the host is running scripts an older Deployer wrote. Updating
-   *  Deployer does not rewrite what is on a host — setting up again does. */
+  /** True where the host is running scripts an older HostMan wrote. Updating
+   *  HostMan does not rewrite what is on a host — setting up again does. */
   stale?: boolean
   /** The account it runs as — whose Downloads a file lands in. */
   user: string
@@ -451,21 +451,21 @@ export interface RemoteSession {
  * The downloader: deluge running on the host, driven from here.
  *
  * One object answers the four questions the screen asks in order — is deluge
- * installed, has Deployer set it up, is it running, and what is it doing —
+ * installed, has HostMan set it up, is it running, and what is it doing —
  * because each of them is only worth asking if the one before it was yes.
  */
 export interface TorrentDaemon {
   /** The systemd unit, so the daemon is a service like any other. */
   unit: string
   /** Whether deluge is on the host at all. It is the one thing on this screen
-   *  Deployer will not install for you. */
+   *  HostMan will not install for you. */
   installed: boolean
   /** The deluge commands that are missing, which the screen turns into the
    *  line to run. */
   missing?: string[]
   /** deluged's own version. */
   version?: string
-  /** Whether Deployer has written the daemon onto this host. */
+  /** Whether HostMan has written the daemon onto this host. */
   configured: boolean
   /** Whether a torrent could be added right now. */
   ready: boolean
@@ -476,11 +476,11 @@ export interface TorrentDaemon {
   /** systemd's own words, for when "running" is not the whole story. */
   active?: string
   sub?: string
-  /** True where the host is running a unit an older Deployer wrote. */
+  /** True where the host is running a unit an older HostMan wrote. */
   stale?: boolean
   /** The account it runs as, and so the account that owns the files. */
   user: string
-  /** Where the files land. Before setup it is the folder Deployer would use. */
+  /** Where the files land. Before setup it is the folder HostMan would use. */
   downloads: string
   /** The disk behind that folder, in bytes. A torrent that fills a Pi's card
    *  is the ordinary way this goes wrong. */
@@ -566,7 +566,7 @@ export interface App {
   healthType: HealthType
   healthTarget: string
   createdAt: string
-  /** True for the app that installs Deployer itself. */
+  /** True for the app that installs HostMan itself. */
   selfUpdate: boolean
 }
 
@@ -620,7 +620,7 @@ export interface Installation {
   url?: string
 }
 
-/** A login shell open on a host. It belongs to Deployer rather than to the
+/** A login shell open on a host. It belongs to HostMan rather than to the
  *  screen looking at it, so the same shell survives the phone locking, and two
  *  screens can be looking at one. */
 export interface ShellSession {
@@ -675,7 +675,7 @@ export interface ClaudeHost {
   path?: string
   arch?: string
   os?: string
-  /** The install Deployer started, if it started one. */
+  /** The install HostMan started, if it started one. */
   install: 'absent' | 'running' | 'failed' | 'done'
   installExit?: number
   installLog?: string
@@ -684,7 +684,7 @@ export interface ClaudeHost {
   auth?: 'oauth' | 'api_key' | ''
   account?: string
   plan?: string
-  /** The sign-in Deployer started. "waiting" means the link is ready and a
+  /** The sign-in HostMan started. "waiting" means the link is ready and a
    *  code is what it needs. */
   login: 'absent' | 'waiting' | 'running' | 'failed' | 'done'
   loginUrl?: string
@@ -696,7 +696,7 @@ export interface ClaudeHost {
 
 export type ClaudeMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions'
 
-/** One conversation with Claude Code on a host. It lives on Deployer, so it
+/** One conversation with Claude Code on a host. It lives on HostMan, so it
  *  outlives the screen looking at it. */
 export interface ClaudeSession {
   id: string

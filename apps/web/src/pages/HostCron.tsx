@@ -24,7 +24,7 @@ export default function HostCron() {
   const hostId = Number(id)
 
   const { data: host } = useLoader(() => api.host(hostId), [hostId])
-  // "" means the account Deployer signs in as, which needs no privileges.
+  // "" means the account HostMan signs in as, which needs no privileges.
   const [user, setUser] = useState('')
   // The crontab that comes back names the user it belongs to. A read that fails
   // — asking for root's without sudo, say — leaves the last good one in place,
@@ -75,7 +75,7 @@ export default function HostCron() {
     }
   }
 
-  // Where Deployer already signs in as root, "the SSH user" and "root" are the
+  // Where HostMan already signs in as root, "the SSH user" and "root" are the
   // same crontab, and offering both would be offering a choice that isn't one.
   const own = host?.username ?? 'this user'
   const separateRoot = !!host && host.username !== 'root'

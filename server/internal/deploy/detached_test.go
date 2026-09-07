@@ -61,7 +61,7 @@ func TestStripExitMarker(t *testing.T) {
 }
 
 // The whole point of detaching: the command must outlive the SSH session that
-// started it, because updating Deployer kills that session.
+// started it, because updating HostMan kills that session.
 func TestDetachedCommandOutlivesItsSSHSession(t *testing.T) {
 	e := newEnv(t)
 	logPath := filepath.Join(t.TempDir(), "detached.log")
@@ -114,7 +114,7 @@ func waitForExitMarker(t *testing.T, logPath string) string {
 	return log
 }
 
-// selfHostEnv marks the test host as the machine Deployer runs on, which is
+// selfHostEnv marks the test host as the machine HostMan runs on, which is
 // what turns a deployment of a self-update app into a detached one.
 func selfHostEnv(t *testing.T) *env {
 	t.Helper()
@@ -133,7 +133,7 @@ func selfHostEnv(t *testing.T) *env {
 func TestSelfUpdateRunsDetached(t *testing.T) {
 	e := selfHostEnv(t)
 	app := e.app(t, &store.App{
-		Name:           "Deployer",
+		Name:           "HostMan",
 		InstallCommand: "echo updating to {{ref}}; sleep 1; echo restarted",
 		Params:         []store.Param{{Name: "ref", Label: "Version", Default: "main"}},
 		SelfUpdate:     true,
@@ -159,7 +159,7 @@ func TestSelfUpdateRunsDetached(t *testing.T) {
 	if strings.Contains(dep.Log, exitMarker) {
 		t.Errorf("exit marker leaked into the log:\n%s", dep.Log)
 	}
-	if !strings.Contains(dep.Log, "survives Deployer restarting itself") {
+	if !strings.Contains(dep.Log, "survives HostMan restarting itself") {
 		t.Errorf("log should explain why this one is different:\n%s", dep.Log)
 	}
 	if _, err := e.db.FindInstallation(context.Background(), app.ID, e.host.ID); err != nil {
@@ -170,7 +170,7 @@ func TestSelfUpdateRunsDetached(t *testing.T) {
 func TestSelfUpdateFailureIsRecorded(t *testing.T) {
 	e := selfHostEnv(t)
 	app := e.app(t, &store.App{
-		Name:           "Deployer",
+		Name:           "HostMan",
 		InstallCommand: "echo starting; echo bad >&2; exit 9",
 		SelfUpdate:     true,
 	})
@@ -198,7 +198,7 @@ func TestSelfUpdateFailureIsRecorded(t *testing.T) {
 func TestSelfUpdateOnAnotherHostRunsNormally(t *testing.T) {
 	e := newEnv(t) // host is not marked as self
 	app := e.app(t, &store.App{
-		Name:           "Deployer",
+		Name:           "HostMan",
 		InstallCommand: "echo installing deployer elsewhere",
 		SelfUpdate:     true,
 	})
@@ -214,12 +214,12 @@ func TestSelfUpdateOnAnotherHostRunsNormally(t *testing.T) {
 	}
 }
 
-// The restart case: a previous Deployer process started a detached update and
+// The restart case: a previous HostMan process started a detached update and
 // died. A fresh Runner must pick the log back up and finish the record.
 func TestResumeDetachedAfterRestart(t *testing.T) {
 	e := selfHostEnv(t)
 	app := e.app(t, &store.App{
-		Name:           "Deployer",
+		Name:           "HostMan",
 		InstallCommand: "irrelevant, the command already ran",
 		SelfUpdate:     true,
 	})
@@ -234,14 +234,14 @@ func TestResumeDetachedAfterRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The command kept running on the host while Deployer was down, and has
+	// The command kept running on the host while HostMan was down, and has
 	// since finished.
 	content := "==> installing\nbuilding the web app\nrestarting deployer.service\n\n" + exitMarker + "0\n"
 	if err := os.WriteFile(logPath, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	// A brand new Runner, exactly as a restarted Deployer would have.
+	// A brand new Runner, exactly as a restarted HostMan would have.
 	fresh := NewRunner(e.db, e.svc, e.checker, discardLogger())
 	fresh.ResumeDetached(ctx)
 
@@ -253,7 +253,7 @@ func TestResumeDetachedAfterRestart(t *testing.T) {
 		t.Errorf("log should say it was picked back up:\n%s", got.Log)
 	}
 	if !strings.Contains(got.Log, "restarting deployer.service") {
-		t.Errorf("log written while Deployer was down was lost:\n%s", got.Log)
+		t.Errorf("log written while HostMan was down was lost:\n%s", got.Log)
 	}
 	if strings.Contains(got.Log, exitMarker) {
 		t.Errorf("exit marker leaked into the log:\n%s", got.Log)
@@ -269,7 +269,7 @@ func TestResumeDetachedAfterRestart(t *testing.T) {
 
 func TestResumeDetachedReportsFailure(t *testing.T) {
 	e := selfHostEnv(t)
-	app := e.app(t, &store.App{Name: "Deployer", InstallCommand: "x", SelfUpdate: true})
+	app := e.app(t, &store.App{Name: "HostMan", InstallCommand: "x", SelfUpdate: true})
 
 	ctx := context.Background()
 	logPath := filepath.Join(t.TempDir(), "resume-failed.log")
@@ -302,7 +302,7 @@ func TestResumeDetachedReportsFailure(t *testing.T) {
 // running on the host and will be resumed.
 func TestInterruptLeavesDetachedDeploymentsAlone(t *testing.T) {
 	e := selfHostEnv(t)
-	app := e.app(t, &store.App{Name: "Deployer", InstallCommand: "x", SelfUpdate: true})
+	app := e.app(t, &store.App{Name: "HostMan", InstallCommand: "x", SelfUpdate: true})
 	other := e.app(t, &store.App{Name: "ordinary", InstallCommand: "x"})
 
 	ctx := context.Background()
@@ -345,12 +345,12 @@ func TestInterruptLeavesDetachedDeploymentsAlone(t *testing.T) {
 	}
 }
 
-// `systemctl restart deployer` reaches Deployer as a SIGTERM, which triggers a
+// `systemctl restart deployer` reaches HostMan as a SIGTERM, which triggers a
 // graceful shutdown. That must not cancel the very update doing the restarting.
 func TestShutdownLeavesDetachedDeploymentsRunning(t *testing.T) {
 	e := selfHostEnv(t)
 	app := e.app(t, &store.App{
-		Name:           "Deployer",
+		Name:           "HostMan",
 		InstallCommand: "sleep 30",
 		SelfUpdate:     true,
 	})
@@ -385,7 +385,7 @@ func TestShutdownLeavesDetachedDeploymentsRunning(t *testing.T) {
 // An explicit cancel still stops watching a detached deployment.
 func TestCancelStillWorksForDetachedDeployments(t *testing.T) {
 	e := selfHostEnv(t)
-	app := e.app(t, &store.App{Name: "Deployer", InstallCommand: "sleep 30", SelfUpdate: true})
+	app := e.app(t, &store.App{Name: "HostMan", InstallCommand: "sleep 30", SelfUpdate: true})
 	started, err := e.runner.Start(context.Background(), app.ID, e.host.ID, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -426,7 +426,7 @@ func waitForFile(t *testing.T, path string) {
 func TestShutdownHandsOverWithoutRecording(t *testing.T) {
 	e := selfHostEnv(t)
 	app := e.app(t, &store.App{
-		Name:           "Deployer",
+		Name:           "HostMan",
 		InstallCommand: "sleep 1; echo done",
 		SelfUpdate:     true,
 	})
@@ -467,11 +467,11 @@ func TestShutdownHandsOverWithoutRecording(t *testing.T) {
 		t.Errorf("the resumed process should own the log:\n%s", resumed.Log)
 	}
 	if !strings.Contains(resumed.Log, "done") {
-		t.Errorf("output written while Deployer was down was lost:\n%s", resumed.Log)
+		t.Errorf("output written while HostMan was down was lost:\n%s", resumed.Log)
 	}
 }
 
-// An app is expected to be unreachable while it is being deployed — Deployer
+// An app is expected to be unreachable while it is being deployed — HostMan
 // updating itself most of all. Recording a failure then would show "Not
 // responding" for something that is simply mid-restart.
 func TestHealthIsNotFailedDuringADeployment(t *testing.T) {
@@ -483,7 +483,7 @@ func TestHealthIsNotFailedDuringADeployment(t *testing.T) {
 
 	// An installed app with a health check that will not answer.
 	app := e.app(t, &store.App{
-		Name: "Deployer", InstallCommand: "sleep 20", SelfUpdate: true,
+		Name: "HostMan", InstallCommand: "sleep 20", SelfUpdate: true,
 		HealthType: store.HealthHTTP, HealthTarget: "http://127.0.0.1:1/",
 	})
 	dep, err := e.db.CreateDeployment(ctx, &store.Deployment{AppID: app.ID, HostID: e.host.ID, Command: "x"})

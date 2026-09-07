@@ -14,7 +14,7 @@ import { Sheet } from './ui'
  * xterm.js draws the screen — a terminal is a thirty-year-old protocol of
  * escape sequences and there is no point pretending otherwise, because `htop`
  * and `vim` and a coloured prompt are exactly what a shell is for. What is
- * Deployer's own work is everything around it, and all of that is about the
+ * HostMan's own work is everything around it, and all of that is about the
  * phone:
  *
  * The key bar. A phone keyboard has no Ctrl, no Esc, no Tab and no arrows,
@@ -33,7 +33,7 @@ import { Sheet } from './ui'
  * Copy and paste. Both are keys on the bar, because neither is a gesture a
  * phone offers over a terminal: xterm selects with a mouse and a phone has
  * none, so Copy arms a mode in which a drag picks lines instead of scrolling.
- * And because Deployer is usually plain http on a LAN, where a browser hands a
+ * And because HostMan is usually plain http on a LAN, where a browser hands a
  * script no clipboard at all, both fall back to a box of text the phone's own
  * Copy and Paste can reach. When the phone does offer Paste over the screen —
  * a long press while the keyboard is up — that lands in the shell too; the
@@ -318,7 +318,7 @@ export default function TerminalView({
     }
     dark.addEventListener('change', onTheme)
 
-    // The screen is asked for from the beginning: what Deployer kept is the
+    // The screen is asked for from the beginning: what HostMan kept is the
     // shell's history, and a client arriving at an hour-old session should see
     // what it has been doing rather than an empty rectangle.
     const stream = new ShellStream(session.id, 0, {
@@ -579,7 +579,7 @@ export default function TerminalView({
   const paste = async () => {
     try {
       // Optional because over plain http there is no clipboard object at all,
-      // and Deployer is usually plain http on a LAN.
+      // and HostMan is usually plain http on a LAN.
       const text = await navigator.clipboard?.readText()
       if (text) {
         insert(text)
@@ -818,7 +818,7 @@ export default function TerminalView({
  * The clipboard the long way round.
  *
  * A browser hands a script the clipboard only on a page it trusts, which means
- * https or localhost — and Deployer is usually plain http on the LAN, where
+ * https or localhost — and HostMan is usually plain http on the LAN, where
  * there is no clipboard object at all. But the phone's own Copy and Paste have
  * never needed one: they work on a box of text. So this is that box, filled in
  * to be copied out of, or empty to be pasted into and sent.

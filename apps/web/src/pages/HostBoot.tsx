@@ -72,7 +72,7 @@ function Verdict({ report }: { report: BootReport }) {
         <div className="grow">
           <div className="title">{report.headline}</div>
           <div className="sub">
-            {booted ? whenItCameBack(booted) : 'Deployer could not date the restart'}
+            {booted ? whenItCameBack(booted) : 'HostMan could not date the restart'}
           </div>
         </div>
         <CauseBadge cause={report.cause} />
@@ -117,7 +117,7 @@ function Reasons({ report }: { report: BootReport }) {
   if (report.reasons.length === 0) return null
   return (
     <>
-      <SectionTitle>Why Deployer thinks so</SectionTitle>
+      <SectionTitle>Why HostMan thinks so</SectionTitle>
       <Card>
         {report.reasons.map((reason, i) => (
           <div key={reason} className="row" style={{ gap: 10, padding: '6px 0' }}>
@@ -213,7 +213,7 @@ function History({ report }: { report: BootReport }) {
       <Card>
         {!report.cleanKnown && (
           <Banner tone="warn">
-            `last` on this host does not show shutdown records, so Deployer cannot tell which of
+            `last` on this host does not show shutdown records, so HostMan cannot tell which of
             these were asked for.
           </Banner>
         )}
@@ -374,7 +374,7 @@ function Record({
           <>
             <div className="list-divider" />
             <p className="sub" style={{ margin: 0 }}>
-              This host has no systemd journal, so all Deployer can read is wtmp and whatever
+              This host has no systemd journal, so all HostMan can read is wtmp and whatever
               rsyslog happens to keep.
             </p>
           </>

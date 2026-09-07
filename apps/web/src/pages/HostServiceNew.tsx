@@ -199,7 +199,7 @@ export default function HostServiceNew() {
       <Card>
         <p className="sub" style={{ marginTop: 0 }}>
           {raw === null
-            ? `This is what will be written to /etc/systemd/system/${unitName}. systemd reads it before Deployer keeps it: anything it refuses to load is taken straight back off the disk.`
+            ? `This is what will be written to /etc/systemd/system/${unitName}. systemd reads it before HostMan keeps it: anything it refuses to load is taken straight back off the disk.`
             : 'Edited by hand, so the fields above no longer change it.'}
         </p>
         <textarea

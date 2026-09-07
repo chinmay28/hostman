@@ -18,7 +18,7 @@ const (
 	StatusError   = "error"
 )
 
-// Host is a machine Deployer can reach over SSH.
+// Host is a machine HostMan can reach over SSH.
 type Host struct {
 	ID         int64      `json:"id"`
 	Name       string     `json:"name"`
@@ -35,7 +35,7 @@ type Host struct {
 	Arch       string     `json:"arch"`
 	SudoOK     bool       `json:"sudoOk"`
 	CreatedAt  time.Time  `json:"createdAt"`
-	// IsSelf marks the machine Deployer itself is running on.
+	// IsSelf marks the machine HostMan itself is running on.
 	IsSelf    bool   `json:"isSelf"`
 	MachineID string `json:"-"`
 }
@@ -147,7 +147,7 @@ type HostFacts struct {
 	Kernel   string
 	Arch     string
 	SudoOK   bool
-	// MachineID is /etc/machine-id, which is how Deployer recognises the
+	// MachineID is /etc/machine-id, which is how HostMan recognises the
 	// machine it is running on regardless of the address used to reach it.
 	MachineID string
 	IsSelf    bool
@@ -181,13 +181,13 @@ func requireRow(res interface{ RowsAffected() (int64, error) }) error {
 	return nil
 }
 
-// SelfHost returns the host Deployer is running on, if one has been identified.
+// SelfHost returns the host HostMan is running on, if one has been identified.
 func (d *DB) SelfHost(ctx context.Context) (*Host, error) {
 	return scanHost(d.sql.QueryRowContext(ctx,
 		`SELECT `+hostColumns+` FROM hosts WHERE is_self = 1 ORDER BY id LIMIT 1`))
 }
 
-// SetHostSelf marks (or unmarks) a host as the machine Deployer runs on.
+// SetHostSelf marks (or unmarks) a host as the machine HostMan runs on.
 func (d *DB) SetHostSelf(ctx context.Context, id int64, isSelf bool, machineID string) error {
 	_, err := d.sql.ExecContext(ctx,
 		`UPDATE hosts SET is_self = ?, machine_id = ? WHERE id = ?`, isSelf, machineID, id)

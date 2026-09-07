@@ -15,7 +15,7 @@ type selfView struct {
 	MachineID string `json:"machineId"`
 	// Host is the home host, or null if this machine has not been registered.
 	Host *store.Host `json:"host"`
-	// App is the app that installs Deployer, or null if it was deleted.
+	// App is the app that installs HostMan, or null if it was deleted.
 	App *store.App `json:"app"`
 	// Ref is the version a self-update would build by default.
 	Ref string `json:"ref"`
@@ -72,11 +72,11 @@ func (s *Server) handleGetSelf(w http.ResponseWriter, r *http.Request) {
 	case host == nil:
 		view.Blocked = "This machine isn't registered as a host yet."
 	case app == nil:
-		view.Blocked = "The Deployer app was deleted, so there is nothing to update from."
+		view.Blocked = "The HostMan app was deleted, so there is nothing to update from."
 	case view.Running != nil:
 		view.Blocked = "An update is already running."
 	case host.Status != store.StatusOnline:
-		view.Blocked = "Deployer can't reach this machine over SSH yet — authorize its key below."
+		view.Blocked = "HostMan can't reach this machine over SSH yet — authorize its key below."
 	case !host.SudoOK:
 		view.Blocked = "The SSH user needs passwordless sudo before it can install anything."
 	default:
@@ -85,7 +85,7 @@ func (s *Server) handleGetSelf(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, view)
 }
 
-// handleSelfUpdate starts an update of Deployer itself on the home host.
+// handleSelfUpdate starts an update of HostMan itself on the home host.
 func (s *Server) handleSelfUpdate(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Ref string `json:"ref"`
@@ -101,7 +101,7 @@ func (s *Server) handleSelfUpdate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusConflict,
-				"This machine isn't registered as a host yet, so Deployer can't update itself.")
+				"This machine isn't registered as a host yet, so HostMan can't update itself.")
 			return
 		}
 		s.writeStoreError(w, err, "self update")
@@ -111,7 +111,7 @@ func (s *Server) handleSelfUpdate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusConflict,
-				"The Deployer app was deleted. Recreate it to update from the UI.")
+				"The HostMan app was deleted. Recreate it to update from the UI.")
 			return
 		}
 		s.writeStoreError(w, err, "self update")

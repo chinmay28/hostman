@@ -88,15 +88,15 @@ var migrations = []string{
 		updated_at         TEXT NOT NULL DEFAULT (datetime('now')),
 		UNIQUE(app_id, host_id)
 	)`,
-	// The machine Deployer itself runs on, once identified, is marked so the UI
+	// The machine HostMan itself runs on, once identified, is marked so the UI
 	// can label it and so self-updates can be handled differently.
 	`ALTER TABLE hosts ADD COLUMN is_self INTEGER NOT NULL DEFAULT 0`,
 	`ALTER TABLE hosts ADD COLUMN machine_id TEXT NOT NULL DEFAULT ''`,
-	// An app that installs Deployer itself: deploying it to the home host
+	// An app that installs HostMan itself: deploying it to the home host
 	// restarts the very process running the deployment.
 	`ALTER TABLE apps ADD COLUMN self_update INTEGER NOT NULL DEFAULT 0`,
 	// Where a detached deployment writes its output on the host. Non-empty
-	// means the command outlives Deployer and can be picked back up.
+	// means the command outlives HostMan and can be picked back up.
 	`ALTER TABLE deployments ADD COLUMN detached_log TEXT NOT NULL DEFAULT ''`,
 	// How an app takes itself back off a host. Optional: an app that does not
 	// say cannot be uninstalled, only forgotten.

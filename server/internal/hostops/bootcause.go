@@ -29,7 +29,7 @@ import (
 // that was asked to restart says so, at length, in a dozen lines of systemd
 // shutting things down. A machine that lost power says nothing at all: its log
 // stops mid-sentence. That absence cannot be distinguished from a lock-up so
-// complete the kernel never got to write about it, and Deployer says so in
+// complete the kernel never got to write about it, and HostMan says so in
 // those words instead of picking the more dramatic of the two.
 
 // Sign kinds. These group the patterns below; the verdict is decided on kinds,
@@ -65,7 +65,7 @@ const nearSkew = time.Minute
 
 // nearLines is how many lines from the end of a chunk count as "near" for a
 // line whose timestamp could not be read at all. It is a poor substitute for a
-// clock and is only reached for on a log Deployer could not date.
+// clock and is only reached for on a log HostMan could not date.
 const nearLines = 25
 
 // maxSignLine is how much of a matching line to keep. Kernel lines carry
@@ -264,7 +264,7 @@ var uncleanOrder = []string{
 // diagnose fills in the verdict, its confidence, and the reasoning that led to
 // it. It is deliberately the only place any of that is decided: the API returns
 // the report as it stands and the UI renders it, so there is one account of why
-// Deployer thinks what it thinks rather than three that can drift apart.
+// HostMan thinks what it thinks rather than three that can drift apart.
 func diagnose(r *BootReport) {
 	r.Reasons = []string{}
 
@@ -382,7 +382,7 @@ func diagnoseUnclean(r *BootReport, nearest, anywhere func(string) *Sign, wtmpKn
 		r.Confidence = ConfidenceUnclear
 		r.Headline = "There is no record of it to read"
 		r.Detail = "Nothing on this machine kept a log of the boot that ended, so there is nothing to look through. " +
-			"What is below is everything Deployer could find without one."
+			"What is below is everything HostMan could find without one."
 		return
 	}
 
@@ -405,7 +405,7 @@ func diagnoseUnclean(r *BootReport, nearest, anywhere func(string) *Sign, wtmpKn
 	r.Headline = "It went down without saying why"
 	r.Detail = "The log ends in the middle of ordinary work, with no panic, no shutdown and no complaint. " +
 		"Losing power looks exactly like this, and so does a lock-up hard enough that the kernel never got to write " +
-		"about it — Deployer will not pick between the two on no evidence."
+		"about it — HostMan will not pick between the two on no evidence."
 	r.Reasons = append(r.Reasons, "The last thing it said was routine, so whatever happened left no trace.")
 }
 
@@ -518,14 +518,14 @@ func appendHistory(r *BootReport) {
 		"Of the last %d restarts this machine remembers, %d were not asked for.", len(r.Restarts), r.Unclean))
 }
 
-// appendGaps says what Deployer could not see, and is the most useful line on
+// appendGaps says what HostMan could not see, and is the most useful line on
 // the screen when the verdict is "unknown". A journal kept in memory is the
 // single commonest reason this question has no answer, and it is one command
 // away from being fixed — which is what the button on this screen does.
 func appendGaps(r *BootReport) {
 	switch {
 	case !r.Journal:
-		r.Reasons = append(r.Reasons, "This host has no systemd journal, so the only log Deployer could look for was rsyslog's.")
+		r.Reasons = append(r.Reasons, "This host has no systemd journal, so the only log HostMan could look for was rsyslog's.")
 	case r.Source == SourceNone && !r.Persistent:
 		r.Reasons = append(r.Reasons, "This host's journal is kept in memory and does not survive a restart, so the log of the boot that ended is gone.")
 	case r.Source == SourceLogFile:

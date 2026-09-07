@@ -138,7 +138,7 @@ func TestClaudeModelChangeWaitsForTheCLI(t *testing.T) {
 		t.Fatal("the model did not change")
 	}
 	if w := do(t, h, "POST", "/api/claude/"+id+"/mode", `{"mode":"auto"}`); w.Code != http.StatusBadGateway {
-		t.Fatalf("a mode Deployer does not offer = %d", w.Code)
+		t.Fatalf("a mode HostMan does not offer = %d", w.Code)
 	}
 }
 

@@ -41,11 +41,11 @@ func TestUninstallOfAMissingInstallation(t *testing.T) {
 	}
 }
 
-// Deployer removing itself from the machine it runs on would take the log, the
+// HostMan removing itself from the machine it runs on would take the log, the
 // record and the UI down with it half way through, leaving nothing to say what
 // happened. An update survives that restart by running detached and being
 // picked back up; an uninstall has nothing left to pick it back up.
-func TestUninstallRefusesToRemoveDeployerFromItsOwnMachine(t *testing.T) {
+func TestUninstallRefusesToRemoveHostManFromItsOwnMachine(t *testing.T) {
 	s, h := testServer(t, "")
 	s.Self = fakeSelf{id: "abc123"}
 	host, app := registerSelf(t, s, true)
@@ -137,7 +137,7 @@ func TestUninstallEndToEndThroughAPI(t *testing.T) {
 		t.Errorf("log missing the command's output:\n%s", removal.Log)
 	}
 
-	// The app is gone from the host, so Deployer's record of it being there is
+	// The app is gone from the host, so HostMan's record of it being there is
 	// gone too — along with the health check that would keep asking after it.
 	if got := decode[[]store.Installation](t, do(t, h, "GET", "/api/installations", "")); len(got) != 0 {
 		t.Errorf("installations after uninstall = %+v, want none", got)

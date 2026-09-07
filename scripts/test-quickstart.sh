@@ -6,7 +6,7 @@
 #   sudo ./scripts/test-quickstart.sh
 #
 # systemd is stubbed out (the unit file is still written and parsed, and the
-# real binary is really started), so this runs anywhere Deployer builds.
+# real binary is really started), so this runs anywhere HostMan builds.
 #
 set -euo pipefail
 
@@ -217,7 +217,7 @@ curl -fsS --max-time 3 "http://127.0.0.1:$PORT/api/health" >/dev/null ||
   fail "the installed service is not answering"
 pass "installs, writes a hardened unit, and the service answers"
 
-# The database must be private: it holds Deployer's SSH private key.
+# The database must be private: it holds HostMan's SSH private key.
 perms="$(stat -c '%a' "$SANDBOX/data")"
 [ "$perms" = "700" ] || fail "data directory is mode $perms, want 700"
 pass "data directory is not world-readable"

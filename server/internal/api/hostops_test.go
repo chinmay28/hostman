@@ -57,7 +57,7 @@ func TestFileRequestsValidateThePath(t *testing.T) {
 }
 
 // The service screens name a unit in the query string or the body. Services and
-// timers are what Deployer manages; anything else is the request's problem
+// timers are what HostMan manages; anything else is the request's problem
 // rather than the host's, and is refused before a connection is opened.
 func TestServiceRequestsValidateTheUnitName(t *testing.T) {
 	_, h := testServer(t, "")
@@ -91,7 +91,7 @@ func TestServiceRequestsValidateTheUnitName(t *testing.T) {
 	}
 }
 
-// Deployer asks systemd to start, stop and restart things. Masking a unit,
+// HostMan asks systemd to start, stop and restart things. Masking a unit,
 // isolating a target or powering the machine off from here are not on offer,
 // and the API is where that stops rather than the UI.
 func TestServiceActionsAreLimitedToWhatTheUIOffers(t *testing.T) {
@@ -108,7 +108,7 @@ func TestServiceActionsAreLimitedToWhatTheUIOffers(t *testing.T) {
 }
 
 // Restarting is the only power state there is: a host can be brought back from
-// a reboot, and Deployer cannot bring one back from off.
+// a reboot, and HostMan cannot bring one back from off.
 func TestThereIsNoShutdownRoute(t *testing.T) {
 	_, h := testServer(t, "")
 	id := newHost(t, h)

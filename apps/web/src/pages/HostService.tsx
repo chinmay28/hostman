@@ -78,7 +78,7 @@ export default function HostService() {
   // same screen, and the words have to follow it.
   const kind = unit?.timer ? 'timer' : 'service'
 
-  // systemctl waits for the service, and Deployer waits for systemctl: a unit
+  // systemctl waits for the service, and HostMan waits for systemctl: a unit
   // that takes half a minute to come up takes half a minute to answer.
   const run = async (action: ServiceAction) => {
     setBusy(action)
@@ -263,7 +263,7 @@ export default function HostService() {
                   </button>
                 </div>
                 <p className="sub" style={{ marginBottom: 0 }}>
-                  Deployer waits for systemd to finish, so a unit that takes its time starting
+                  HostMan waits for systemd to finish, so a unit that takes its time starting
                   takes its time answering.
                 </p>
                 {/* Reload is a signal to a running program to re-read its
@@ -474,7 +474,7 @@ function StartedBy({ hostId, unit }: { hostId: number; unit: ServiceUnit }) {
 
 /** Another unit by name. Services and timers have a screen of their own and are
  *  a tap away; the socket or target that started one is named but goes nowhere,
- *  which is the truth — Deployer manages those two kinds and does not pretend
+ *  which is the truth — HostMan manages those two kinds and does not pretend
  *  to manage the rest. */
 function UnitRef({ hostId, name }: { hostId: number; name: string }) {
   if (!name.endsWith('.service') && !name.endsWith('.timer')) return <span>{name}</span>
@@ -485,7 +485,7 @@ function UnitRef({ hostId, name }: { hostId: number; name: string }) {
  * What to say under the figures when one of them is missing or is not quite the
  * measure it looks like.
  *
- * A dash on a running service is a question, and the answer is never "Deployer
+ * A dash on a running service is a question, and the answer is never "HostMan
  * could not be bothered" — it is that this host does not count that unit's
  * memory, or that this unit has no process to have a PID. Both have a cause
  * worth naming and a fix worth naming with it. On a stopped service neither is

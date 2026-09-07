@@ -21,7 +21,7 @@ export function AppHeader() {
       {/* Name over version, as a lockup — the version reads as part of the
           name rather than as another thing on the screen. */}
       <div className="brand">
-        <h1>Deployer</h1>
+        <h1>HostMan</h1>
         <span className="brand-version">{APP_VERSION}</span>
       </div>
       <DevMark />

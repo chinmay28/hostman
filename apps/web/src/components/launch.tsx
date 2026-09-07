@@ -5,11 +5,11 @@ import type { Installation } from '../types'
 import { Sheet } from './ui'
 
 /**
- * The button that opens a deployed app in the phone's browser. Deployer knows
+ * The button that opens a deployed app in the phone's browser. HostMan knows
  * an app is healthy and which port it answers on; this is the one tap that
  * turns knowing into using it.
  *
- * It shows nothing at all when the app has not said enough for Deployer to name
+ * It shows nothing at all when the app has not said enough for HostMan to name
  * an address — a dead "Open" would be worse than none. Where the same app is
  * deployed to several hosts there is no right one to guess at, so it asks.
  */
@@ -86,7 +86,7 @@ export function LaunchButton({
   )
 }
 
-/** An arrow leaving its frame: the app opens away from Deployer, in the
+/** An arrow leaving its frame: the app opens away from HostMan, in the
  *  browser, rather than in the screen the button is on. */
 export function LaunchIcon() {
   return (

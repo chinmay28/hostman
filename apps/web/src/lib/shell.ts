@@ -6,7 +6,7 @@ import type { ShellSession } from '../types'
  *
  * The screen goes one way and the keyboard goes the other, over two different
  * things, and that is deliberate. Output arrives on an EventSource, which the
- * browser reopens by itself and which Deployer can be asked to resume from a
+ * browser reopens by itself and which HostMan can be asked to resume from a
  * byte offset — so a phone that locked its screen for ten minutes reconnects
  * and gets exactly what it missed. Keystrokes go as ordinary POSTs, which need
  * no connection to have stayed up at all.
@@ -15,12 +15,12 @@ import type { ShellSession } from '../types'
 export type ConnectionState = 'connecting' | 'live' | 'reconnecting' | 'ended'
 
 export interface StreamHandlers {
-  /** The session as Deployer sees it, sent first on every connect — so a screen
+  /** The session as HostMan sees it, sent first on every connect — so a screen
    *  reconnecting into a shell somebody has since resized can correct itself. */
   onSession: (session: ShellSession) => void
   onData: (bytes: Uint8Array) => void
   /** Output was produced while nobody was watching and has fallen off the end
-   *  of what Deployer keeps. Said out loud rather than papered over: the screen
+   *  of what HostMan keeps. Said out loud rather than papered over: the screen
    *  is about to jump, and a terminal that jumps silently is a terminal lying
    *  about what ran. */
   onGap: (missed: number) => void

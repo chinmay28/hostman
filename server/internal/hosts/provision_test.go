@@ -85,7 +85,7 @@ func TestAuthorizeScriptAddsTheKeyExactlyOnce(t *testing.T) {
 	}
 }
 
-// A file whose last line has no newline would otherwise get Deployer's key
+// A file whose last line has no newline would otherwise get HostMan's key
 // spliced onto the end of someone else's, silently breaking both.
 func TestAuthorizeScriptKeepsExistingKeysIntact(t *testing.T) {
 	_, svc, h := testEnv(t)
@@ -116,7 +116,7 @@ func TestAuthorizeScriptKeepsExistingKeysIntact(t *testing.T) {
 	}
 	lines := strings.Split(strings.TrimRight(string(body), "\n"), "\n")
 	if len(lines) != 2 || lines[0] != existing || lines[1] != testKey {
-		t.Errorf("authorized_keys = %q, want the existing key then Deployer's", body)
+		t.Errorf("authorized_keys = %q, want the existing key then HostMan's", body)
 	}
 }
 

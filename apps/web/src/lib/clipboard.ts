@@ -18,7 +18,7 @@
  *  the second is gone the moment anything is awaited before it. */
 export async function toClipboard(text: string): Promise<boolean> {
   // The modern way needs a page the browser trusts — https or localhost — and
-  // Deployer is usually plain http on a LAN, where the object does not exist.
+  // HostMan is usually plain http on a LAN, where the object does not exist.
   if (navigator.clipboard?.writeText) {
     try {
       await navigator.clipboard.writeText(text)

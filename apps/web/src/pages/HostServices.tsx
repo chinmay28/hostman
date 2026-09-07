@@ -157,7 +157,7 @@ export default function HostServices() {
 
           {list.truncated && (
             <Banner tone="warn">
-              This host has more hand-installed units than Deployer will list. Only the first{' '}
+              This host has more hand-installed units than HostMan will list. Only the first{' '}
               {units.length} are shown.
             </Banner>
           )}

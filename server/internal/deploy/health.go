@@ -96,7 +96,7 @@ func (c *Checker) CheckAll(ctx context.Context) {
 }
 
 // settleAttempts is how many times a just-deployed app is given to come up
-// before a failure is recorded. A service that restarts — Deployer included —
+// before a failure is recorded. A service that restarts — HostMan included —
 // is briefly unreachable, and calling that unhealthy would be wrong.
 const settleAttempts = 12
 
@@ -147,7 +147,7 @@ func (c *Checker) CheckOne(ctx context.Context, in *store.Installation) (string,
 
 func (c *Checker) checkAndRecord(ctx context.Context, in *store.Installation, host *store.Host) (string, string) {
 	// An app that is being deployed right now is expected to be down for a
-	// moment — Deployer updating itself is exactly this case. Recording a
+	// moment — HostMan updating itself is exactly this case. Recording a
 	// failure would only mean showing "Not responding" for something that is
 	// mid-restart, so the last known result stands.
 	if running, err := c.db.HasRunningDeployment(ctx, in.AppID, in.HostID); err == nil && running {

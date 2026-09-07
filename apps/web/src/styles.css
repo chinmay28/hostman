@@ -1,4 +1,4 @@
-/* Deployer is used one-handed on a phone: large tap targets, a bottom tab bar
+/* HostMan is used one-handed on a phone: large tap targets, a bottom tab bar
    within thumb reach, and safe-area padding so nothing hides under the home
    indicator or the notch. */
 
@@ -625,7 +625,7 @@ button.card {
 /* The shortcuts on a host's card: its files, services, terminal and jobs as
    four equal chips, icon over word, each a full tap target. They are buttons
    inside a card that is itself a link, so they take their own tap and give
-   the card nothing. On a host Deployer cannot reach they dim, and the
+   the card nothing. On a host HostMan cannot reach they dim, and the
    disabled state is the button's own. */
 .tools {
   display: grid;

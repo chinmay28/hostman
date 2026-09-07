@@ -1,4 +1,4 @@
-// Package api exposes Deployer's REST API over HTTP.
+// Package api exposes HostMan's REST API over HTTP.
 package api
 
 import (
@@ -38,13 +38,13 @@ type Server struct {
 	// their screens the way shells do.
 	Claude *claude.Manager
 	Log    *slog.Logger
-	// Self identifies the machine Deployer runs on; nil disables self-update.
+	// Self identifies the machine HostMan runs on; nil disables self-update.
 	Self SelfManager
 	// Version is the build this binary was made from.
 	Version string
 	// SelfRef is the git ref a self-update builds from by default.
 	SelfRef string
-	// Auth is nil when Deployer runs without a PIN.
+	// Auth is nil when HostMan runs without a PIN.
 	Auth *PinAuth
 }
 

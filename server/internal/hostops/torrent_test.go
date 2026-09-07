@@ -13,7 +13,7 @@ import (
 // The downloader is a unit file, a settings file and three short scripts that
 // run on somebody else's machine, so they are tested by running them: against a
 // real filesystem, through a real shell, with deluge itself stubbed out. What
-// is left is exactly the logic Deployer wrote, which is the part that can be
+// is left is exactly the logic HostMan wrote, which is the part that can be
 // wrong.
 
 // delugeStubs are a host with deluge installed: a daemon that can say its
@@ -131,7 +131,7 @@ func TestTorrentScriptsParse(t *testing.T) {
 }
 
 // Setup writes the whole downloader: a state directory the daemon can use, a
-// password for it, the settings Deployer reads back, and a unit systemd runs.
+// password for it, the settings HostMan reads back, and a unit systemd runs.
 func TestTorrentSetupWritesTheDaemon(t *testing.T) {
 	root := t.TempDir()
 	work := t.TempDir()
@@ -179,7 +179,7 @@ func TestTorrentSetupWritesTheDaemon(t *testing.T) {
 }
 
 // The password deluged authenticates against is generated on the host and
-// stays there: nothing Deployer reads back carries it.
+// stays there: nothing HostMan reads back carries it.
 func TestTorrentSetupKeepsThePasswordOnTheHost(t *testing.T) {
 	root := t.TempDir()
 	work := t.TempDir()
@@ -200,11 +200,11 @@ func TestTorrentSetupKeepsThePasswordOnTheHost(t *testing.T) {
 	config := read(t, filepath.Join(stateDir(root), "deployer.conf"))
 	unit := read(t, filepath.Join(root, "etc/systemd/system", TorrentUnit))
 	if strings.Contains(config, fields[1]) || strings.Contains(unit, fields[1]) {
-		t.Error("the password leaked into a file Deployer reads back")
+		t.Error("the password leaked into a file HostMan reads back")
 	}
 
 	// Setting up again is how a folder is changed and how a host takes a newer
-	// Deployer's unit. Neither should log the daemon out of itself.
+	// HostMan's unit. Neither should log the daemon out of itself.
 	if out, code := runScript(t, torrentSetupFor(root, "pi", "/srv/torrents", ""), "", bin); code != 0 {
 		t.Fatalf("second setup exited %d: %s", code, out)
 	}
@@ -226,7 +226,7 @@ func TestTorrentSetupKeepsThePasswordOnTheHost(t *testing.T) {
 
 // deluged writes its own auth file the first time it runs, with a localclient
 // account in it. A host where that has already happened must still end up with
-// an account Deployer can use, and must keep the one it had.
+// an account HostMan can use, and must keep the one it had.
 func TestTorrentSetupAddsToAnExistingAuthFile(t *testing.T) {
 	root := t.TempDir()
 	work := t.TempDir()
@@ -247,11 +247,11 @@ func TestTorrentSetupAddsToAnExistingAuthFile(t *testing.T) {
 		t.Errorf("setup took away the account that was already there:\n%s", auth)
 	}
 	if !strings.Contains(auth, torrentAccount+":") {
-		t.Errorf("setup left no account for Deployer:\n%s", auth)
+		t.Errorf("setup left no account for HostMan:\n%s", auth)
 	}
 }
 
-// Deluge is the one thing on this screen Deployer will not install, so a host
+// Deluge is the one thing on this screen HostMan will not install, so a host
 // without it is told what to install rather than left with a unit that cannot
 // start.
 func TestTorrentSetupRefusesAHostWithoutDeluge(t *testing.T) {
@@ -369,7 +369,7 @@ exit 0`))
 		t.Errorf("trouble = %q on a healthy daemon", daemon.Trouble)
 	}
 
-	// The console was asked as the user, against Deployer's own config
+	// The console was asked as the user, against HostMan's own config
 	// directory and its own port — not deluge's default, which is where a
 	// daemon somebody else runs would be answering.
 	log := read(t, filepath.Join(work, "console.log"))
@@ -377,7 +377,7 @@ exit 0`))
 		t.Errorf("the console was pointed somewhere else:\n%s", log)
 	}
 	if !strings.Contains(log, fmt.Sprintf("-d 127.0.0.1 -p %d -U %s -P ", torrentPort, torrentAccount)) {
-		t.Errorf("the console did not connect as Deployer's own account:\n%s", log)
+		t.Errorf("the console did not connect as HostMan's own account:\n%s", log)
 	}
 	// The listing has to be the verbose one: the short form deluge prints by
 	// default is one line a torrent with none of the numbers on this screen.
@@ -448,7 +448,7 @@ func TestAddScriptWritesTheFileAndHandsItOver(t *testing.T) {
 	if !strings.Contains(log, want) {
 		t.Errorf("deluge was asked %q, want it to carry %q", log, want)
 	}
-	// Deluge keeps its own copy, so Deployer's is rubbish the moment it has
+	// Deluge keeps its own copy, so HostMan's is rubbish the moment it has
 	// been taken.
 	if _, err := os.Stat(filepath.Join(stateDir(root), "incoming/picked.torrent")); err == nil {
 		t.Error("the torrent file was left behind on the host")
@@ -480,7 +480,7 @@ func TestAddScriptTakesAMagnetAndAFolder(t *testing.T) {
 }
 
 // The add script runs as the SSH user and cannot start a service. A stopped
-// daemon is reported as such so Deployer can start it and ask again, rather
+// daemon is reported as such so HostMan can start it and ask again, rather
 // than the screen refusing something somebody clearly asked for.
 func TestAddScriptSaysWhenTheDaemonIsStopped(t *testing.T) {
 	root := t.TempDir()
@@ -781,7 +781,7 @@ func TestParseDiskFree(t *testing.T) {
 	}
 }
 
-// --- what Deployer will and will not send ---
+// --- what HostMan will and will not send ---
 
 func TestCleanTorrentSource(t *testing.T) {
 	good := []string{
@@ -920,7 +920,7 @@ func TestTorrentRevisionTracksTheScript(t *testing.T) {
 }
 
 // systemd calls a Type=simple service started as soon as it has forked, which
-// is a moment before deluged is listening. Deployer starts a stopped daemon and
+// is a moment before deluged is listening. HostMan starts a stopped daemon and
 // says this in the same breath, so the first attempt can arrive before anybody
 // is there to hear it.
 func TestAddScriptWaitsForADaemonThatIsStillStarting(t *testing.T) {

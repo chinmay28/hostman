@@ -80,7 +80,7 @@ func TestInstallationVersion(t *testing.T) {
 	}
 }
 
-// The app Deployer creates for itself takes the ref it builds from, so its own
+// The app HostMan creates for itself takes the ref it builds from, so its own
 // card is the first place a version shows up.
 func TestInstallationVersionForSelfUpdateApp(t *testing.T) {
 	in := &store.Installation{

@@ -8,7 +8,7 @@ import { Badge, Sheet } from './ui'
 /**
  * A conversation with Claude Code on a host, on a phone.
  *
- * The session lives on Deployer and this is a view of it: the history arrives
+ * The session lives on HostMan and this is a view of it: the history arrives
  * on a stream that resumes from where this screen got to, and what the user
  * says and answers goes back as ordinary requests. Two phones can look at the
  * same conversation; the one that answers a permission question settles it
@@ -59,7 +59,7 @@ export default function ClaudeChat({
   )
 
   // The whole history, from the start: a conversation is read from the top,
-  // unlike a terminal's scrollback, and Deployer keeps it.
+  // unlike a terminal's scrollback, and HostMan keeps it.
   useEffect(() => {
     const stream = new ClaudeStream(initial.id, 0, {
       onSession: update,

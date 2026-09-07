@@ -11,7 +11,7 @@ import type { DirEntry, DirUsage } from '../types'
  * the back button walks back up the way you came and a link to a directory is
  * a link someone can keep.
  *
- * Deployer already holds a key that can run anything on this machine, so the
+ * HostMan already holds a key that can run anything on this machine, so the
  * listing is taken as root wherever sudo allows it — a browser that could not
  * open /etc would be hiding the reality rather than limiting it. Which account
  * it acted as is shown rather than assumed.
@@ -86,7 +86,7 @@ export default function HostFiles() {
 
           {listing.truncated && (
             <Banner tone="warn">
-              This directory has more in it than Deployer will list. Only the first{' '}
+              This directory has more in it than HostMan will list. Only the first{' '}
               {listing.entries.length} are shown.
             </Banner>
           )}

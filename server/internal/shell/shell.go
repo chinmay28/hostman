@@ -6,11 +6,11 @@
 // app comes to the front, wifi hands over to cellular — and a terminal that
 // lived in the page would lose the shell every time, along with the directory
 // it was in, the command half typed, and the program it was running. So the
-// shell is held open on Deployer's side, everything it prints is kept, and a
+// shell is held open on HostMan's side, everything it prints is kept, and a
 // client that comes back asks for the bytes it missed and carries on. Closing
 // the screen is not the same as closing the shell.
 //
-// Like the rest of Deployer there is no agent on the host: this is one SSH
+// Like the rest of HostMan there is no agent on the host: this is one SSH
 // session with a pty on it, which is what `ssh host` already is.
 package shell
 
@@ -111,7 +111,7 @@ type Info struct {
 	ID     string `json:"id"`
 	HostID int64  `json:"hostId"`
 	// User is who the shell runs as, which is the SSH user and not root: a
-	// shell is the one place in Deployer that does not quietly elevate, because
+	// shell is the one place in HostMan that does not quietly elevate, because
 	// a prompt that says one thing and runs as another is how mistakes happen.
 	User      string    `json:"user"`
 	Cols      int       `json:"cols"`
@@ -162,7 +162,7 @@ type Session struct {
 	lastSeen time.Time
 	running  bool
 	exit     string
-	// because is the reason Deployer ended the shell, recorded before the
+	// because is the reason HostMan ended the shell, recorded before the
 	// terminal is closed. Without it the pump wins the race and writes down the
 	// symptom — "closed" — in place of the cause.
 	because string
@@ -217,7 +217,7 @@ func (m *Manager) Open(ctx context.Context, h *store.Host, cols, rows int) (*Ses
 }
 
 // adopt wraps a live terminal in a session and starts reading its screen. It is
-// the seam the tests use: everything after this point is Deployer's own
+// the seam the tests use: everything after this point is HostMan's own
 // bookkeeping and has no SSH in it.
 func (m *Manager) adopt(hostID int64, user string, conn io.Closer, term pty, cols, rows int) *Session {
 	now := m.now()
@@ -275,7 +275,7 @@ func (m *Manager) Close(id string) error {
 	if !ok {
 		return ErrNotFound
 	}
-	s.shutdown("closed from Deployer")
+	s.shutdown("closed from HostMan")
 	return nil
 }
 
@@ -292,7 +292,7 @@ func (m *Manager) CloseHost(hostID int64) {
 	}
 	m.mu.Unlock()
 	for _, s := range doomed {
-		s.shutdown("the host was removed from Deployer")
+		s.shutdown("the host was removed from HostMan")
 	}
 }
 
@@ -340,7 +340,7 @@ func (m *Manager) closeAll() {
 	}
 	m.mu.Unlock()
 	for _, s := range all {
-		s.shutdown("Deployer is shutting down")
+		s.shutdown("HostMan is shutting down")
 	}
 }
 
@@ -530,7 +530,7 @@ func (s *Session) notify() {
 	s.change = make(chan struct{})
 }
 
-// shutdown ends the shell from Deployer's side, saying why.
+// shutdown ends the shell from HostMan's side, saying why.
 func (s *Session) shutdown(reason string) {
 	// The reason goes down first: closing the terminal is what wakes the pump,
 	// and whichever of the two reaches finish first should still record this.
@@ -585,7 +585,7 @@ func clamp(v, lo, hi int) int {
 
 func newID() string {
 	b := make([]byte, 16)
-	// crypto/rand.Read never fails on any platform Deployer runs on, and the
+	// crypto/rand.Read never fails on any platform HostMan runs on, and the
 	// signature keeps the error only for form.
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)

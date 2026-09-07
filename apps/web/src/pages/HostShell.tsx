@@ -13,14 +13,14 @@ const TerminalView = lazy(() => import('../components/Terminal'))
 /**
  * A shell on a host.
  *
- * The shell belongs to Deployer, not to this screen. That is what the whole
+ * The shell belongs to HostMan, not to this screen. That is what the whole
  * design turns on: a phone drops its connection every time it locks, and a
  * terminal that lived in the page would lose the directory it was in, the
  * command half typed, and whatever was running. So leaving this screen leaves
  * the shell open, coming back rejoins it with its scrollback, and ending it is
  * a thing you do on purpose — by typing `exit`, or with End here.
  *
- * It runs as the user Deployer signs in as. Everything else in Deployer quietly
+ * It runs as the user HostMan signs in as. Everything else in HostMan quietly
  * becomes root where it can, because a file browser that could not open /etc
  * would be hiding the reality; a shell is the opposite case. A prompt that says
  * one thing and runs as another is how a machine gets broken by somebody who
@@ -214,12 +214,12 @@ export default function HostShell() {
         </p>
         <p className="sub">
           It stays open when you leave this screen, so locking your phone mid-command is survivable.
-          {/* Everything else in Deployer takes root where it can, so the one
+          {/* Everything else in HostMan takes root where it can, so the one
               screen that does not is worth saying out loud — and saying the
               opposite to somebody who signs in as root would be a lie. */}
           {isRoot
-            ? ' Deployer signs in to this host as root, so the shell is root: there is no sudo to forget.'
-            : ' It is not root, whatever Deployer does elsewhere: sudo is there when you mean it.'}
+            ? ' HostMan signs in to this host as root, so the shell is root: there is no sudo to forget.'
+            : ' It is not root, whatever HostMan does elsewhere: sudo is there when you mean it.'}
         </p>
         <button className="block" onClick={start} disabled={starting || !host.data}>
           {starting ? 'Opening…' : 'Start a shell'}

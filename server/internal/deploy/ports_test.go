@@ -64,7 +64,7 @@ func TestInstallationPorts(t *testing.T) {
 		},
 		want: []int{443},
 	}, {
-		name: "a placeholder Deployer cannot fill claims no port",
+		name: "a placeholder HostMan cannot fill claims no port",
 		in: store.Installation{
 			HealthType:   store.HealthHTTP,
 			HealthTarget: "http://{{host}}:{{port}}/",
@@ -98,7 +98,7 @@ func TestInstallationPorts(t *testing.T) {
 	}
 }
 
-// The app Deployer creates for itself is the one every install has, so its
+// The app HostMan creates for itself is the one every install has, so its
 // port is the one users will see first.
 func TestInstallationPortsForSelfUpdateApp(t *testing.T) {
 	in := &store.Installation{

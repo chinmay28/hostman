@@ -16,7 +16,7 @@ import (
 )
 
 // systemd is not on every build machine, and where it is, a test has no
-// business starting anything. What is worth proving is the half Deployer owns:
+// business starting anything. What is worth proving is the half HostMan owns:
 // that the scripts find the right unit files and no others, that they hand
 // systemctl one argument per unit, and that whatever systemctl answers is read
 // back the way it was meant. So systemctl and journalctl are stood in for, and
@@ -559,7 +559,7 @@ func TestUnitsListDoesNotAskWhatStartsThem(t *testing.T) {
 // A timer's schedule is the reason to look at one, and systemd states it in
 // whichever clock the timer was written against: OnCalendar answers in seconds
 // since the epoch, OnBootSec in microseconds since boot. Both have to come out
-// as "in about this long", against the host's own clock rather than Deployer's.
+// as "in about this long", against the host's own clock rather than HostMan's.
 func TestTimersReadTheirScheduleFromEitherClock(t *testing.T) {
 	now, uptime := hostClock{now: 1_700_000_000, uptime: 3600}, 3600
 
@@ -753,7 +753,7 @@ func TestUnitLogReadsTheTail(t *testing.T) {
 	}
 }
 
-// A log longer than Deployer will carry loses its beginning, not its end — and
+// A log longer than HostMan will carry loses its beginning, not its end — and
 // never leaves half a line at the top for the reader to puzzle over.
 func TestUnitLogTruncatesFromTheTop(t *testing.T) {
 	dir, path := withFakeJournalctl(t)
@@ -864,7 +864,7 @@ func TestCleanUnit(t *testing.T) {
 	}
 }
 
-func TestActOnlyRunsTheVerbsDeployerOffers(t *testing.T) {
+func TestActOnlyRunsTheVerbsHostManOffers(t *testing.T) {
 	svc := &Service{}
 	h := &store.Host{Name: "pi", Username: "chinmay"}
 	for _, action := range []string{"mask", "isolate", "kill", "poweroff", "", "start; reboot"} {
@@ -1037,7 +1037,7 @@ func TestCreateUnitRefusesANameSystemdAlreadyKnows(t *testing.T) {
 	state, path := withFakeSystemctl(t)
 	dir := t.TempDir()
 	// The distribution's sshd: systemd knows the name, though nothing of it is
-	// in the directory Deployer writes to.
+	// in the directory HostMan writes to.
 	if err := os.WriteFile(filepath.Join(state, "ssh.service.exists"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}

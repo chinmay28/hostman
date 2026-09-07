@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// The verdict is the part of Deployer that guesses, so it is the part most
+// The verdict is the part of HostMan that guesses, so it is the part most
 // worth pinning down. Every case here is built from log output of the shape the
 // real thing produces — a Raspberry Pi's journal, an rsyslog file on a host
 // that keeps no journal, the `last` output that is all there is on a host that

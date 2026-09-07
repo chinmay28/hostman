@@ -1,7 +1,7 @@
 {
-  "name": "Deployer",
-  "short_name": "Deployer",
-  "description": "Deploy apps onto your home server",
+  "name": "HostMan",
+  "short_name": "HostMan",
+  "description": "A general-purpose host manager for machines on a network",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

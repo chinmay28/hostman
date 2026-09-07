@@ -15,7 +15,7 @@ const TOOLS = [
  * HostTools is the row of shortcuts on a host's card: straight to its files,
  * services, terminal and scheduled jobs, skipping the host page. The card is a
  * link to the host, so each chip takes its own tap the way AppRow does. Off a
- * host Deployer cannot reach, the chips dim and go nowhere — a terminal to an
+ * host HostMan cannot reach, the chips dim and go nowhere — a terminal to an
  * offline machine is a screen that says so, and the card already has.
  */
 export function HostTools({ hostId, enabled }: { hostId: number; enabled: boolean }) {

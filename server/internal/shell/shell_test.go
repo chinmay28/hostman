@@ -15,7 +15,7 @@ import (
 // client which was away gets back exactly the bytes it missed, that one which
 // was away too long is told so rather than handed a torn screen, that a reader
 // wakes on output instead of polling for it, and that a shell nobody is
-// watching is eventually let go. All of that is Deployer's own bookkeeping, so
+// watching is eventually let go. All of that is HostMan's own bookkeeping, so
 // these run against a terminal that never leaves the process. The SSH path
 // underneath is covered separately, against a real sshd.
 
@@ -288,7 +288,7 @@ func TestDetachingStartsTheIdleClock(t *testing.T) {
 }
 
 // Typing at a shell counts as being there, which is what keeps a terminal that
-// is streaming through a proxy Deployer cannot see from being reaped mid-command.
+// is streaming through a proxy HostMan cannot see from being reaped mid-command.
 func TestWritingKeepsASessionAlive(t *testing.T) {
 	m, clock := testManager(t)
 	s, _ := adopt(t, m)

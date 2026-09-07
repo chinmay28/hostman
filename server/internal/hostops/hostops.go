@@ -2,7 +2,7 @@
 // and editing files, managing the systemd services someone installed by hand,
 // reading and writing the crontab, and restarting the machine.
 //
-// Like the rest of Deployer there is no agent on the host. Everything here is a
+// Like the rest of HostMan there is no agent on the host. Everything here is a
 // short POSIX shell script fed to one SSH session, with every value the user
 // supplied passed as a quoted positional argument rather than spliced into the
 // script text — a path can never become a command.
@@ -50,7 +50,7 @@ func asUser(script string, args ...string) string {
 // the connecting user wherever it is not. Asking the host rather than trusting
 // the sudo flag recorded on the last probe means the answer is never stale.
 //
-// Browsing as root is the point: Deployer already holds a key that can run
+// Browsing as root is the point: HostMan already holds a key that can run
 // anything on this machine, so a file browser that could not open /etc would be
 // hiding the reality rather than limiting it.
 func elevate(script string, args ...string) string {
@@ -99,7 +99,7 @@ func first(lines []string) string {
 	return strings.TrimSpace(lines[0])
 }
 
-// ErrInvalid marks a refusal by Deployer rather than by the host: a path it
+// ErrInvalid marks a refusal by HostMan rather than by the host: a path it
 // will not send, a name it will not accept, a file too large to carry. The
 // caller can tell it apart from "the host said no", which is a different
 // problem with a different fix.

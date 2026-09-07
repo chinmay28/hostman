@@ -15,12 +15,12 @@ import (
 	"github.com/chinmay28/deployer/server/internal/store"
 )
 
-// SelfIdentifier recognises the machine Deployer itself is running on.
+// SelfIdentifier recognises the machine HostMan itself is running on.
 type SelfIdentifier interface {
 	IsSelf(machineID string) bool
 }
 
-// Service connects to hosts using Deployer's SSH identity.
+// Service connects to hosts using HostMan's SSH identity.
 type Service struct {
 	db       *store.DB
 	self     SelfIdentifier
@@ -50,7 +50,7 @@ func (s *Service) Identity() *sshx.Identity { return s.identity.Load() }
 func (s *Service) SetIdentity(id *sshx.Identity) { s.identity.Store(id) }
 
 // Processes returns the newest snapshot of what a host is busy with, or nil
-// where none has been taken since Deployer started.
+// where none has been taken since HostMan started.
 func (s *Service) Processes(hostID int64) *metrics.Processes {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -151,7 +151,7 @@ type TestResult struct {
 	Hints    []string `json:"hints,omitempty"`
 }
 
-// Test checks that a host is reachable, that Deployer's key is authorized, and
+// Test checks that a host is reachable, that HostMan's key is authorized, and
 // that passwordless sudo works. Hints tell the user how to fix what is missing.
 func (s *Service) Test(ctx context.Context, h *store.Host) *TestResult {
 	probe, err := s.Probe(ctx, h)
@@ -163,8 +163,8 @@ func (s *Service) Test(ctx context.Context, h *store.Host) *TestResult {
 				"The host's SSH key changed. If you reinstalled it, remove and re-add the host to trust the new key.")
 		default:
 			res.Hints = append(res.Hints,
-				"Set up access with the host's password and Deployer will authorize its own key.",
-				fmt.Sprintf("Or add Deployer's public key to ~%s/.ssh/authorized_keys on the host by hand (see Settings).", h.Username),
+				"Set up access with the host's password and HostMan will authorize its own key.",
+				fmt.Sprintf("Or add HostMan's public key to ~%s/.ssh/authorized_keys on the host by hand (see Settings).", h.Username),
 				"Check the address, port and username, and that the host is powered on and reachable.")
 		}
 		return res

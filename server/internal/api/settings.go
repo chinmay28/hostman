@@ -7,7 +7,7 @@ import (
 	"github.com/chinmay28/deployer/server/internal/sshx"
 )
 
-// sshKeyView tells the user how to trust Deployer on a new host.
+// sshKeyView tells the user how to trust HostMan on a new host.
 type sshKeyView struct {
 	PublicKey   string `json:"publicKey"`
 	Fingerprint string `json:"fingerprint"`
@@ -34,7 +34,7 @@ func (s *Server) handleGetSSHKey(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.sshKeyView())
 }
 
-// handleRotateSSHKey replaces Deployer's keypair. Every host must have the new
+// handleRotateSSHKey replaces HostMan's keypair. Every host must have the new
 // public key installed afterwards, so the UI warns before calling this.
 func (s *Server) handleRotateSSHKey(w http.ResponseWriter, r *http.Request) {
 	id, err := sshx.RotateIdentity(r.Context(), s.DB)

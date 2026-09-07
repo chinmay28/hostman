@@ -17,7 +17,7 @@ import (
 // declares neither gets no link rather than a broken one.
 
 // InstallationURL returns the address to open an installation at, or "" where
-// the app has not said enough for Deployer to know one.
+// the app has not said enough for HostMan to know one.
 func InstallationURL(in *store.Installation) string {
 	if in == nil {
 		return ""
@@ -48,7 +48,7 @@ func InstallationURL(in *store.Installation) string {
 // browsableOrigin reduces a health check URL to something worth opening:
 // scheme, host and port, without the path. /healthz is where an app reports on
 // itself, not where it greets a person, and the app's own root is the closest
-// thing to a front door Deployer can name without guessing.
+// thing to a front door HostMan can name without guessing.
 func browsableOrigin(target string) string {
 	u, err := url.Parse(strings.TrimSpace(target))
 	if err != nil {
@@ -74,7 +74,7 @@ func browsableOrigin(target string) string {
 }
 
 // schemeForPort is https only on the port that means https by definition.
-// Anything else — 8443 included — is a convention Deployer would be guessing at.
+// Anything else — 8443 included — is a convention HostMan would be guessing at.
 func schemeForPort(port int) string {
 	if port == 443 {
 		return "https"

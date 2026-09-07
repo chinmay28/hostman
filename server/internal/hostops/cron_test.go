@@ -13,7 +13,7 @@ import (
 // fakeCron is a stand-in for the crontab command, doing the parts these scripts
 // use: listing a user's crontab, refusing when there isn't one, and installing a
 // file after refusing to parse it. Real cron is not on every build machine, and
-// the half worth testing here is what Deployer does with its answers.
+// the half worth testing here is what HostMan does with its answers.
 const fakeCron = `#!/bin/sh
 dir=$FAKE_CRON_DIR
 user=self

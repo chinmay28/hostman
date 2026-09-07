@@ -1,4 +1,4 @@
-// Package selfhost is how Deployer recognises the machine it is running on,
+// Package selfhost is how HostMan recognises the machine it is running on,
 // registers it as a host, and knows how to update itself.
 package selfhost
 
@@ -40,20 +40,20 @@ func MachineID() string {
 	return ""
 }
 
-// Config describes how Deployer reaches itself over SSH.
+// Config describes how HostMan reaches itself over SSH.
 type Config struct {
-	// SSHUser is the account on this machine that Deployer connects as. It
-	// needs Deployer's public key and passwordless sudo, exactly like any
+	// SSHUser is the account on this machine that HostMan connects as. It
+	// needs HostMan's public key and passwordless sudo, exactly like any
 	// other host.
 	SSHUser string
-	// Port is the port Deployer is listening on, used for its health check.
+	// Port is the port HostMan is listening on, used for its health check.
 	Port string
 	// Repo and Ref are where a self-update builds from.
 	Repo string
 	Ref  string
 }
 
-// Manager owns the home host and the app that updates Deployer.
+// Manager owns the home host and the app that updates HostMan.
 type Manager struct {
 	db        *store.DB
 	machineID string
@@ -61,7 +61,7 @@ type Manager struct {
 	log       *slog.Logger
 }
 
-// New builds a Manager. A blank SSHUser falls back to the account Deployer runs
+// New builds a Manager. A blank SSHUser falls back to the account HostMan runs
 // as, which is usually wrong but at least gives the user something to correct.
 func New(db *store.DB, cfg Config, log *slog.Logger) *Manager {
 	if cfg.SSHUser == "" {
@@ -72,10 +72,10 @@ func New(db *store.DB, cfg Config, log *slog.Logger) *Manager {
 	return &Manager{db: db, machineID: MachineID(), cfg: cfg, log: log}
 }
 
-// MachineID returns the id this Deployer instance identifies itself by.
+// MachineID returns the id this HostMan instance identifies itself by.
 func (m *Manager) MachineID() string { return m.machineID }
 
-// SetMachineIDForTest pretends Deployer is running on a different machine.
+// SetMachineIDForTest pretends HostMan is running on a different machine.
 func (m *Manager) SetMachineIDForTest(id string) { m.machineID = id }
 
 // IsSelf reports whether a probed machine id belongs to this machine.
@@ -133,9 +133,9 @@ func (m *Manager) ensureHomeHost(ctx context.Context) error {
 }
 
 // UpdaterAppName is what the self-update app is called.
-const UpdaterAppName = "Deployer"
+const UpdaterAppName = "HostMan"
 
-// EnsureUpdaterApp creates the app that installs Deployer, once.
+// EnsureUpdaterApp creates the app that installs HostMan, once.
 func (m *Manager) EnsureUpdaterApp(ctx context.Context) error {
 	if done, _, err := m.db.GetSetting(ctx, settingUpdaterAppMade); err != nil || done != "" {
 		return err
@@ -147,7 +147,7 @@ func (m *Manager) EnsureUpdaterApp(ctx context.Context) error {
 	repo := strings.TrimSuffix(m.cfg.Repo, ".git")
 	repo = strings.TrimPrefix(repo, "https://github.com/")
 	if repo == "" {
-		repo = "chinmay28/deployer"
+		repo = "chinmay28/hostman"
 	}
 	// The script and the build come from the same ref, so pinning a tag pins
 	// both halves of the upgrade.
@@ -161,7 +161,7 @@ func (m *Manager) EnsureUpdaterApp(ctx context.Context) error {
 	}
 	if _, err := m.db.CreateApp(ctx, &store.App{
 		Name:           UpdaterAppName,
-		Description:    "Deployer itself. Updating restarts the service.",
+		Description:    "HostMan itself. Updating restarts the service.",
 		InstallCommand: command,
 		Params: []store.Param{{
 			Name:    "ref",

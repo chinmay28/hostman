@@ -222,7 +222,7 @@ export default function AppDetail() {
           <SectionTitle>Danger zone</SectionTitle>
           <Card>
             <p className="sub" style={{ marginTop: 0 }}>
-              Deleting an app removes it and its deployment history from Deployer. Anything
+              Deleting an app removes it and its deployment history from HostMan. Anything
               already installed on a host keeps running there — take it off each host first if
               that is not what you want.
             </p>
@@ -263,14 +263,14 @@ export default function AppDetail() {
       {confirmDelete && (
         <Sheet
           title={`Delete ${app?.name}?`}
-          subtitle="This removes the app and its history from Deployer only."
+          subtitle="This removes the app and its history from HostMan only."
           onClose={() => setConfirmDelete(false)}
         >
           {mine.length > 0 && (
             <Banner tone="warn">
               {mine.length === 1
-                ? `${app?.name} is still installed on ${mine[0].hostName} and will stay there, with nothing left in Deployer to remove it.`
-                : `${app?.name} is still installed on ${mine.length} hosts and will stay there, with nothing left in Deployer to remove it.`}
+                ? `${app?.name} is still installed on ${mine[0].hostName} and will stay there, with nothing left in HostMan to remove it.`
+                : `${app?.name} is still installed on ${mine.length} hosts and will stay there, with nothing left in HostMan to remove it.`}
             </Banner>
           )}
           <div className="actions">
@@ -345,7 +345,7 @@ function UninstallSheet({
       {error && <Banner tone="bad">{error}</Banner>}
 
       <p className="sub" style={{ marginTop: 0 }}>
-        This runs on {installation.hostName} and removes the app from it. Deployer forgets the
+        This runs on {installation.hostName} and removes the app from it. HostMan forgets the
         installation once the command succeeds; the log is kept either way.
       </p>
 

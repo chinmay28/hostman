@@ -12,7 +12,7 @@ import (
 )
 
 // Managing a host — its files, its services, its crontab, restarting it — is
-// work Deployer asks the host to do. So the failures worth telling apart are
+// work HostMan asks the host to do. So the failures worth telling apart are
 // "you asked for something impossible" (400) and "the host refused" (502): a
 // missing file or a read-only filesystem is not a bug in this API, and saying
 // so as a 500 would send the user looking in the wrong place.
@@ -36,7 +36,7 @@ func opContext(r *http.Request) (context.Context, context.CancelFunc) {
 func (s *Server) writeOpError(w http.ResponseWriter, err error, action string) {
 	switch {
 	case errors.Is(err, hostops.ErrInvalid):
-		// Deployer refused it, not the host: the request is what needs fixing.
+		// HostMan refused it, not the host: the request is what needs fixing.
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, hostops.ErrNotEmpty):
 		// The caller can retry asking for the contents to go too.
@@ -58,7 +58,7 @@ func (s *Server) writeOpError(w http.ResponseWriter, err error, action string) {
 // it is about to go, and a UI that keeps calling it online until the next poll
 // fails would be lying for half a minute.
 //
-// Restarting is the only power state offered. Deployer can watch a machine come
+// Restarting is the only power state offered. HostMan can watch a machine come
 // back from a reboot; it cannot bring one back from off.
 func (s *Server) handleHostReboot(w http.ResponseWriter, r *http.Request) {
 	h, err := s.hostFromPath(r)
@@ -89,7 +89,7 @@ func (s *Server) handleHostReboot(w http.ResponseWriter, r *http.Request) {
 // systemd walking its archives, which on a Pi's SD card is not instant.
 const bootTimeout = 60 * time.Second
 
-// handleHostBoot answers "why did it restart?" with Deployer's best guess and
+// handleHostBoot answers "why did it restart?" with HostMan's best guess and
 // everything it looked at to make it. The guess is made on the host's evidence
 // in one place — hostops.diagnose — so what this returns is what the screen
 // shows, rather than a second opinion assembled here.

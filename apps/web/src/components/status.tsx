@@ -38,7 +38,7 @@ export function HostBadge({ status }: { status: HostStatus }) {
   }
 }
 
-/** HomeBadge marks the machine Deployer itself is running on. */
+/** HomeBadge marks the machine HostMan itself is running on. */
 export function HomeBadge() {
   return <Badge tone="accent">Home</Badge>
 }
@@ -130,7 +130,7 @@ export function BootBadge({ unit }: { unit: ServiceUnit }) {
 
 /** What took the machine down last, in two words. A restart something asked for
  *  is good news and reads as such; an unexplained one is deliberately neutral
- *  rather than alarming, because "Deployer could not tell" is not a fault
+ *  rather than alarming, because "HostMan could not tell" is not a fault
  *  found. */
 const CAUSE_WORD: Record<BootCause, { word: string; tone: 'good' | 'warn' | 'bad' | 'neutral' }> = {
   clean: { word: 'Asked for', tone: 'good' },
@@ -150,7 +150,7 @@ export function CauseBadge({ cause }: { cause: BootCause }) {
 }
 
 /** How far the verdict above should be trusted. It is a separate badge because
- *  the two are separate claims: "it panicked" and "Deployer is sure of it" can
+ *  the two are separate claims: "it panicked" and "HostMan is sure of it" can
  *  come apart, and a screen that ran them together would be overstating a
  *  guess. */
 export function ConfidenceBadge({ confidence }: { confidence: BootConfidence }) {

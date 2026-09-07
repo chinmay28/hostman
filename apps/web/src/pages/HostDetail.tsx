@@ -120,7 +120,7 @@ export default function HostDetail() {
 
             {host.isSelf && (
               <div className="sub" style={{ marginTop: 10 }}>
-                Deployer itself runs on this machine. It still connects over SSH, so it needs its
+                HostMan itself runs on this machine. It still connects over SSH, so it needs its
                 own key authorized here like any other host.
               </div>
             )}
@@ -234,7 +234,7 @@ export default function HostDetail() {
           {/* The meters above say whether the machine is busy. This says what
               it is busy with, which is the next question and until now needed
               a terminal. A host that is up but has not been probed since
-              Deployer started is seconds from having an answer; one that is
+              HostMan started is seconds from having an answer; one that is
               down is not, so it is not left waiting for something. */}
           {sample && (processes || host.status === 'online') && (
             <>
@@ -419,8 +419,8 @@ export default function HostDetail() {
                 <div className="title">Why it restarted</div>
                 <div className="sub">
                   {sample
-                    ? `Up ${uptime(sample.uptimeS)} — what took it down last, and how sure Deployer is`
-                    : 'What took it down last, and how sure Deployer is'}
+                    ? `Up ${uptime(sample.uptimeS)} — what took it down last, and how sure HostMan is`
+                    : 'What took it down last, and how sure HostMan is'}
                 </div>
               </div>
               <span className="chevron">›</span>
@@ -431,12 +431,12 @@ export default function HostDetail() {
             <div className="title">Restart</div>
             <p className="sub" style={{ marginTop: 4 }}>
               {host.isSelf
-                ? 'This is the machine Deployer runs on, so restarting it takes Deployer with it. It comes back when the machine does.'
-                : 'The host goes down a few seconds after you confirm, and Deployer reports it offline until it answers again.'}
+                ? 'This is the machine HostMan runs on, so restarting it takes HostMan with it. It comes back when the machine does.'
+                : 'The host goes down a few seconds after you confirm, and HostMan reports it offline until it answers again.'}
             </p>
             {!host.sudoOk && (
               <Banner tone="warn">
-                {host.username} needs passwordless sudo here before Deployer can restart the machine.
+                {host.username} needs passwordless sudo here before HostMan can restart the machine.
               </Banner>
             )}
             <button
@@ -451,9 +451,9 @@ export default function HostDetail() {
           <SectionTitle>Danger zone</SectionTitle>
           <Card>
             <p className="sub" style={{ marginTop: 0 }}>
-              Removing a host deletes its monitoring history from Deployer. Nothing on the machine
+              Removing a host deletes its monitoring history from HostMan. Nothing on the machine
               itself is changed.
-              {host.isSelf && ' Removing this one also turns off updating Deployer from the UI.'}
+              {host.isSelf && ' Removing this one also turns off updating HostMan from the UI.'}
             </p>
             <button className="danger block" onClick={() => setConfirmDelete(true)}>
               Remove host
@@ -523,7 +523,7 @@ export default function HostDetail() {
           onClose={() => setConfirmReboot(false)}
         >
           {host.isSelf && (
-            <Banner tone="warn">Deployer runs on this machine. It goes down with it.</Banner>
+            <Banner tone="warn">HostMan runs on this machine. It goes down with it.</Banner>
           )}
           <div className="actions">
             <button className="secondary" onClick={() => setConfirmReboot(false)} disabled={rebooting}>
@@ -539,7 +539,7 @@ export default function HostDetail() {
       {confirmDelete && (
         <Sheet
           title={`Remove ${host?.name}?`}
-          subtitle="Deployer will forget this host and its monitoring history. The machine is left alone."
+          subtitle="HostMan will forget this host and its monitoring history. The machine is left alone."
           onClose={() => setConfirmDelete(false)}
         >
           <div className="actions">

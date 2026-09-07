@@ -32,7 +32,7 @@ type Param struct {
 	Required bool   `json:"required"`
 }
 
-// App is something Deployer knows how to install, defined by a one-line
+// App is something HostMan knows how to install, defined by a one-line
 // install command.
 type App struct {
 	ID             int64  `json:"id"`
@@ -46,7 +46,7 @@ type App struct {
 	HealthType       string    `json:"healthType"`
 	HealthTarget     string    `json:"healthTarget"`
 	CreatedAt        time.Time `json:"createdAt"`
-	// SelfUpdate marks the app that installs Deployer itself. Deploying it to
+	// SelfUpdate marks the app that installs HostMan itself. Deploying it to
 	// the home host restarts the process running the deployment, so it runs
 	// detached and is picked back up afterwards.
 	SelfUpdate bool `json:"selfUpdate"`
@@ -154,7 +154,7 @@ func orEmptyParams(p []Param) []Param {
 	return p
 }
 
-// SelfUpdateApp returns the app that installs Deployer itself, if it exists.
+// SelfUpdateApp returns the app that installs HostMan itself, if it exists.
 func (d *DB) SelfUpdateApp(ctx context.Context) (*App, error) {
 	return scanApp(d.sql.QueryRowContext(ctx,
 		`SELECT `+appColumns+` FROM apps WHERE self_update = 1 ORDER BY id LIMIT 1`))

@@ -242,7 +242,7 @@ func TestSetModelWaitsForTheCLI(t *testing.T) {
 		t.Fatal("a refused mode change took effect")
 	}
 	if err := s.SetMode(context.Background(), "auto"); err == nil {
-		t.Fatal("a mode Deployer does not offer was accepted")
+		t.Fatal("a mode HostMan does not offer was accepted")
 	}
 }
 
@@ -286,14 +286,14 @@ func TestExitEndsTheHistoryWithAReason(t *testing.T) {
 	}
 }
 
-func TestClosingFromDeployerRecordsWhyNotHow(t *testing.T) {
+func TestClosingFromHostManRecordsWhyNotHow(t *testing.T) {
 	m, _ := testManager(t)
 	s, _ := adopt(t, m, Options{})
 	if err := m.Close(s.ID()); err != nil {
 		t.Fatal(err)
 	}
 	c := read(t, s, 0)
-	if !c.Done || c.Exit != "ended from Deployer" {
+	if !c.Done || c.Exit != "ended from HostMan" {
 		t.Fatalf("chunk = %+v", c)
 	}
 	if _, err := m.Get(s.ID()); !errors.Is(err, ErrNotFound) {

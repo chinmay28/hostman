@@ -202,7 +202,7 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, app)
 }
 
-// handleDeleteApp removes an app from Deployer. Nothing is uninstalled: an app
+// handleDeleteApp removes an app from HostMan. Nothing is uninstalled: an app
 // that is still on a host is taken off it one host at a time, through
 // handleUninstall, because that is a command that can fail and has a log worth
 // watching.

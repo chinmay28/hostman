@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The one place Deployer's version number is assembled.
+ * The one place HostMan's version number is assembled.
  *
  * Scheme: vYEAR.MONTH.PATCH — a calendar version, where PATCH is the
  * repository's commit count, so `v2026.8.42` is the 42nd commit on the 2026.8

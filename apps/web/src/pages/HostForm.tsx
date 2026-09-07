@@ -81,7 +81,7 @@ export default function HostForm() {
       ) : (
         <form onSubmit={save}>
           <Card>
-            <Field label="Name" help="What you'll call it in Deployer.">
+            <Field label="Name" help="What you'll call it in HostMan.">
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -129,7 +129,7 @@ export default function HostForm() {
                 <span>Set it up for me</span>
               </div>
               <p className="sub" style={{ marginTop: 0 }}>
-                Give Deployer the host's password once and it will authorize its own key and enable
+                Give HostMan the host's password once and it will authorize its own key and enable
                 passwordless sudo for you. Leave it empty to run the two commands in Settings by hand
                 instead.
               </p>
@@ -139,8 +139,8 @@ export default function HostForm() {
 
           <p className="sub" style={{ margin: '0 4px 12px' }}>
             {hostId === null && password === ''
-              ? "After saving, Deployer will try to connect. If it can't, Settings has the public key and the two commands to run on the host."
-              : 'Deployer connects straight after saving, so you can see the result right away.'}
+              ? "After saving, HostMan will try to connect. If it can't, Settings has the public key and the two commands to run on the host."
+              : 'HostMan connects straight after saving, so you can see the result right away.'}
           </p>
 
           <button className="primary block" type="submit" disabled={saving}>

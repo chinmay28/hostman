@@ -68,7 +68,7 @@ func registerSelf(t *testing.T, s *Server, online bool) (*store.Host, *store.App
 		}
 	}
 	app, err := s.DB.CreateApp(ctx, &store.App{
-		Name:           "Deployer",
+		Name:           "HostMan",
 		InstallCommand: "curl -fsSL https://example.com/{{ref}}/quickstart.sh | sudo bash",
 		Params:         []store.Param{{Name: "ref", Label: "Version", Default: "main"}},
 		SelfUpdate:     true,
@@ -200,7 +200,7 @@ func TestSelfUpdateTargetsTheHomeHost(t *testing.T) {
 	if !strings.Contains(dep.Command, "v2.0") {
 		t.Errorf("command = %q, want the ref substituted", dep.Command)
 	}
-	// Deployer updating itself must be recorded as detached, or a restart
+	// HostMan updating itself must be recorded as detached, or a restart
 	// would lose the log.
 	stored, err := s.DB.GetDeployment(context.Background(), dep.ID)
 	if err != nil {

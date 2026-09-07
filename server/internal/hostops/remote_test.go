@@ -14,7 +14,7 @@ import (
 // run on somebody else's machine. So they are tested by running them: against a
 // real filesystem, through a real shell, with the parts that would install
 // packages or talk to systemd stubbed out. What is left is exactly the logic
-// Deployer wrote, which is the part that can be wrong.
+// HostMan wrote, which is the part that can be wrong.
 
 // stubBin builds a directory of fake commands. Each is a shell script that does
 // whatever the test needs it to; putting it first on PATH is what keeps apt-get
@@ -466,7 +466,7 @@ func TestStartScriptRefusesAHostWithNoSession(t *testing.T) {
 	}
 }
 
-// Removing takes what Deployer wrote and nothing else — the packages stay, the
+// Removing takes what HostMan wrote and nothing else — the packages stay, the
 // downloads stay, and the profile with its logins goes only when asked.
 func TestRemoveScriptLeavesTheDownloadsAndTakesTheProfileOnlyWhenAsked(t *testing.T) {
 	build := func(t *testing.T) (root string, bin string) {
@@ -543,12 +543,12 @@ func TestRemoveScriptLeavesTheDownloadsAndTakesTheProfileOnlyWhenAsked(t *testin
 
 // The session script is what actually runs on the virtual screen. It is checked
 // here rather than run — starting an X server in a unit test would be testing
-// Xvfb — but the parts Deployer got to choose are worth asserting.
+// Xvfb — but the parts HostMan got to choose are worth asserting.
 func TestSessionScriptChoosesSafeDefaults(t *testing.T) {
 	script := sessionScript()
 	for _, want := range []string{
 		// The VNC server never listens on the network: the gateway is the only
-		// way in, and it is the port Deployer's link points at.
+		// way in, and it is the port HostMan's link points at.
 		"-localhost",
 		// Without this Chromium waits for a keyring no headless host will answer.
 		"--password-store=basic",
@@ -721,7 +721,7 @@ exit 1`,
 	if !strings.Contains(log, "The profile appears to be in use") {
 		t.Errorf("the browser's output never reached the journal:\n%s", log)
 	}
-	// Deployer's reading of them, for the times when the browser says nothing.
+	// HostMan's reading of them, for the times when the browser says nothing.
 	if !strings.Contains(log, "exited after") {
 		t.Errorf("a browser dying on the spot should be reported as such:\n%s", log)
 	}
@@ -762,11 +762,11 @@ exit 1`,
 	}
 }
 
-// Updating Deployer does not reach back and rewrite the scripts already on a
+// Updating HostMan does not reach back and rewrite the scripts already on a
 // host — a running session should not change under somebody — so a host still
 // running the old ones has to say so. Otherwise a fix that shipped is not the
 // code the host is running, and nothing on the screen admits it.
-func TestStatusReportsASessionWrittenByAnOlderDeployer(t *testing.T) {
+func TestStatusReportsASessionWrittenByAnOlderHostMan(t *testing.T) {
 	current := "PORT=6080\nGEOMETRY=1280x800\nREVISION=" + remoteRevision() + "\n"
 	older := "PORT=6080\nGEOMETRY=1280x800\nREVISION=0000deadbeef\n"
 

@@ -17,8 +17,8 @@ var placeholder = regexp.MustCompile(`\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}`)
 
 // Built-in values available to every template alongside the app's own params.
 const (
-	VarHost     = "host"     // the host's address, as Deployer connects to it
-	VarHostName = "hostname" // the host's name in Deployer
+	VarHost     = "host"     // the host's address, as HostMan connects to it
+	VarHostName = "hostname" // the host's name in HostMan
 	VarUser     = "user"     // the SSH user
 )
 

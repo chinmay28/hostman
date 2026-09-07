@@ -2,12 +2,12 @@
 // keeps them going between visits.
 //
 // A session here is one `claude` process on a host, started over SSH with its
-// standard streams held open, and everything it has said kept on Deployer's
+// standard streams held open, and everything it has said kept on HostMan's
 // side as a log of events. That is the same shape as a shell, for the same
 // reason: a phone drops its connection every time it locks, and a
 // conversation that lived in the page would lose its history, the question
 // Claude was in the middle of asking, and the work it was in the middle of
-// doing. So the process belongs to Deployer, a screen that comes back asks
+// doing. So the process belongs to HostMan, a screen that comes back asks
 // for the events it missed, and closing the screen is not the same as ending
 // the session.
 //
@@ -18,7 +18,7 @@
 // the CLI has to acknowledge. All of that matching lives here, on top of the
 // wire format in claudecli.
 //
-// Like the rest of Deployer there is no agent on the host: the process is
+// Like the rest of HostMan there is no agent on the host: the process is
 // Claude Code itself, installed for the SSH user, working in a directory of
 // theirs, with their sign-in.
 package claude
@@ -218,7 +218,7 @@ type Session struct {
 	// change is closed and replaced whenever there is something new to see.
 	change chan struct{}
 	// pending is the permission requests waiting for an answer, by request
-	// id; waiters is the control requests Deployer made and is waiting on.
+	// id; waiters is the control requests HostMan made and is waiting on.
 	pending map[string]claudecli.Event
 	waiters map[string]chan claudecli.Event
 	nextReq int
@@ -283,7 +283,7 @@ func (m *Manager) Open(ctx context.Context, h *store.Host, opts Options) (*Sessi
 }
 
 // adopt wraps a live process in a session and starts reading it. It is the
-// seam the tests use: everything after this point is Deployer's own
+// seam the tests use: everything after this point is HostMan's own
 // bookkeeping and has no SSH in it.
 func (m *Manager) adopt(hostID int64, user string, conn io.Closer, proc process, opts Options) *Session {
 	now := m.now()
@@ -345,7 +345,7 @@ func (m *Manager) Close(id string) error {
 	if !ok {
 		return ErrNotFound
 	}
-	s.shutdown("ended from Deployer")
+	s.shutdown("ended from HostMan")
 	return nil
 }
 
@@ -361,7 +361,7 @@ func (m *Manager) CloseHost(hostID int64) {
 	}
 	m.mu.Unlock()
 	for _, s := range doomed {
-		s.shutdown("the host was removed from Deployer")
+		s.shutdown("the host was removed from HostMan")
 	}
 }
 
@@ -412,7 +412,7 @@ func (m *Manager) closeAll() {
 	}
 	m.mu.Unlock()
 	for _, s := range all {
-		s.shutdown("Deployer is shutting down")
+		s.shutdown("HostMan is shutting down")
 	}
 }
 
@@ -745,7 +745,7 @@ func (s *Session) handle(ev claudecli.Event) {
 	case claudecli.KindControlRequest:
 		// Hooks, dialogs and MCP relays are for an SDK host with code behind
 		// it. Saying no at once is what keeps the CLI from waiting forever.
-		go s.write(claudecli.Refuse(ev.RequestID, "Deployer does not handle "+ev.Subtype))
+		go s.write(claudecli.Refuse(ev.RequestID, "HostMan does not handle "+ev.Subtype))
 		return
 	case claudecli.KindControlResponse:
 		if ch, ok := s.waiters[ev.RequestID]; ok {

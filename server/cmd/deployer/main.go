@@ -1,4 +1,4 @@
-// Command deployer runs the Deployer server: REST API plus the PWA, from a
+// Command deployer runs the HostMan server: REST API plus the PWA, from a
 // single binary.
 package main
 
@@ -40,8 +40,8 @@ func run() error {
 		addr    = flag.String("addr", envOr("DEPLOYER_ADDR", ":8899"), "listen address (host:port)")
 		dbPath  = flag.String("db", envOr("DEPLOYER_DB", "data/deployer.db"), "path to the SQLite database")
 		pin     = flag.String("pin", os.Getenv("DEPLOYER_PIN"), "optional PIN required to use the UI; empty disables authentication")
-		sshUser = flag.String("self-user", os.Getenv("DEPLOYER_SELF_USER"), "SSH user Deployer connects as on its own machine")
-		repo    = flag.String("self-repo", envOr("DEPLOYER_REPO", "chinmay28/deployer"), "repository a self-update builds from")
+		sshUser = flag.String("self-user", os.Getenv("DEPLOYER_SELF_USER"), "SSH user HostMan connects as on its own machine")
+		repo    = flag.String("self-repo", envOr("DEPLOYER_REPO", "chinmay28/hostman"), "repository a self-update builds from")
 		ref     = flag.String("self-ref", envOr("DEPLOYER_REF", "main"), "git ref a self-update builds from by default")
 		verbose = flag.Bool("v", false, "verbose logging")
 	)

@@ -39,7 +39,7 @@ func TestRenderTargetPlaceholderForms(t *testing.T) {
 		template: "http://{ HOST }:8123/",
 		want:     "http://pi5.local:8123/",
 	}, {
-		name:     "the host's name in Deployer, where that is what is wanted",
+		name:     "the host's name in HostMan, where that is what is wanted",
 		template: "http://{HOSTNAME}.lan:8123/",
 		want:     "http://pi5.lan:8123/",
 	}, {
@@ -64,7 +64,7 @@ func TestRenderTargetPlaceholderForms(t *testing.T) {
 	}
 }
 
-// A check that writes ".local" itself has to work whether Deployer reaches the
+// A check that writes ".local" itself has to work whether HostMan reaches the
 // host as "pi5" or as "pi5.local" — the person writing the URL should not have
 // to know which, and "pi5.local.local" answers nothing.
 func TestRenderTargetHostSuffix(t *testing.T) {
@@ -101,7 +101,7 @@ func TestRenderTargetHostSuffix(t *testing.T) {
 func TestRenderTargetRejectsUnknownPlaceholders(t *testing.T) {
 	_, err := RenderTarget("http://{HOST}:{PORT}/{TOKEN}", map[string]string{VarHost: "pi5.local"}, false)
 	if err == nil {
-		t.Fatal("expected an error naming what Deployer cannot fill in")
+		t.Fatal("expected an error naming what HostMan cannot fill in")
 	}
 	for _, want := range []string{"PORT", "TOKEN"} {
 		if !strings.Contains(err.Error(), want) {

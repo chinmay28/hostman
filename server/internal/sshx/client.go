@@ -16,7 +16,7 @@ import (
 )
 
 // ErrHostKeyChanged means the host presented a different key than the one
-// pinned when Deployer first connected. Treated as fatal: it is either a
+// pinned when HostMan first connected. Treated as fatal: it is either a
 // reinstalled host or someone in the middle.
 var ErrHostKeyChanged = errors.New("host key changed since it was first trusted")
 
@@ -48,14 +48,14 @@ type Client struct {
 	once sync.Once
 }
 
-// Dial opens an SSH connection using Deployer's keypair, honouring ctx for the
+// Dial opens an SSH connection using HostMan's keypair, honouring ctx for the
 // connect phase.
 func Dial(ctx context.Context, t Target, id *Identity) (*Client, error) {
 	return dial(ctx, t, []ssh.AuthMethod{ssh.PublicKeys(id.Signer)})
 }
 
 // DialPassword opens an SSH connection with a password, for the one-time setup
-// that installs Deployer's key on a host. The password is used for this
+// that installs HostMan's key on a host. The password is used for this
 // handshake and nothing else: it is never written to the database or the log.
 //
 // Keyboard-interactive is offered alongside plain password auth because that is

@@ -61,7 +61,7 @@ func (s *Server) handleUninstall(w http.ResponseWriter, r *http.Request) {
 	s.writeStartedDeployment(w, dep, err)
 }
 
-// handleForgetInstallation removes Deployer's record of an app on a host and
+// handleForgetInstallation removes HostMan's record of an app on a host and
 // nothing else. Whatever the app left on the machine stays there — which is
 // what you want for an app removed by hand, and what Uninstall is for
 // otherwise.

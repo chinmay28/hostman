@@ -50,11 +50,11 @@ const (
 )
 
 // unitPattern is what systemd allows in a unit name, narrowed to the two types
-// Deployer manages. The name reaches a command line as a quoted argument either
+// HostMan manages. The name reaches a command line as a quoted argument either
 // way; this is what keeps a typo from becoming a confusing error from the host.
 var unitPattern = regexp.MustCompile(`^[A-Za-z0-9_:@][A-Za-z0-9_.:@\\-]{0,238}\.(service|timer)$`)
 
-// unitActions is every action Deployer will ask systemd for. Anything else —
+// unitActions is every action HostMan will ask systemd for. Anything else —
 // masking, editing state files, isolating targets — belongs on a terminal, not
 // on a phone.
 var unitActions = map[string]bool{
@@ -223,7 +223,7 @@ var unitDirs = []string{"/etc/systemd/system", "/usr/local/lib/systemd/system"}
 // microseconds since boot and a timer's next run as microseconds since either
 // the epoch or boot, depending on how the timer was written. Only the machine's
 // own clock turns those into "for three days" and "in four hours", and it has
-// to be the machine's rather than Deployer's — the two are on different boxes
+// to be the machine's rather than HostMan's — the two are on different boxes
 // and need not agree.
 const unitListScript = `set -u
 limit=$1
@@ -414,7 +414,7 @@ func (s *Service) Act(ctx context.Context, h *store.Host, name, action string) e
 		return err
 	}
 	if !unitActions[action] {
-		return invalid("%q is not something Deployer will ask systemd to do", action)
+		return invalid("%q is not something HostMan will ask systemd to do", action)
 	}
 	res, err := s.run(ctx, h, elevate(actionScript, clean, action), "")
 	if err != nil {
@@ -472,7 +472,7 @@ func (s *Service) CreateUnit(ctx context.Context, h *store.Host, name, content s
 		return nil, err
 	}
 	if isTemplate(clean) {
-		return nil, invalid("Deployer does not create template units")
+		return nil, invalid("HostMan does not create template units")
 	}
 	if strings.TrimSpace(content) == "" {
 		return nil, invalid("a unit file needs something in it")
@@ -505,7 +505,7 @@ func (s *Service) CreateUnit(ctx context.Context, h *store.Host, name, content s
 	return &unit, nil
 }
 
-// unitInstallDir is where a unit Deployer creates goes. /etc/systemd/system is
+// unitInstallDir is where a unit HostMan creates goes. /etc/systemd/system is
 // the administrator's own directory and the one that wins over every other.
 const unitInstallDir = "/etc/systemd/system"
 
@@ -574,7 +574,7 @@ func removable(u *Unit) error {
 	return nil
 }
 
-// discardUnit removes a unit file Deployer has just written and that systemd
+// discardUnit removes a unit file HostMan has just written and that systemd
 // then refused. Whether the cleanup works is not reported: the failure it is
 // cleaning up after is the one worth telling the caller about.
 func (s *Service) discardUnit(ctx context.Context, h *store.Host, name string) {

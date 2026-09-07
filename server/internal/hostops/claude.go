@@ -11,7 +11,7 @@ import (
 	"github.com/chinmay28/deployer/server/internal/store"
 )
 
-// Claude Code on a host is three things Deployer looks after before a
+// Claude Code on a host is three things HostMan looks after before a
 // conversation can start: the CLI being installed, the SSH user being signed
 // in, and — since neither is instant — the state of getting there.
 //
@@ -19,15 +19,15 @@ import (
 //
 // **It is installed for the user, not the machine.** Anthropic's installer
 // puts the binary in ~/.local/bin and keeps it up to date from there; no
-// sudo, nothing in /usr, nothing another user on the host inherits. Deployer
+// sudo, nothing in /usr, nothing another user on the host inherits. HostMan
 // runs it as the SSH user and nothing else, which is also who the sessions
 // run as.
 //
 // **The sign-in belongs to the host.** `claude auth login` prints a link and
-// waits for a code. Deployer lifts the link out of the log, the phone opens
-// it, and the code the phone is given goes back through Deployer to the
+// waits for a code. HostMan lifts the link out of the log, the phone opens
+// it, and the code the phone is given goes back through HostMan to the
 // process that is waiting. The token the CLI ends up with is written by the
-// CLI into the user's own home directory, and Deployer never reads it, never
+// CLI into the user's own home directory, and HostMan never reads it, never
 // stores it and never sends it anywhere. The same goes for an API key: it is
 // written into the CLI's own settings file on the host and forgotten here.
 //
@@ -42,8 +42,8 @@ import (
 // types — is checked against an alphabet before it is sent.
 
 const (
-	// claudeStateDir is where Deployer keeps the state of an install or a
-	// sign-in on the host, relative to the user's home. It is Deployer's,
+	// claudeStateDir is where HostMan keeps the state of an install or a
+	// sign-in on the host, relative to the user's home. It is HostMan's,
 	// and holds nothing secret: logs, exit statuses, and the link a sign-in
 	// is waiting on.
 	claudeStateDir = ".local/state/deployer-claude"
@@ -72,7 +72,7 @@ type ClaudeHost struct {
 	Arch string `json:"arch,omitempty"`
 	OS   string `json:"os,omitempty"`
 	// Install is "absent", "running", "failed" or "done": the state of the
-	// install Deployer started, if it started one.
+	// install HostMan started, if it started one.
 	Install     string `json:"install"`
 	InstallExit int    `json:"installExit,omitempty"`
 	InstallLog  string `json:"installLog,omitempty"`
@@ -85,7 +85,7 @@ type ClaudeHost struct {
 	// Plan is the subscription type the CLI recorded, when it did.
 	Plan string `json:"plan,omitempty"`
 	// Login is "absent", "waiting", "running", "failed" or "done": the state
-	// of the sign-in Deployer started. "waiting" means the link is ready and
+	// of the sign-in HostMan started. "waiting" means the link is ready and
 	// a code is what it needs.
 	Login string `json:"login"`
 	// LoginURL is the link to open, while a sign-in is waiting.
@@ -246,7 +246,7 @@ func parseClaudeStatus(out, user string) *ClaudeHost {
 	return c
 }
 
-// authKind names the CLI's authentication method in Deployer's two words.
+// authKind names the CLI's authentication method in HostMan's two words.
 func authKind(method string) string {
 	switch {
 	case method == "":
@@ -339,7 +339,7 @@ func (s *Service) InstallClaude(ctx context.Context, h *store.Host) (*ClaudeHost
 }
 
 // claudeLoginScript starts `claude auth login` detached, with its stdin fed
-// from a file Deployer appends the code to later. tail -f keeps the pipe open
+// from a file HostMan appends the code to later. tail -f keeps the pipe open
 // while the CLI waits, and the job kills it when the CLI is done.
 //
 // The CLI prints the link with "visit:" in front of it and then waits at

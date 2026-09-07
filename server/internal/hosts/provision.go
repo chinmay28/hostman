@@ -11,12 +11,12 @@ import (
 )
 
 // Provisioning is the one-time setup that a host otherwise needs done by hand:
-// authorizing Deployer's public key, and granting the SSH user passwordless
+// authorizing HostMan's public key, and granting the SSH user passwordless
 // sudo. Both are done over a password-authenticated SSH session that lasts for
 // the length of the request. The password is held in memory for that session
 // and nothing else — it is never persisted, never logged, and never returned.
 
-// authorizeScript appends Deployer's key to the user's authorized_keys, and is
+// authorizeScript appends HostMan's key to the user's authorized_keys, and is
 // safe to run twice: a key already present is left alone. It also fixes the
 // permissions sshd insists on, and the missing final newline that would
 // otherwise splice the new key onto the last one.
@@ -59,7 +59,7 @@ type ProvisionStep struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-// ProvisionResult reports how far setup got. OK means Deployer can now reach
+// ProvisionResult reports how far setup got. OK means HostMan can now reach
 // the host with its own key; SudoOK means unattended installs will work too.
 type ProvisionResult struct {
 	OK     bool            `json:"ok"`
@@ -82,8 +82,8 @@ func (r *ProvisionResult) fail(step, cause string, hints ...string) *ProvisionRe
 	return r
 }
 
-// Provision sets a host up for Deployer using a password the user supplies
-// once. It authorizes Deployer's key, grants passwordless sudo, and then proves
+// Provision sets a host up for HostMan using a password the user supplies
+// once. It authorizes HostMan's key, grants passwordless sudo, and then proves
 // the result by reconnecting with the key alone.
 //
 // Every step is idempotent, so a partial run can simply be repeated.
@@ -117,16 +117,16 @@ func (s *Service) Provision(ctx context.Context, h *store.Host, password string)
 	pub := s.identity.Load().AuthorizedKey()
 	out, err := client.Run(ctx, fmt.Sprintf(authorizeScript, sshx.Quote(pub)))
 	if err != nil {
-		return res.fail("Authorize Deployer's key", err.Error())
+		return res.fail("Authorize HostMan's key", err.Error())
 	}
 	if out.ExitCode != 0 {
-		return res.fail("Authorize Deployer's key", commandError(out),
+		return res.fail("Authorize HostMan's key", commandError(out),
 			fmt.Sprintf("Check that %s has a home directory that it can write to.", h.Username))
 	}
 	if strings.Contains(out.Stdout, "already") {
-		res.step("Deployer's key was already authorized", true, "")
+		res.step("HostMan's key was already authorized", true, "")
 	} else {
-		res.step("Authorized Deployer's key", true, "")
+		res.step("Authorized HostMan's key", true, "")
 	}
 
 	// Sudo is best-effort: a host without it is still usable for installs that
@@ -140,13 +140,13 @@ func (s *Service) Provision(ctx context.Context, h *store.Host, password string)
 			fmt.Sprintf("Deploys that need root will fail until %s has passwordless sudo. Settings has the command to run by hand.", h.Username))
 	}
 
-	// The proof: connect again as Deployer normally would, with the key only.
+	// The proof: connect again as HostMan normally would, with the key only.
 	probe, err := s.Probe(ctx, h)
 	if err != nil {
-		return res.fail("Connect with Deployer's key", err.Error(),
+		return res.fail("Connect with HostMan's key", err.Error(),
 			"The key was installed but the host still refused it. Check that sshd allows public key authentication, and that the home directory is not writable by anyone else — sshd ignores authorized_keys when it is.")
 	}
-	res.step("Connected with Deployer's key", true, "")
+	res.step("Connected with HostMan's key", true, "")
 	res.OK = true
 	res.SudoOK = probe.Facts.SudoOK
 	return res

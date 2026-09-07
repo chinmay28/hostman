@@ -22,7 +22,7 @@ import (
 // readable in one command, and none of them is worth typing three commands on a
 // phone to get to.
 //
-// So Deployer reads all of them in a single SSH round trip and says what it
+// So HostMan reads all of them in a single SSH round trip and says what it
 // thinks, with the evidence underneath. The verdict is a guess and is labelled
 // as one — see bootcause.go, which is where the guessing happens. This file is
 // only concerned with getting the evidence back intact.
@@ -56,7 +56,7 @@ const (
 	maxRestarts = 40
 )
 
-// Cause is what Deployer thinks took the machine down.
+// Cause is what HostMan thinks took the machine down.
 type Cause string
 
 const (
@@ -114,7 +114,7 @@ type Sign struct {
 	// the process the out-of-memory killer chose.
 	Detail string `json:"detail,omitempty"`
 	// BeforeS is how many seconds before the machine came back this was logged.
-	// 0 where the line carried no time Deployer could read.
+	// 0 where the line carried no time HostMan could read.
 	BeforeS int64 `json:"beforeS,omitempty"`
 	// Near marks a sign close enough to the restart to be part of it, rather
 	// than something that also happened during that boot. It is the difference
@@ -183,13 +183,13 @@ type Watchdog struct {
 	Flags []string `json:"flags,omitempty"`
 }
 
-// BootReport is Deployer's answer to "why did it restart?", with everything it
+// BootReport is HostMan's answer to "why did it restart?", with everything it
 // looked at.
 type BootReport struct {
 	// The guess.
 	Cause      Cause  `json:"cause"`
 	Confidence string `json:"confidence"`
-	// Headline is one line: what Deployer thinks happened.
+	// Headline is one line: what HostMan thinks happened.
 	Headline string `json:"headline"`
 	// Detail is a sentence or two saying what that means and what it does not.
 	Detail string `json:"detail"`
@@ -238,7 +238,7 @@ type BootReport struct {
 	// LogTail is the end of the previous boot's log — the last thing the
 	// machine said before it went.
 	LogTail string `json:"logTail"`
-	// Truncated means the tail was longer than Deployer will carry and lost its
+	// Truncated means the tail was longer than HostMan will carry and lost its
 	// beginning.
 	Truncated bool `json:"truncated"`
 
@@ -257,7 +257,7 @@ type BootReport struct {
 // critical temperature and the Pi's under-voltage warning all are. Filtering by
 // priority is what makes reading hours of log affordable on a Pi's SD card.
 //
-// Both come back base64-encoded, like any other log Deployer carries, so no
+// Both come back base64-encoded, like any other log HostMan carries, so no
 // line of a log can be mistaken for one of the markers around it. --no-hostname
 // drops a column that is the same on every line; it arrived in systemd 230, so
 // a host that refuses it gets the same command without it rather than nothing.
@@ -476,7 +476,7 @@ func parseBootReport(out string) (*BootReport, error) {
 type JournalStorage struct {
 	// Enabled is whether the journal now survives a restart.
 	Enabled bool `json:"enabled"`
-	// Already is true where it was on before Deployer touched anything, which
+	// Already is true where it was on before HostMan touched anything, which
 	// makes this a no-op rather than a change.
 	Already bool `json:"already"`
 	// Configured is what journald.conf says about Storage=, where it says

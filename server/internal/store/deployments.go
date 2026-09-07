@@ -41,7 +41,7 @@ type Deployment struct {
 	StartedAt  time.Time  `json:"startedAt"`
 	FinishedAt *time.Time `json:"finishedAt"`
 	// DetachedLog is where the command writes on the host when it has to
-	// outlive Deployer. Empty for ordinary deployments.
+	// outlive HostMan. Empty for ordinary deployments.
 	DetachedLog string `json:"-"`
 
 	// Denormalized for list views.
@@ -185,12 +185,12 @@ func (d *DB) ListDeployments(ctx context.Context, f DeploymentFilter) ([]*Deploy
 
 // InterruptRunningDeployments marks deployments that were in flight when the
 // server stopped. Their remote commands may well have completed; the record is
-// honest that Deployer stopped watching. Detached deployments are left alone:
-// they were designed to outlive Deployer and are resumed instead.
+// honest that HostMan stopped watching. Detached deployments are left alone:
+// they were designed to outlive HostMan and are resumed instead.
 func (d *DB) InterruptRunningDeployments(ctx context.Context) (int64, error) {
 	res, err := d.sql.ExecContext(ctx, `
 		UPDATE deployments
-		SET status = ?, error = 'Deployer restarted while this deployment was running',
+		SET status = ?, error = 'HostMan restarted while this deployment was running',
 			finished_at = ?
 		WHERE status = ? AND detached_log = ''`,
 		DeployInterrupted, time.Now().UTC().Format(time.RFC3339Nano), DeployRunning)
@@ -275,7 +275,7 @@ func scanInstallation(row interface{ Scan(...any) error }) (*Installation, error
 	return &in, nil
 }
 
-// ListInstallations returns every app/host pair Deployer has deployed.
+// ListInstallations returns every app/host pair HostMan has deployed.
 func (d *DB) ListInstallations(ctx context.Context) ([]*Installation, error) {
 	rows, err := d.sql.QueryContext(ctx,
 		`SELECT `+installationColumns+` `+installationJoin+` ORDER BY a.name, h.name`)
@@ -362,7 +362,7 @@ func orEmptyMap(m map[string]string) map[string]string {
 }
 
 // ResumableDeployments returns detached deployments still marked running: they
-// kept going on the host while Deployer was restarting.
+// kept going on the host while HostMan was restarting.
 func (d *DB) ResumableDeployments(ctx context.Context) ([]*Deployment, error) {
 	rows, err := d.sql.QueryContext(ctx, `SELECT `+deploymentColumns+`, a.name, h.name
 		FROM deployments d

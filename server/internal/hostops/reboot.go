@@ -8,13 +8,13 @@ import (
 	"github.com/chinmay28/deployer/server/internal/store"
 )
 
-// Rebooting is offered; shutting down is not. Deployer can watch a machine come
+// Rebooting is offered; shutting down is not. HostMan can watch a machine come
 // back from a restart, but it cannot bring one back from off — that needs
 // someone at the plug. A button that can strand the host it manages is worse
 // than no button, so the only way down is one the machine comes back up from.
 
 // rebootScript schedules the restart in a detached process and returns
-// immediately, so Deployer gets a clean answer instead of the connection dying
+// immediately, so HostMan gets a clean answer instead of the connection dying
 // mid-command and having to guess what that meant. The few seconds' delay is
 // what buys that: sshd hangs up the remote command when its client goes away,
 // so the command that takes the machine down must outlive the session it was

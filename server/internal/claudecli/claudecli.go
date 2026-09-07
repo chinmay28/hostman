@@ -42,7 +42,7 @@ const (
 // Modes lists the permission modes, in the order a screen offers them.
 var Modes = []string{ModeDefault, ModeAcceptEdits, ModePlan, ModeBypass}
 
-// ValidMode reports whether mode is one Deployer will start a session in.
+// ValidMode reports whether mode is one HostMan will start a session in.
 func ValidMode(mode string) bool {
 	for _, m := range Modes {
 		if m == mode {
@@ -175,7 +175,7 @@ func Deny(requestID, reason string) []byte {
 	return controlResponse(requestID, map[string]any{"behavior": "deny", "message": reason})
 }
 
-// Refuse answers a control request Deployer does not handle, so the CLI does
+// Refuse answers a control request HostMan does not handle, so the CLI does
 // not wait on it forever.
 func Refuse(requestID, why string) []byte {
 	return line(map[string]any{
@@ -256,7 +256,7 @@ const (
 	// mode change, an interrupt.
 	KindControlResponse = "control_response"
 	// KindControlRequest is a request from the CLI that is not a permission
-	// prompt. Deployer refuses these; the kind exists so the session can.
+	// prompt. HostMan refuses these; the kind exists so the session can.
 	KindControlRequest = "control_request"
 	// KindNotice is anything else worth a line on the screen: a retry, a
 	// compaction, a warning.

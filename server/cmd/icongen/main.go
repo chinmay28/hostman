@@ -1,4 +1,4 @@
-// Command icongen draws Deployer's app icons. iOS home-screen icons must be
+// Command icongen draws HostMan's app icons. iOS home-screen icons must be
 // PNG, so they are generated rather than hand-drawn, and checked in.
 //
 //	go run ./cmd/icongen -out ../apps/web/public

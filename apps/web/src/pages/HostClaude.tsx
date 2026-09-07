@@ -26,11 +26,11 @@ const PREFS_KEY = 'deployer.claude.start'
  * download onto a Pi, a person with a phone — so both run on the host by
  * themselves and this screen follows along. The sign-in is the interesting
  * one: the CLI prints a link and waits for a code, the phone is what opens
- * the link, and the code the phone is shown goes back through Deployer to the
+ * the link, and the code the phone is shown goes back through HostMan to the
  * process waiting for it. The token that results is written by the CLI into
- * the user's home on the host, and Deployer never sees it.
+ * the user's home on the host, and HostMan never sees it.
  *
- * Talking to it is the rest. A session belongs to Deployer, not to this
+ * Talking to it is the rest. A session belongs to HostMan, not to this
  * screen, exactly as a shell does: leaving keeps it open, coming back rejoins
  * it with the whole conversation, and ending it is a thing you do on purpose.
  */
@@ -348,7 +348,7 @@ function NotInstalled({ c, host, busy, onInstall }: { c: ClaudeHost; host: strin
           <Badge tone="neutral">Not installed</Badge>
         </div>
         <p className="sub" style={{ marginTop: 10 }}>
-          Deployer installs it for the user it signs in as, <b>{c.user}</b>, with Anthropic's own installer. It lands
+          HostMan installs it for the user it signs in as, <b>{c.user}</b>, with Anthropic's own installer. It lands
           in <span className="mono">~/.local/bin</span> and keeps itself up to date from there. Nothing is installed
           system-wide, and no sudo is needed.
         </p>
@@ -378,7 +378,7 @@ function NotInstalled({ c, host, busy, onInstall }: { c: ClaudeHost; host: strin
       <Card>
         <div className="title">Or do it yourself</div>
         <p className="sub" style={{ margin: '4px 0 10px' }}>
-          The same command, run on {host} as {c.user}. Deployer notices on its next look.
+          The same command, run on {host} as {c.user}. HostMan notices on its next look.
         </p>
         <Copyable text={INSTALL} />
         <p className="sub" style={{ marginTop: 10 }}>
@@ -427,7 +427,7 @@ function SignIn({
           <Badge tone="warn">Sign in</Badge>
         </div>
         <p className="sub" style={{ marginTop: 10 }}>
-          The sign-in belongs to {host}: Claude keeps it in {c.user}'s home folder, and Deployer never sees the
+          The sign-in belongs to {host}: Claude keeps it in {c.user}'s home folder, and HostMan never sees the
           token. This phone only carries the sign-in code across.
         </p>
       </Card>

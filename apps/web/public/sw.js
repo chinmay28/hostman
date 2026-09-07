@@ -1,4 +1,4 @@
-// Deployer's service worker exists to make the app open instantly from the
+// HostMan's service worker exists to make the app open instantly from the
 // iPhone home screen. It deliberately never caches API responses: showing a
 // stale host list or, worse, a stale deployment status would be actively
 // misleading.

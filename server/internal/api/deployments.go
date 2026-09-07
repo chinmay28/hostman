@@ -134,7 +134,7 @@ func (s *Server) handleDeploymentStream(w http.ResponseWriter, r *http.Request) 
 	h.Set("Content-Type", "text/event-stream")
 	h.Set("Cache-Control", "no-cache")
 	h.Set("Connection", "keep-alive")
-	// Disable buffering in any reverse proxy sitting in front of Deployer.
+	// Disable buffering in any reverse proxy sitting in front of HostMan.
 	h.Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 
@@ -189,7 +189,7 @@ func writeSSELog(w http.ResponseWriter, text string) {
 // writeSSEStatus emits the final state of the deployment and ends the stream.
 //
 // A deployment that is still running when its run ends has been handed over —
-// a detached self-update whose Deployer is restarting. Saying "status: running"
+// a detached self-update whose HostMan is restarting. Saying "status: running"
 // would look terminal to the client, so nothing is sent and the stream simply
 // closes; the browser reconnects and picks up whichever process owns it next.
 func (s *Server) writeSSEStatus(w http.ResponseWriter, r *http.Request, id int64) {

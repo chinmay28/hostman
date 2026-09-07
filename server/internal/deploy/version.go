@@ -11,7 +11,7 @@ import (
 // Nothing on a host reports back which version of an app is running there, but
 // the deploy that installed it said so: an install command that can install
 // more than one version takes it as a parameter — `ref`, `tag`, `version` —
-// and Deployer keeps the parameters of the last successful deploy. So the
+// and HostMan keeps the parameters of the last successful deploy. So the
 // version is read back out of those, the same way ports are, and shown beside
 // the app: "On nakedpi · v1.4.0 · port 8899". An app whose command installs
 // whatever is current names no version, and none is shown for it.
@@ -45,7 +45,7 @@ const maxVersionLen = 32
 
 // InstallationVersion returns the version of an app that a host is running, or
 // "" where the app's parameters do not say. Like ports, it is read off what was
-// deployed rather than asked of the machine: it is the version Deployer put
+// deployed rather than asked of the machine: it is the version HostMan put
 // there, which is the version running unless somebody changed it by hand.
 func InstallationVersion(in *store.Installation) string {
 	if in == nil {

@@ -22,7 +22,7 @@ import (
 //
 // It is opt-in because it changes the machine it runs on — it creates a
 // throwaway user and writes /etc/sudoers.d/deployer, exactly as it would on a
-// host. Both are removed afterwards, but don't point it at a machine Deployer
+// host. Both are removed afterwards, but don't point it at a machine HostMan
 // already manages. Run it with `make test-provision`.
 func TestProvisionEndToEnd(t *testing.T) {
 	if os.Getenv("DEPLOYER_E2E") != "1" {
@@ -68,7 +68,7 @@ func TestProvisionEndToEnd(t *testing.T) {
 	}
 	authorizedKeys := filepath.Join("/home", user, ".ssh", "authorized_keys")
 
-	// Nothing has authorized Deployer yet, so the ordinary route is shut.
+	// Nothing has authorized HostMan yet, so the ordinary route is shut.
 	if _, err := svc.Probe(ctx, h); err == nil {
 		t.Fatal("probe succeeded before the host was provisioned")
 	}
@@ -101,7 +101,7 @@ func TestProvisionEndToEnd(t *testing.T) {
 		t.Fatalf("read authorized_keys: %v", err)
 	}
 	if strings.TrimSpace(string(authorized)) != id.AuthorizedKey() {
-		t.Errorf("authorized_keys = %q, want Deployer's key", authorized)
+		t.Errorf("authorized_keys = %q, want HostMan's key", authorized)
 	}
 	sudoers, err := os.ReadFile("/etc/sudoers.d/deployer")
 	if err != nil {
@@ -135,7 +135,7 @@ func TestProvisionEndToEnd(t *testing.T) {
 }
 
 // startPasswordSSHD boots an sshd that accepts passwords as well as keys — the
-// shape of a host that has never met Deployer.
+// shape of a host that has never met HostMan.
 func startPasswordSSHD(t *testing.T) int {
 	t.Helper()
 	dir := t.TempDir()

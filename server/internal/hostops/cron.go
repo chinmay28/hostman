@@ -12,7 +12,7 @@ import (
 	"github.com/chinmay28/deployer/server/internal/store"
 )
 
-// A crontab is edited whole, the way `crontab -e` edits it: Deployer reads the
+// A crontab is edited whole, the way `crontab -e` edits it: HostMan reads the
 // file, the user changes it, and the whole thing goes back through `crontab -`,
 // which parses it and refuses to install anything it cannot read. That refusal
 // is the validation — cron's own parser is the only one that counts.
@@ -136,7 +136,7 @@ func (s *Service) WriteCrontab(ctx context.Context, h *store.Host, user, content
 }
 
 // cronTarget resolves the user to act on. It returns the argument for the
-// script — empty for "the account Deployer signs in as", which needs no
+// script — empty for "the account HostMan signs in as", which needs no
 // privileges — and whether that is the case.
 func cronTarget(h *store.Host, user string) (target string, own bool, err error) {
 	user = strings.TrimSpace(user)

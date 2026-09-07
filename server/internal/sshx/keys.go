@@ -1,4 +1,4 @@
-// Package sshx handles Deployer's SSH identity and connections to hosts.
+// Package sshx handles HostMan's SSH identity and connections to hosts.
 package sshx
 
 import (
@@ -12,10 +12,10 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// SettingPrivateKey is the settings key holding Deployer's OpenSSH private key.
+// SettingPrivateKey is the settings key holding HostMan's OpenSSH private key.
 const SettingPrivateKey = "ssh_private_key"
 
-// KeyComment identifies Deployer's key in a host's authorized_keys file.
+// KeyComment identifies HostMan's key in a host's authorized_keys file.
 const KeyComment = "deployer"
 
 // keyStore is the slice of the database that sshx needs.
@@ -24,12 +24,12 @@ type keyStore interface {
 	SetSetting(ctx context.Context, key, value string) error
 }
 
-// Identity is Deployer's SSH keypair.
+// Identity is HostMan's SSH keypair.
 type Identity struct {
 	Signer ssh.Signer
 }
 
-// EnsureIdentity loads Deployer's keypair, generating one on first run.
+// EnsureIdentity loads HostMan's keypair, generating one on first run.
 func EnsureIdentity(ctx context.Context, db keyStore) (*Identity, error) {
 	pemBytes, ok, err := db.GetSetting(ctx, SettingPrivateKey)
 	if err != nil {

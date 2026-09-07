@@ -15,7 +15,7 @@ const sessionCookie = "deployer_session"
 
 const sessionTTL = 30 * 24 * time.Hour
 
-// PinAuth is an optional single-user gate. Deployer runs unauthenticated by
+// PinAuth is an optional single-user gate. HostMan runs unauthenticated by
 // default (LAN and Tailscale only); setting a PIN turns this on without any
 // other change to the API.
 type PinAuth struct {

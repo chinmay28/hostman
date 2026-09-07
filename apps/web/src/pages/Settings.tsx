@@ -40,14 +40,14 @@ export default function Settings() {
       <p className="sub" style={{ margin: '0 4px 12px' }}>
         Adding a host can do both of these for you, if you give it the host's password once — it is
         used for that one connection and never stored. These are the same two steps by hand, run on
-        the machine, signed in as the user Deployer will connect as.
+        the machine, signed in as the user HostMan will connect as.
       </p>
 
       {data && (
         <>
           <Card>
             <div className="meter-label">
-              <span>1 · Trust Deployer's key</span>
+              <span>1 · Trust HostMan's key</span>
             </div>
             <Copyable text={data.authorizeCommand} />
           </Card>
@@ -63,7 +63,7 @@ export default function Settings() {
             <Copyable text={data.sudoCommand} />
           </Card>
 
-          <SectionTitle>Deployer's SSH key</SectionTitle>
+          <SectionTitle>HostMan's SSH key</SectionTitle>
           <Card>
             <div className="meter-label">
               <span>Public key</span>
@@ -76,7 +76,7 @@ export default function Settings() {
 
           <Card>
             <p className="sub" style={{ marginTop: 0 }}>
-              Rotating generates a new keypair. Every host stops accepting Deployer until you add the
+              Rotating generates a new keypair. Every host stops accepting HostMan until you add the
               new public key to it, so keep this for when a key may have leaked.
             </p>
             <button className="danger block" onClick={() => setConfirmRotate(true)}>
@@ -89,7 +89,7 @@ export default function Settings() {
       <SectionTitle>About</SectionTitle>
       <Card>
         <p className="sub" style={{ marginTop: 0 }}>
-          Deployer holds a key that can run commands as root on your hosts. Keep it on your LAN or
+          HostMan holds a key that can run commands as root on your hosts. Keep it on your LAN or
           Tailscale network — don't expose it to the internet. Its database also holds the private
           key, so treat backups of it as a secret.
         </p>
@@ -104,7 +104,7 @@ export default function Settings() {
       {confirmRotate && (
         <Sheet
           title="Rotate the SSH key?"
-          subtitle="Every host will need the new public key added before it will accept Deployer again."
+          subtitle="Every host will need the new public key added before it will accept HostMan again."
           onClose={() => setConfirmRotate(false)}
         >
           <div className="actions">
@@ -122,7 +122,7 @@ export default function Settings() {
 }
 
 /**
- * SelfCard is where Deployer updates itself: it shows the machine it runs on,
+ * SelfCard is where HostMan updates itself: it shows the machine it runs on,
  * whether an update can start, and the version to build.
  */
 function SelfCard({ info, onStarted }: { info: SelfInfo; onStarted: () => void }) {
@@ -152,7 +152,7 @@ function SelfCard({ info, onStarted }: { info: SelfInfo; onStarted: () => void }
     return (
       <Card>
         <p className="sub" style={{ marginTop: 0 }}>
-          Deployer hasn't registered the machine it runs on, so it can't update itself from here.
+          HostMan hasn't registered the machine it runs on, so it can't update itself from here.
           Add it as a host with the address <span className="mono">127.0.0.1</span>.
         </p>
         <Link to="/hosts/new">
@@ -198,7 +198,7 @@ function SelfCard({ info, onStarted }: { info: SelfInfo; onStarted: () => void }
           )}
           <div className="actions">
             <button className="primary" onClick={() => setConfirming(true)} disabled={!info.ready}>
-              Update Deployer
+              Update HostMan
             </button>
           </div>
         </>
@@ -206,8 +206,8 @@ function SelfCard({ info, onStarted }: { info: SelfInfo; onStarted: () => void }
 
       {confirming && (
         <Sheet
-          title="Update Deployer"
-          subtitle={`Rebuilds and restarts Deployer on ${info.host.name}.`}
+          title="Update HostMan"
+          subtitle={`Rebuilds and restarts HostMan on ${info.host.name}.`}
           onClose={() => setConfirming(false)}
         >
           <Field label="Version" help="Branch, tag or commit to build from.">
@@ -220,7 +220,7 @@ function SelfCard({ info, onStarted }: { info: SelfInfo; onStarted: () => void }
             />
           </Field>
           <Banner tone="warn">
-            Deployer restarts itself part-way through. The update keeps running on the host and this
+            HostMan restarts itself part-way through. The update keeps running on the host and this
             page picks the log back up once it is available again.
           </Banner>
           <div className="actions">

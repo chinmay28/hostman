@@ -139,7 +139,7 @@ func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 	// SQLite reuses row ids, so what is held in memory about this host goes
 	// with it rather than waiting to be inherited by the next one. A shell is
 	// a live SSH connection as well as a memory: forgetting the host without
-	// ending it would leave a terminal typing at a machine Deployer no longer
+	// ending it would leave a terminal typing at a machine HostMan no longer
 	// admits to knowing.
 	s.Hosts.Forget(id)
 	s.Shells.CloseHost(id)
@@ -166,7 +166,7 @@ type provisionInput struct {
 }
 
 // handleProvisionHost does by SSH what the two commands in Settings do by hand:
-// authorize Deployer's key and grant passwordless sudo. Like a test, a failure
+// authorize HostMan's key and grant passwordless sudo. Like a test, a failure
 // to set the host up is a 200 with the reasons in the body — the request itself
 // worked, the host is just not ready.
 func (s *Server) handleProvisionHost(w http.ResponseWriter, r *http.Request) {
@@ -226,7 +226,7 @@ func (s *Server) handleHostMetrics(w http.ResponseWriter, r *http.Request) {
 	// The process snapshot rides along with the metrics the screen is already
 	// polling for: it comes from the same probe, so asking for it separately
 	// would be a second SSH session for something already in hand. It is null
-	// until the first probe since Deployer started, which is seconds away.
+	// until the first probe since HostMan started, which is seconds away.
 	writeJSON(w, http.StatusOK, map[string]any{
 		"hostId":    h.ID,
 		"minutes":   minutes,

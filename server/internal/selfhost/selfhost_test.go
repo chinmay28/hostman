@@ -24,7 +24,7 @@ func testDB(t *testing.T) *store.DB {
 
 func testManager(t *testing.T, db *store.DB) *Manager {
 	t.Helper()
-	m := New(db, Config{SSHUser: "chinmay", Port: "8899", Repo: "chinmay28/deployer", Ref: "main"},
+	m := New(db, Config{SSHUser: "chinmay", Port: "8899", Repo: "chinmay28/hostman", Ref: "main"},
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	m.machineID = "abc123"
 	return m
@@ -93,7 +93,7 @@ func TestEnsureRegistersHomeHostAndUpdaterApp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("updater app not created: %v", err)
 	}
-	if !strings.Contains(app.InstallCommand, "chinmay28/deployer") {
+	if !strings.Contains(app.InstallCommand, "chinmay28/hostman") {
 		t.Errorf("install command = %q, want it to build from the configured repo", app.InstallCommand)
 	}
 	if !strings.Contains(app.InstallCommand, "{{ref}}") {
@@ -106,7 +106,7 @@ func TestEnsureRegistersHomeHostAndUpdaterApp(t *testing.T) {
 			app.InstallCommand)
 	}
 	if app.HealthTarget != "http://{{host}}:8899/api/health" {
-		t.Errorf("healthTarget = %q, want the port Deployer listens on", app.HealthTarget)
+		t.Errorf("healthTarget = %q, want the port HostMan listens on", app.HealthTarget)
 	}
 	if len(app.Params) != 1 || app.Params[0].Name != "ref" || app.Params[0].Default != "main" {
 		t.Errorf("params = %+v", app.Params)

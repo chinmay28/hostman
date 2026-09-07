@@ -114,7 +114,7 @@ export default function HostRemote() {
       {session?.stale && (
         <Card>
           <Banner tone="warn">
-            This host is running a session script an older Deployer wrote. Updating Deployer does
+            This host is running a session script an older HostMan wrote. Updating HostMan does
             not reach back and rewrite it — setting the session up again does.
           </Banner>
           <p className="sub" style={{ marginTop: 0 }}>
@@ -205,7 +205,7 @@ export default function HostRemote() {
                   </div>
                 </Field>
                 <p className="sub" style={{ marginTop: 0 }}>
-                  Writing the session again is also how a host takes a newer Deployer's script. It
+                  Writing the session again is also how a host takes a newer HostMan's script. It
                   keeps the password and the browser profile, so nothing signs out; a running
                   session picks the change up when it is stopped and started.
                 </p>
@@ -478,11 +478,11 @@ function Live({
           </div>
         ) : (
           <Banner tone="warn">
-            Deployer can't work out an address for this host, so there is no link to open.
+            HostMan can't work out an address for this host, so there is no link to open.
           </Banner>
         )}
         <p className="sub" style={{ marginBottom: 0 }}>
-          It opens outside Deployer, in your phone's browser. Turn the phone sideways: a desktop
+          It opens outside HostMan, in your phone's browser. Turn the phone sideways: a desktop
           screen on a portrait phone is mostly scrolling. Downloads need no dialog — they go
           straight to {session.downloads ?? 'the host'}. A screen that is black with only a mouse
           pointer is the browser failing to start, and the journal below says why.

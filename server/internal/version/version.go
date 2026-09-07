@@ -1,4 +1,4 @@
-// Package version carries Deployer's version number.
+// Package version carries HostMan's version number.
 //
 // The scheme is calendar-based: vYEAR.MONTH.PATCH, where the patch number is
 // the repository's commit count — every commit is a patch release, so

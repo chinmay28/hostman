@@ -201,7 +201,7 @@ func TestTypingAtAnExitedShellIsAConflict(t *testing.T) {
 }
 
 // Removing a host ends the shells on it: a terminal typing at a machine
-// Deployer no longer admits to knowing is the worst of both.
+// HostMan no longer admits to knowing is the worst of both.
 func TestRemovingAHostClosesItsShells(t *testing.T) {
 	s, h := testServer(t, "")
 	hostID := newHost(t, h)

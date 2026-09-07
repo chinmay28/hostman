@@ -12,9 +12,9 @@ import (
 )
 
 // Everything else about the downloader is tested with deluge stubbed out, which
-// proves Deployer's own logic and proves nothing at all about deluge. This one
+// proves HostMan's own logic and proves nothing at all about deluge. This one
 // runs the real thing: a real deluged, started from the unit's own ExecStart
-// line, driven by the real deluge-console with the commands Deployer sends it.
+// line, driven by the real deluge-console with the commands HostMan sends it.
 //
 // It is what checks the assumptions that no amount of stubbing can — that the
 // auth file is the format deluged reads, that `connect` takes a host, a user
@@ -57,7 +57,7 @@ func waitForDeluge(t *testing.T, conf string) {
 		}
 	}
 	if password == "" {
-		t.Fatal("setup left no account for Deployer in the auth file")
+		t.Fatal("setup left no account for HostMan in the auth file")
 	}
 	connect := fmt.Sprintf("connect 127.0.0.1:%d %s %s; info", torrentPort, torrentAccount, password)
 	for i := 0; i < 100; i++ {
@@ -70,7 +70,7 @@ func waitForDeluge(t *testing.T, conf string) {
 	t.Fatal("deluged never answered on its port")
 }
 
-func TestRealDelugeTakesWhatDeployerSends(t *testing.T) {
+func TestRealDelugeTakesWhatHostManSends(t *testing.T) {
 	requireDeluge(t)
 	root := t.TempDir()
 	work := t.TempDir()

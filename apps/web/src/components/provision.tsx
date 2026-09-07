@@ -4,7 +4,7 @@ import { Badge, Banner, Field, Sheet } from './ui'
 import type { ProvisionResult } from '../types'
 
 /**
- * Setting a host up needs a password once — to authorize Deployer's key and to
+ * Setting a host up needs a password once — to authorize HostMan's key and to
  * grant passwordless sudo. It is held only for the length of that request:
  * typed here, sent once, cleared as soon as the answer comes back, and never
  * written down on either side.
@@ -25,7 +25,7 @@ export function PasswordField({
   return (
     <Field
       label={`Password for ${username || 'the SSH user'}`}
-      help="Used once to authorize Deployer's key and enable passwordless sudo. It isn't stored — not in the database, not in the log."
+      help="Used once to authorize HostMan's key and enable passwordless sudo. It isn't stored — not in the database, not in the log."
     >
       <input
         type="password"
@@ -51,8 +51,8 @@ export function Steps({ result }: { result: ProvisionResult }) {
       {result.ok ? (
         <Banner tone={result.sudoOk ? 'good' : 'warn'}>
           {result.sudoOk
-            ? 'The host is set up. Deployer can reach it with its own key.'
-            : 'Deployer can reach the host, but passwordless sudo is still missing.'}
+            ? 'The host is set up. HostMan can reach it with its own key.'
+            : 'HostMan can reach the host, but passwordless sudo is still missing.'}
         </Banner>
       ) : (
         <Banner tone="bad">{result.error ?? 'Setup did not finish.'}</Banner>
@@ -139,7 +139,7 @@ export function SetupSheet({
   return (
     <Sheet
       title="Set up access"
-      subtitle={`Signs in to ${where} once, authorizes Deployer's key, and enables passwordless sudo.`}
+      subtitle={`Signs in to ${where} once, authorizes HostMan's key, and enables passwordless sudo.`}
       onClose={onClose}
     >
       <form onSubmit={run}>

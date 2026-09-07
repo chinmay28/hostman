@@ -15,16 +15,16 @@ import (
 // picked on a phone, base64 in the body — so it gets a body limit of its own.
 // Everything else is a handful of fields.
 
-// maxTorrentBody bounds an add. It is the largest .torrent file Deployer will
+// maxTorrentBody bounds an add. It is the largest .torrent file HostMan will
 // carry, with room for base64's third and for the fields around it.
 const maxTorrentBody = int64(hostops.MaxTorrentFileBytes)*2 + (1 << 16)
 
 // handleTorrents reports on a host's downloader: whether deluge is installed,
-// what Deployer has set up, whether the daemon is running, and what it is
+// what HostMan has set up, whether the daemon is running, and what it is
 // working on.
 //
 // Nothing here writes, which matters because a screen watching a download is
-// the second place in Deployer that polls a host on a timer rather than on a
+// the second place in HostMan that polls a host on a timer rather than on a
 // tap — a progress bar that only moved when you asked it to would not be a
 // progress bar.
 func (s *Server) handleTorrents(w http.ResponseWriter, r *http.Request) {

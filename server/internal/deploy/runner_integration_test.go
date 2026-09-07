@@ -19,7 +19,7 @@ import (
 	"github.com/chinmay28/deployer/server/internal/testutil"
 )
 
-// env is a Deployer wired up against a throwaway sshd on localhost, so
+// env is a HostMan wired up against a throwaway sshd on localhost, so
 // deployments run real commands over a real SSH connection.
 type env struct {
 	db      *store.DB

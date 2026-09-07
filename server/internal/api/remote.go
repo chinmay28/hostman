@@ -32,7 +32,7 @@ type remoteView struct {
 // how far a setup got, whether it is running, and what has been downloaded.
 //
 // It is safe to ask for repeatedly — nothing here writes — which matters
-// because the screen watching an install is the one place in Deployer that
+// because the screen watching an install is the one place in HostMan that
 // polls a host on a timer rather than on a tap.
 func (s *Server) handleRemoteSession(w http.ResponseWriter, r *http.Request) {
 	h, err := s.hostFromPath(r)

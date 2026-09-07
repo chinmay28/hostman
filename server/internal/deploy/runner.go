@@ -28,11 +28,11 @@ var ErrAlreadyRunning = errors.New("a deployment for this app and host is alread
 // host, so there is nothing to run.
 var ErrNoUninstallCommand = errors.New("this app has no uninstall command")
 
-// ErrCannotUninstallSelf refuses to remove Deployer from the machine Deployer
+// ErrCannotUninstallSelf refuses to remove HostMan from the machine HostMan
 // is running on. An install can survive the restart it causes by running
 // detached and being picked back up afterwards; an uninstall has nothing left
 // to pick it back up, and would take the log, the record and the UI with it.
-var ErrCannotUninstallSelf = errors.New("Deployer can't uninstall itself from the machine it runs on")
+var ErrCannotUninstallSelf = errors.New("HostMan can't uninstall itself from the machine it runs on")
 
 // Runner starts deployments and keeps their live output available.
 type Runner struct {
@@ -163,7 +163,7 @@ func (rn *Runner) Start(ctx context.Context, appID, hostID int64, submitted map[
 }
 
 // Uninstall runs the app's uninstall command on a host and, if it succeeds,
-// forgets the installation — the app is gone from the machine, so Deployer's
+// forgets the installation — the app is gone from the machine, so HostMan's
 // record of it being there should go too. It reuses the parameters the install
 // was given, since undoing an install generally has to know what it was told.
 //
@@ -222,7 +222,7 @@ func (rn *Runner) start(ctx context.Context, kind string, appID, hostID int64, s
 		return nil, err
 	}
 
-	// Updating Deployer on the machine Deployer runs on restarts the process
+	// Updating HostMan on the machine HostMan runs on restarts the process
 	// watching the deployment, so that one runs detached and is followed
 	// through a file on the host. The log path needs the id, which only exists
 	// once the row does.

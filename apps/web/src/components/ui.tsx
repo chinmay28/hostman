@@ -211,7 +211,7 @@ export function useLoader<T>(
   data: T | null
   error: string | null
   loading: boolean
-  /** True when Deployer could not be reached at all, as opposed to refusing. */
+  /** True when HostMan could not be reached at all, as opposed to refusing. */
   offline: boolean
   reload: () => void
 } {
@@ -236,7 +236,7 @@ export function useLoader<T>(
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e))
-          // Status 0 means the request never landed — Deployer is restarting,
+          // Status 0 means the request never landed — HostMan is restarting,
           // or the network dropped. Either way it is worth waiting out.
           setOffline(e instanceof ApiError && e.status === 0)
         }
@@ -262,7 +262,7 @@ export function useLoader<T>(
 
 /**
  * Loading tells the user what is wrong, and — importantly — what isn't.
- * Deployer being briefly unreachable is normal while it updates itself, so
+ * HostMan being briefly unreachable is normal while it updates itself, so
  * that reads as "reconnecting", not as a failure.
  */
 export function Loading({
@@ -278,7 +278,7 @@ export function Loading({
   if (offline) {
     return (
       <Banner tone="warn">
-        Can't reach Deployer — reconnecting…
+        Can't reach HostMan — reconnecting…
         {hasData ? ' Showing the last state it reported.' : ''}
       </Banner>
     )

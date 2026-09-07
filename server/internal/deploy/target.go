@@ -95,7 +95,7 @@ func resolve(values, folded map[string]string, name string) (key, value string, 
 
 // hostLabel is the first part of an address — "pi5" out of "pi5.local" — for
 // checks that write the rest of the name themselves, as in {HOST}.local. Doing
-// this means one URL works whether Deployer reaches a host as `pi5` or as
+// this means one URL works whether HostMan reaches a host as `pi5` or as
 // `pi5.local`, instead of quietly asking for `pi5.local.local`. An address
 // that is an IP has no labels to take and is left whole, so the check fails
 // visibly on a URL nobody meant to write rather than dialling 192.local.

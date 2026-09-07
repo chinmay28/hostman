@@ -21,7 +21,7 @@ export default function Hosts() {
 
       {data?.length === 0 && (
         <Empty
-          message="Add a machine Deployer can reach over SSH — a hostname like nakedpi.local, or an IP address."
+          message="Add a machine HostMan can reach over SSH — a hostname like nakedpi.local, or an IP address."
           action={
             <Link to="/hosts/new">
               <button className="primary">Add a host</button>
@@ -56,7 +56,7 @@ function HostCard({ host }: { host: Host }) {
       {sample && <HostMeters sample={sample} />}
 
       {/* One line about the machine. The kernel and architecture are on the
-          host's page, and the Home badge already says where Deployer runs;
+          host's page, and the Home badge already says where HostMan runs;
           here the system's name, how long it has been up and how warm it is
           are what tell one host from another. A host that has no reading says
           why instead, in red where the reason is an error. */}

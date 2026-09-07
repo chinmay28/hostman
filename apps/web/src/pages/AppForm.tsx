@@ -115,7 +115,7 @@ export default function AppForm() {
 
           <SectionTitle>Parameters</SectionTitle>
           <p className="sub" style={{ margin: '0 4px 12px' }}>
-            Values you confirm before each deploy. Deployer remembers what you used last time.
+            Values you confirm before each deploy. HostMan remembers what you used last time.
           </p>
           {params.map((param, index) => (
             <Card key={index}>
@@ -171,7 +171,7 @@ export default function AppForm() {
 
           <SectionTitle>Health check</SectionTitle>
           <Card>
-            <Field label="Type" help="How Deployer decides whether the app is actually running.">
+            <Field label="Type" help="How HostMan decides whether the app is actually running.">
               <select value={healthType} onChange={(e) => setHealthType(e.target.value as HealthType)}>
                 <option value="none">None</option>
                 <option value="http">HTTP request</option>
@@ -181,7 +181,7 @@ export default function AppForm() {
             {healthType === 'http' && (
               <Field
                 label="URL"
-                help="Checked from Deployer, once per host. Write {HOST} for the machine it's deployed on — {HOST}.local is fine either way — and {PORT} for a parameter."
+                help="Checked from HostMan, once per host. Write {HOST} for the machine it's deployed on — {HOST}.local is fine either way — and {PORT} for a parameter."
               >
                 <input
                   value={healthTarget}

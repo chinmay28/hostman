@@ -120,7 +120,7 @@ export default function HostFile() {
 
           {file.binary && (
             <Banner tone="warn">
-              This isn't text, so there is nothing safe to show or edit. Deployer leaves it alone.
+              This isn't text, so there is nothing safe to show or edit. HostMan leaves it alone.
             </Banner>
           )}
           {file.truncated && (

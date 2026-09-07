@@ -10,10 +10,10 @@ import (
 	"github.com/chinmay28/deployer/server/internal/store"
 )
 
-// Updating Deployer restarts deployer.service, which kills the process running
+// Updating HostMan restarts deployer.service, which kills the process running
 // the deployment and, with it, the SSH session carrying the install script —
 // sshd hangs up the remote command when its client disappears. So the script is
-// started detached, writing to a file on the host, and Deployer follows that
+// started detached, writing to a file on the host, and HostMan follows that
 // file. After the restart the new process picks the same file back up and
 // finishes the record.
 
@@ -30,7 +30,7 @@ const exitMarker = "__deployer_exit__:"
 const pollInterval = 2 * time.Second
 
 // startDetached launches the command in its own session so it survives both the
-// SSH connection closing and Deployer being restarted by the command itself.
+// SSH connection closing and HostMan being restarted by the command itself.
 func startDetachedScript(command, logPath string) string {
 	// setsid detaches from the session sshd will tear down; nohup covers the
 	// SIGHUP; the marker line records the exit status for whoever reads the
@@ -98,7 +98,7 @@ func stripExitMarker(log string) string {
 }
 
 // ResumeDetached picks up detached deployments that were still running when
-// Deployer stopped — most often because they were what restarted it.
+// HostMan stopped — most often because they were what restarted it.
 func (rn *Runner) ResumeDetached(ctx context.Context) {
 	pending, err := rn.db.ResumableDeployments(ctx)
 	if err != nil {
@@ -143,7 +143,7 @@ func (rn *Runner) runDetached(ctx context.Context, cancel context.CancelFunc, ru
 	} else {
 		fmt.Fprintf(run, "==> Updating %s on %s (%s@%s)\n$ %s\n\n",
 			dep.AppName, host.Name, host.Username, host.Address, dep.Command)
-		fmt.Fprint(run, "This runs detached, so it survives Deployer restarting itself.\n\n")
+		fmt.Fprint(run, "This runs detached, so it survives HostMan restarting itself.\n\n")
 		if err := rn.launchDetached(ctx, host, dep); err != nil {
 			// A cancel while connecting is a cancel, not a failure.
 			if status, failure, ok := interrupted(ctx); ok {
@@ -158,7 +158,7 @@ func (rn *Runner) runDetached(ctx context.Context, cancel context.CancelFunc, ru
 
 	status, exitCode, failure := rn.tailUntilDone(ctx, run, dep, host)
 	if status == statusAbandoned {
-		// Deployer is shutting down, most likely because this very update
+		// HostMan is shutting down, most likely because this very update
 		// restarted it. The row stays running and the next process resumes it.
 		return
 	}
@@ -257,7 +257,7 @@ func (rn *Runner) tailUntilDone(ctx context.Context, run *Run, dep *store.Deploy
 			attempt = 0
 		} else {
 			attempt++
-			// The service being updated is Deployer itself, so losing the
+			// The service being updated is HostMan itself, so losing the
 			// connection for a while is expected, not a failure.
 			if attempt == 1 {
 				fmt.Fprintf(run, "\n... host unreachable, waiting (%v)\n", err)
@@ -277,7 +277,7 @@ func (rn *Runner) tailUntilDone(ctx context.Context, run *Run, dep *store.Deploy
 }
 
 // readDetachedLog fetches the whole log in one short-lived connection, so a
-// restart of the SSH server (or of Deployer) cannot strand a long-lived one.
+// restart of the SSH server (or of HostMan) cannot strand a long-lived one.
 func (rn *Runner) readDetachedLog(ctx context.Context, host *store.Host, logPath string) (string, error) {
 	readCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()

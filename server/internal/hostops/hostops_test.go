@@ -42,7 +42,7 @@ func TestArgumentsSurviveTheShell(t *testing.T) {
 	}
 }
 
-// $0 is set so a shell error message names Deployer rather than "sh".
+// $0 is set so a shell error message names HostMan rather than "sh".
 func TestScriptArgumentsStartAtOne(t *testing.T) {
 	out, err := exec.Command("/bin/sh", "-c", asUser(`printf '%s\n' "$0" "$#"`, "/tmp", "x")).Output()
 	if err != nil {
@@ -82,7 +82,7 @@ func TestElevateFallsBackWithoutSudo(t *testing.T) {
 	}
 }
 
-// A refusal by Deployer and a refusal by the host are different problems with
+// A refusal by HostMan and a refusal by the host are different problems with
 // different fixes, and the API turns them into different status codes. That
 // only works while the sentinel survives being returned as an error.
 func TestInvalidIsRecognisable(t *testing.T) {

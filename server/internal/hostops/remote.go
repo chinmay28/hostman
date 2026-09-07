@@ -46,7 +46,7 @@ import (
 // an authenticator app — and it is also why removing the session offers to take
 // the profile with it.
 //
-// Nothing here is sourced. Values Deployer writes to the host are read back by
+// Nothing here is sourced. Values HostMan writes to the host are read back by
 // parsing, and the session script is handed its settings as arguments by
 // systemd, so no file on the host is ever fed to a shell that would run what is
 // in it.
@@ -57,7 +57,7 @@ const (
 	// its journal and can stop it, like anything else installed by hand.
 	RemoteUnit = "deployer-remote.service"
 
-	// remoteConfDir holds everything Deployer writes that is not a unit file:
+	// remoteConfDir holds everything HostMan writes that is not a unit file:
 	// the VNC password, the settings, the page to open, and the setup log.
 	remoteConfDir = "/etc/deployer-remote"
 	// remoteLibDir holds the two generated scripts. /usr/local is where things
@@ -110,7 +110,7 @@ type RemoteSession struct {
 	Port     int    `json:"port"`
 	Geometry string `json:"geometry"`
 	// Password is the VNC password. It is generated on the host and kept there;
-	// Deployer reads it back so the screen can show it and put it in the link,
+	// HostMan reads it back so the screen can show it and put it in the link,
 	// rather than asking somebody to type eight random characters on a phone.
 	Password string `json:"password,omitempty"`
 	// Homepage is the page the session opens when it starts.
@@ -127,7 +127,7 @@ type RemoteSession struct {
 	// this host would not give it one. It is a weaker browser than the one on
 	// the phone, and whoever signs into something with it should be told.
 	NoSandbox bool `json:"noSandbox,omitempty"`
-	// Stale reports a session written by an older Deployer. Updating Deployer
+	// Stale reports a session written by an older HostMan. Updating HostMan
 	// does not rewrite what is on the host — setting it up again does — so a
 	// host still running the old scripts says so rather than leaving somebody
 	// to wonder why a fix changed nothing.
@@ -445,7 +445,7 @@ func parseRemoteFiles(lines []string) []RemoteFile {
 }
 
 // RemoteSetup is what a caller may choose about a session. Everything else —
-// the display number, the VNC port, where things are written — is Deployer's
+// the display number, the VNC port, where things are written — is HostMan's
 // business and is not worth a field on a phone.
 type RemoteSetup struct {
 	// Geometry is the virtual screen's size, "1280x800" by default.
@@ -510,7 +510,7 @@ INSTALL
 chmod 750 "$lib/remote-install.sh" || exit 5
 
 # Settings are written as lines to be read, never as a file to be sourced: the
-# session script is given them as arguments by systemd, and Deployer parses
+# session script is given them as arguments by systemd, and HostMan parses
 # them back. Nothing on the host is fed to a shell that would run what is in it.
 {
   printf 'PORT=%%s\n' "$port"
@@ -529,7 +529,7 @@ printf '%%s\n' "$url" > "$etc/homepage" || exit 6
 # longer.
 cat > "$units/%[7]s" <<UNIT
 [Unit]
-Description=Deployer remote browser session
+Description=HostMan remote browser session
 After=network-online.target
 
 [Service]
@@ -569,7 +569,7 @@ trap 'code=$?; if [ "$code" -eq 0 ]; then printf "ok\n" > "$etc/setup.state"; el
 
 export DEBIAN_FRONTEND=noninteractive
 command -v apt-get >/dev/null 2>&1 || {
-  printf 'this host has no apt-get, so Deployer cannot install the pieces itself\n'
+  printf 'this host has no apt-get, so HostMan cannot install the pieces itself\n'
   exit 9
 }
 printf '== updating the package list\n'
@@ -653,7 +653,7 @@ printf '== ready\n'
 // screen, the window manager, the VNC server, the web gateway and the browser
 // go together.
 const remoteSessionScript = `#!/bin/sh
-# Written by Deployer. A virtual screen with a browser on it, offered over VNC.
+# Written by HostMan. A virtual screen with a browser on it, offered over VNC.
 set -u
 geom=$1
 dpy=$2
@@ -704,7 +704,7 @@ if command -v openbox >/dev/null 2>&1; then
 fi
 
 # -localhost is what keeps the VNC port off the network: the only way in is the
-# gateway below, which is the port Deployer's link points at.
+# gateway below, which is the port HostMan's link points at.
 x11vnc -display "$DISPLAY" -rfbauth "$conf/vncpasswd" -rfbport "$vnc" \
   -localhost -forever -shared -noxdamage -quiet &
 
@@ -724,7 +724,7 @@ if [ -z "$browser" ]; then
   if [ -n "$snap_browsers" ] || [ -n "$broken_browsers" ]; then
     printf 'deployer-remote: no browser here can run%%s%%s\n' \
       "${snap_browsers:+ — snaps: $snap_browsers}" "${broken_browsers:+ — will not start: $broken_browsers}"
-    printf 'deployer-remote: set the session up again — Deployer will fetch one that is a package\n'
+    printf 'deployer-remote: set the session up again — HostMan will fetch one that is a package\n'
     exit 4
   fi
   printf 'deployer-remote: no browser installed\n'
@@ -827,7 +827,7 @@ wait
 
 // renderRemoteSetup builds the script that writes a session onto a host: the
 // session script and the installer are embedded in it, so this one string is
-// everything Deployer would put there.
+// everything HostMan would put there.
 func renderRemoteSetup() string {
 	return fmt.Sprintf(remoteSetupScript,
 		remoteConfDir, remoteLibDir,
@@ -839,9 +839,9 @@ func renderRemoteSetup() string {
 // remoteRevision names the scripts this build writes, as a hash of them.
 //
 // A host keeps its copy: the session runs the script that was written when it
-// was set up, and updating Deployer does not reach back and rewrite it. That is
+// was set up, and updating HostMan does not reach back and rewrite it. That is
 // the right behaviour — a running session should not change under somebody —
-// but silently is the wrong way to do it, because the fix Deployer shipped is
+// but silently is the wrong way to do it, because the fix HostMan shipped is
 // then not the code the host is running and nothing on the screen says so.
 //
 // Hashing the scripts rather than keeping a number by hand means the answer is
@@ -937,7 +937,7 @@ func (s *Service) StopRemote(ctx context.Context, h *store.Host) (*RemoteSession
 }
 
 // remoteRemoveScript takes the session back off the host: the unit first, so
-// nothing is left pointing at a file that has gone, then what Deployer wrote.
+// nothing is left pointing at a file that has gone, then what HostMan wrote.
 //
 // Two things it does not touch. The packages stay, because apt installed them
 // and something else may want them. The downloads stay, because they are the
@@ -994,7 +994,7 @@ func (s *Service) RemoveRemote(ctx context.Context, h *store.Host, purge bool) e
 // naming: it puts eight characters into a browser history on the LAN, and what
 // it buys is not having to type them into a phone every time. The session is
 // only reachable from the network the host is on, and anyone already on that
-// network with Deployer open can read the password from this screen anyway.
+// network with HostMan open can read the password from this screen anyway.
 func RemoteURL(address string, session *RemoteSession) string {
 	if session == nil || session.Port == 0 || address == "" {
 		return ""

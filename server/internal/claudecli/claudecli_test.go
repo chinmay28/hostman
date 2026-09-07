@@ -232,7 +232,7 @@ func TestCommand(t *testing.T) {
 		t.Error("a default session passed the skip flag")
 	}
 	if _, err := Command(Options{Mode: "auto", SessionID: "x"}); err == nil {
-		t.Error("a mode Deployer does not offer was accepted")
+		t.Error("a mode HostMan does not offer was accepted")
 	}
 	if _, err := Command(Options{Mode: ModeDefault}); err == nil {
 		t.Error("a session without an id was accepted")

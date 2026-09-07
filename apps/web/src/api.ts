@@ -46,7 +46,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       headers: init?.body ? { 'Content-Type': 'application/json', ...init?.headers } : init?.headers,
     })
   } catch {
-    throw new ApiError(0, 'Could not reach Deployer. Is it still running?')
+    throw new ApiError(0, 'Could not reach HostMan. Is it still running?')
   }
   if (response.status === 204) return undefined as T
   const text = await response.text()
@@ -102,11 +102,11 @@ export const api = {
       processes: HostProcesses | null
     }>(`/api/hosts/${id}/metrics?minutes=${minutes}`),
   /** Restart the machine. It goes down a few seconds after this returns.
-   *  There is no shutdown: Deployer cannot turn a host back on. */
+   *  There is no shutdown: HostMan cannot turn a host back on. */
   reboot: (id: number) =>
     request<{ status: string }>(`/api/hosts/${id}/reboot`, { method: 'POST' }),
 
-  /** Why the machine restarted last: Deployer's best guess and the evidence
+  /** Why the machine restarted last: HostMan's best guess and the evidence
    *  behind it. One SSH session that reads wtmp, the previous boot's log and
    *  the Pi firmware's throttle flags, so it is asked for on demand and never
    *  polled. */
@@ -169,7 +169,7 @@ export const api = {
   removeRemote: (id: number, purge = false) =>
     request<void>(`/api/hosts/${id}/remote${purge ? '?purge=true' : ''}`, { method: 'DELETE' }),
 
-  /** The downloader on a host: whether deluge is installed, what Deployer has
+  /** The downloader on a host: whether deluge is installed, what HostMan has
    *  set up, whether the daemon is running, and what it is downloading. It is
    *  a read, so a screen watching a progress bar is free to ask on a timer. */
   torrents: (id: number) => request<TorrentDaemon>(`/api/hosts/${id}/torrents`),
@@ -238,7 +238,7 @@ export const api = {
    *  living on the server. */
   closeShell: (sid: string) => request<void>(`/api/shell/${sid}`, { method: 'DELETE' }),
 
-  /** An empty user means the account Deployer signs in as. */
+  /** An empty user means the account HostMan signs in as. */
   crontab: (id: number, user = '') =>
     request<Crontab>(`/api/hosts/${id}/cron?user=${encodeURIComponent(user)}`),
   saveCrontab: (id: number, user: string, content: string) =>
@@ -329,7 +329,7 @@ export const api = {
    *  back with an id to follow the log on. */
   uninstall: (id: number) =>
     request<Deployment>(`/api/installations/${id}/uninstall`, { method: 'POST' }),
-  /** Drops Deployer's record and nothing else — whatever the app left on the
+  /** Drops HostMan's record and nothing else — whatever the app left on the
    *  host stays there. Uninstall is the one that removes it. */
   forgetInstallation: (id: number) =>
     request<void>(`/api/installations/${id}`, { method: 'DELETE' }),

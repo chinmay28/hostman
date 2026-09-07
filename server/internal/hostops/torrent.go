@@ -14,7 +14,7 @@ import (
 	"github.com/chinmay28/deployer/server/internal/store"
 )
 
-// A torrent downloader is deluged running on the host, with Deployer driving it
+// A torrent downloader is deluged running on the host, with HostMan driving it
 // through deluge-console. Hand it a .torrent file or a magnet link from a phone
 // and the files land on the host's own disk — which is the whole point: the
 // machine with the disk does the downloading, and nothing goes through the
@@ -22,8 +22,8 @@ import (
 //
 // Four decisions shape the rest of this file.
 //
-// **Deluge is the host's to install, not Deployer's.** Everything else here is
-// a package Deployer will fetch for you; this one is not, and deliberately.
+// **Deluge is the host's to install, not HostMan's.** Everything else here is
+// a package HostMan will fetch for you; this one is not, and deliberately.
 // A BitTorrent client is a decision about what a machine does on a network, and
 // on plenty of them it is a decision somebody else has already made — a seedbox
 // with its own deluged, a distribution that packages it differently, a host
@@ -31,7 +31,7 @@ import (
 // rather than having it installed: `apt install deluged deluge-console`, in the
 // screen's own words, and setup refuses until it is there.
 //
-// **The daemon Deployer runs is Deployer's own.** Its state lives in
+// **The daemon HostMan runs is HostMan's own.** Its state lives in
 // /var/lib/deployer-torrent and it answers on a port of its own rather than
 // deluge's default, so a host that already runs deluged keeps running it,
 // untouched, with its own torrents and its own client attached. Two daemons on
@@ -48,7 +48,7 @@ import (
 //
 // **The daemon's password never leaves the host.** deluged authenticates its
 // clients out of an auth file; the password in it is generated on the host, and
-// the scripts Deployer sends read it there. It is not stored by Deployer, not
+// the scripts HostMan sends read it there. It is not stored by HostMan, not
 // carried in an API response and not shown on a screen, because nothing here
 // needs it — the only client is a command running on the same machine.
 //
@@ -70,18 +70,18 @@ const (
 
 	// torrentPort is where deluged listens for its client. It is deluge's
 	// default plus a hundred, on purpose: a host that already runs deluged is
-	// using 58846, and Deployer starting a second daemon on it would leave
+	// using 58846, and HostMan starting a second daemon on it would leave
 	// whichever lost the race dead in the journal. Both listen on loopback
-	// only — deluged's allow_remote is off by default and Deployer never turns
+	// only — deluged's allow_remote is off by default and HostMan never turns
 	// it on.
 	torrentPort = 58946
 
-	// torrentAccount is the account Deployer's scripts authenticate as. deluged
+	// torrentAccount is the account HostMan's scripts authenticate as. deluged
 	// keeps its own "localclient" alongside it, so a thin client somebody
 	// already uses on this host carries on working.
 	torrentAccount = "deployer"
 
-	// MaxTorrentFileBytes is the largest .torrent file Deployer will carry to a
+	// MaxTorrentFileBytes is the largest .torrent file HostMan will carry to a
 	// host. A torrent file is a list of hashes: a few kilobytes is ordinary and
 	// a megabyte is a very large one, so anything past this is not a torrent
 	// file that was picked by mistake.
@@ -93,21 +93,21 @@ const (
 )
 
 // TorrentDaemon is everything the screen needs in one round trip: what is
-// installed, what Deployer has set up, whether it is running, and what it is
+// installed, what HostMan has set up, whether it is running, and what it is
 // downloading.
 type TorrentDaemon struct {
 	// Unit is the systemd unit, so start and stop go through the service API
 	// that already knows how to wait for systemd.
 	Unit string `json:"unit"`
 	// Installed reports deluge being present on the host. It is the one thing
-	// here Deployer will not install for you.
+	// here HostMan will not install for you.
 	Installed bool `json:"installed"`
 	// Missing names the deluge commands that are not there, which is what the
 	// screen turns into an apt line to run.
 	Missing []string `json:"missing,omitempty"`
 	// Version is deluged's own version, as it reports it.
 	Version string `json:"version,omitempty"`
-	// Configured reports Deployer having written the daemon onto this host.
+	// Configured reports HostMan having written the daemon onto this host.
 	Configured bool `json:"configured"`
 	// Ready means a torrent could be added right now: deluge installed, the
 	// daemon written, and a unit systemd has loaded.
@@ -120,14 +120,14 @@ type TorrentDaemon struct {
 	// not the whole story: activating, failed, dead.
 	Active string `json:"active,omitempty"`
 	Sub    string `json:"sub,omitempty"`
-	// Stale reports a daemon written by an older Deployer. Updating Deployer
+	// Stale reports a daemon written by an older HostMan. Updating HostMan
 	// does not rewrite what is on a host — setting it up again does.
 	Stale bool `json:"stale,omitempty"`
 	// User is the account the daemon runs as, and so the account that ends up
 	// owning the files.
 	User string `json:"user"`
 	// Downloads is where finished files land. Before setup it is the folder
-	// Deployer would use, so the screen has something to offer rather than an
+	// HostMan would use, so the screen has something to offer rather than an
 	// empty field.
 	Downloads string `json:"downloads"`
 	// Free and Capacity are the disk behind that folder, in bytes. A torrent
@@ -207,7 +207,7 @@ type TorrentSeeding struct {
 	Remove bool `json:"remove"`
 }
 
-// settingKeys are the daemon settings Deployer reads back, by deluge's own
+// settingKeys are the daemon settings HostMan reads back, by deluge's own
 // names: the three that make up the seeding rule, and the queue's limit on how
 // many torrents are worked on at once.
 var settingKeys = []string{"stop_seed_at_ratio", "stop_seed_ratio", "remove_seed_at_ratio", "max_active_limit"}
@@ -220,15 +220,15 @@ var settingLine = regexp.MustCompile(`^(stop_seed_at_ratio|stop_seed_ratio|remov
 // mistake.
 const MaxSeedRatio = 100
 
-// MaxActiveTorrents is as many as Deployer will ask deluge to work on at once.
+// MaxActiveTorrents is as many as HostMan will ask deluge to work on at once.
 // Past a couple of hundred a limit is not limiting anything, so a bigger
 // number is a typing mistake — and "no limit at all" is asked for as -1, which
 // is deluge's own word for it.
 const MaxActiveTorrents = 200
 
 // torrentPieces is what a host needs before any of this works: the daemon, and
-// the client Deployer drives it with. Both come from deluge's own packages, and
-// neither is installed by Deployer.
+// the client HostMan drives it with. Both come from deluge's own packages, and
+// neither is installed by HostMan.
 var torrentPieces = []string{"deluged", "deluge-console"}
 
 // TorrentPackages is the apt line a host without deluge needs, so the screen
@@ -241,14 +241,14 @@ const TorrentPackages = "deluged deluge-console"
 // is convenient at a prompt and far too loose for an API.
 var torrentIDPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
-// torrentActions is every action Deployer will take on one torrent.
+// torrentActions is every action HostMan will take on one torrent.
 var torrentActions = map[string]bool{"pause": true, "resume": true, "remove": true}
 
 // ansiPattern strips the colour deluge-console adds when it thinks something is
 // watching. Nothing should be reading these bytes as text before they are gone.
 var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
 
-// torrentConsole is the one way Deployer talks to deluged, shared by every
+// torrentConsole is the one way HostMan talks to deluged, shared by every
 // script that needs it so there is a single place where a connection is made.
 //
 // Four things about it are deluge's doing rather than choices:
@@ -271,15 +271,15 @@ var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
 //     open by a hung client would be a phone waiting on nothing.
 //
 //   - **The password is read out of deluged's own auth file on the host.** That
-//     is what keeps it there: Deployer never learns it, never stores it and
+//     is what keeps it there: HostMan never learns it, never stores it and
 //     never sends it. It does reach the daemon as a command-line argument,
 //     which another user on the host could read out of `ps` — the same trade
 //     the `connect` form makes, on a daemon that only listens on loopback, and
-//     the alternative is Deployer holding the password instead.
+//     the alternative is HostMan holding the password instead.
 const torrentConsole = `console() {
   pw=$(awk -F: '$1 == "%[1]s" { print $2; exit }' "$conf/auth" 2>/dev/null)
   if [ -z "$pw" ]; then
-    printf 'this host has no deluge account for Deployer yet\n' >&2
+    printf 'this host has no deluge account for HostMan yet\n' >&2
     return 3
   fi
   if command -v timeout >/dev/null 2>&1; then
@@ -297,7 +297,7 @@ func consoleScript() string {
 }
 
 // torrentStatusScript answers everything about the downloader in one round
-// trip: what deluge is installed, what Deployer has written, what systemd makes
+// trip: what deluge is installed, what HostMan has written, what systemd makes
 // of the unit, how much disk is left, what the daemon is working on, and what
 // it has been told to do with a torrent that has finished.
 //
@@ -305,7 +305,7 @@ func consoleScript() string {
 // screen and the correct one: the daemon runs as that user, its config
 // directory is that user's, and deluge-console leaves files of its own in
 // there. A status probe that ran as root would leave root-owned files in a
-// directory the daemon then cannot write, which is a fault Deployer would have
+// directory the daemon then cannot write, which is a fault HostMan would have
 // caused rather than found.
 //
 // It says which of the four things it did — asked, found the daemon stopped,
@@ -433,7 +433,7 @@ func parseTorrentStatus(out, user string) *TorrentDaemon {
 	// answering. The number is the part anybody wanted.
 	daemon.Version = strings.TrimSpace(strings.TrimPrefix(first(found["version"]), "deluged:"))
 
-	// A settings file with anything in it is a host Deployer has written the
+	// A settings file with anything in it is a host HostMan has written the
 	// downloader onto, whether or not every line of it still parses.
 	daemon.Configured = len(found["config"]) > 0
 	revision := ""
@@ -786,7 +786,7 @@ func parseTorrentETA(value string) int64 {
 
 // TorrentSetup is what a caller may choose about the downloader. Everything
 // else — the port, the state directory, the account the scripts authenticate
-// as — is Deployer's business and is not worth a field on a phone.
+// as — is HostMan's business and is not worth a field on a phone.
 type TorrentSetup struct {
 	// Downloads is where the files land. Empty means the SSH user's
 	// ~/Downloads/torrents, which only the host can work out.
@@ -838,10 +838,10 @@ chown "$u" "$conf" "$r$dl" 2>/dev/null || true
 chmod 750 "$conf" 2>/dev/null || true
 
 # deluged authenticates its clients out of this file. The password is made here
-# and stays here — Deployer never reads it back, and the scripts that need it
+# and stays here — HostMan never reads it back, and the scripts that need it
 # read it on the host.
 #
-# What is asked is whether Deployer's own account is in the file, not whether
+# What is asked is whether HostMan's own account is in the file, not whether
 # the file exists: deluged writes one of these the first time it starts, with a
 # localclient account in it and nothing else, and a host where that had already
 # happened would otherwise end up with a downloader nothing could log in to.
@@ -878,7 +878,7 @@ chown "$u" "$conf/deployer.conf" 2>/dev/null || true
 # restarting in the middle of it, and deluge picks up from its own state.
 cat > "$units/%[4]s" <<UNIT
 [Unit]
-Description=Deployer torrent downloader (deluged)
+Description=HostMan torrent downloader (deluged)
 Documentation=https://deluge.readthedocs.io
 After=network-online.target
 Wants=network-online.target
@@ -912,7 +912,7 @@ func renderTorrentSetup() string {
 }
 
 // torrentRevision names the unit and settings this build writes, as a hash of
-// them. A host keeps what it was given — updating Deployer does not reach back
+// them. A host keeps what it was given — updating HostMan does not reach back
 // and rewrite a unit somebody's download is running under — so hashing is what
 // lets the screen say a host is behind rather than leaving a fix that changed
 // nothing to be discovered.
@@ -952,7 +952,7 @@ func (s *Service) SetupTorrent(ctx context.Context, h *store.Host, opts TorrentS
 
 // torrentRemoveScript takes the downloader back off the host: the unit first,
 // so nothing is left pointing at a directory that has gone, then deluge's state
-// and Deployer's settings.
+// and HostMan's settings.
 //
 // Two things it does not touch. Deluge itself stays, because the host installed
 // it and something else may be using it. The downloaded files stay, always and
@@ -1013,7 +1013,7 @@ type TorrentAdd struct {
 // service is not the /tmp of an SSH session — PrivateTmp turns a path that
 // exists into one that does not. It is removed again as soon as deluge has
 // taken it: deluge keeps its own copy, and a directory of stale torrent files
-// is a thing nobody asked Deployer to look after.
+// is a thing nobody asked HostMan to look after.
 const torrentAddScript = `set -u
 r=$1
 name=$2
@@ -1031,7 +1031,7 @@ fi
 [ -n "$path" ] || { printf 'the downloader has no folder to download into\n' >&2; exit 3; }
 
 # A daemon that is not running cannot be told anything, and starting it needs
-# root — which this script does not have. Deployer is told so it can start the
+# root — which this script does not have. HostMan is told so it can start the
 # service and ask again, which is one round trip rather than a screen saying no.
 if command -v systemctl >/dev/null 2>&1; then
   systemctl is-active --quiet -- %[3]s 2>/dev/null || exit 4
@@ -1047,7 +1047,7 @@ fi
 mkdir -p "$r$path" 2>/dev/null || true
 
 # systemd calls a Type=simple service started the moment it has forked, which
-# is a second or so before deluged is listening. Since Deployer starts a
+# is a second or so before deluged is listening. Since HostMan starts a
 # stopped daemon and immediately says this, the first attempt can arrive before
 # anybody is there to hear it — so a refused connection is waited out rather
 # than reported. Anything else, including a torrent deluge will not take, is
@@ -1078,7 +1078,7 @@ exit 0
 // AddTorrent starts one torrent downloading on the host.
 //
 // A daemon that is not running is started rather than refused: somebody who has
-// just handed Deployer a torrent has said what they want clearly enough, and
+// just handed HostMan a torrent has said what they want clearly enough, and
 // "the service is stopped" is an answer nobody needed to be given. That is the
 // one thing here that needs root, and it goes through the same systemctl path
 // every other service on this host does.
@@ -1133,7 +1133,7 @@ func (s *Service) AddTorrent(ctx context.Context, h *store.Host, in TorrentAdd) 
 // the torrent, deluge 2.1's console never exits — so the command is given a
 // short deadline, and being cut short is not read as having failed. What
 // actually happened is answered by asking for the list again, which is what
-// Deployer does next in any case.
+// HostMan does next in any case.
 const torrentActionScript = `set -u
 r=$1
 id=$2
@@ -1186,7 +1186,7 @@ func (s *Service) TorrentAction(ctx context.Context, h *store.Host, id, action s
 		return nil, invalid("that is not a torrent id")
 	}
 	if !torrentActions[action] {
-		return nil, invalid("%q is not something Deployer will do to a torrent", action)
+		return nil, invalid("%q is not something HostMan will do to a torrent", action)
 	}
 	script := fmt.Sprintf(torrentActionScript, torrentStateDir, consoleScript())
 	res, err := s.run(ctx, h, asUser(script, "", id, action, boolArg(withData)), "")
@@ -1244,7 +1244,7 @@ exit 0
 // downloading: how long it keeps seeding, and whether its entry is then taken
 // out of the list.
 //
-// It is deluge's own setting rather than a rule Deployer enforces, which is
+// It is deluge's own setting rather than a rule HostMan enforces, which is
 // what makes it hold when nobody is looking at the screen — the daemon applies
 // it to torrents that finish at three in the morning, which is when they
 // finish.
@@ -1572,7 +1572,7 @@ func cleanDownloads(folder string) (string, error) {
 	// It becomes an argument to deluge and a directory to create. A quote or a
 	// backslash in it is not a folder anybody meant.
 	if strings.ContainsAny(clean, `"'`+"`\\") {
-		return "", invalid("that folder name has a character Deployer will not send")
+		return "", invalid("that folder name has a character HostMan will not send")
 	}
 	if clean == "/" {
 		return "", invalid("downloading into / is not a folder, it is a mistake")

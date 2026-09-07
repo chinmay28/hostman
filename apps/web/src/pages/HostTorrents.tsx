@@ -17,7 +17,7 @@ import {
 import { bytes, uptime } from '../lib/format'
 import type { Torrent, TorrentDaemon, TorrentSeeding } from '../types'
 
-/** What a host without deluge needs run on it once. Deployer will not do it: a
+/** What a host without deluge needs run on it once. HostMan will not do it: a
  *  BitTorrent client is a decision about what a machine does on a network, and
  *  on plenty of machines somebody has already made it. */
 const INSTALL = 'sudo apt install -y deluged deluge-console'
@@ -185,7 +185,7 @@ export default function HostTorrents() {
           {daemon.stale && (
             <Card>
               <Banner tone="warn">
-                This host is running a unit an older Deployer wrote. Updating Deployer does not
+                This host is running a unit an older HostMan wrote. Updating HostMan does not
                 reach back and rewrite it — setting the downloader up again does.
               </Banner>
               <p className="sub" style={{ marginTop: 0 }}>
@@ -282,7 +282,7 @@ export default function HostTorrents() {
             <p className="sub" style={{ marginTop: 0 }}>
               Changing it is where the next torrent goes; the ones already downloading stay where
               they were put. Writing the downloader again is also how a host takes a newer
-              Deployer's unit.
+              HostMan's unit.
             </p>
             <button className="secondary block" onClick={setup} disabled={!!busy}>
               {busy === 'setup' ? 'Saving…' : 'Save and write it again'}
@@ -315,7 +315,7 @@ export default function HostTorrents() {
           </p>
           <p className="sub">
             It takes a few seconds: deluge's own client does the work and then refuses to exit, so
-            Deployer waits it out and asks for the list again rather than taking its word for it.
+            HostMan waits it out and asks for the list again rather than taking its word for it.
           </p>
           <div className="actions">
             <button className="secondary" onClick={() => remove(removing, false)} disabled={!!busy}>
@@ -371,7 +371,7 @@ function useVisible(): boolean {
   return visible
 }
 
-/** Deluge is the one thing on this screen Deployer will not install, so this is
+/** Deluge is the one thing on this screen HostMan will not install, so this is
  *  the whole of the screen until somebody has. It says the line to run rather
  *  than describing it: the answer to "what do I type" should be copyable. */
 function NotInstalled({
@@ -387,15 +387,15 @@ function NotInstalled({
     <Card>
       <div className="title">Deluge is not installed on {host}</div>
       <p className="sub">
-        Deployer drives deluge rather than shipping one: a BitTorrent client is a decision about
-        what a machine does on a network, and it is not Deployer's to make on your behalf. Run this
+        HostMan drives deluge rather than shipping one: a BitTorrent client is a decision about
+        what a machine does on a network, and it is not HostMan's to make on your behalf. Run this
         on {host} once — on the Terminal screen, or over SSH — and come back.
       </p>
       <Copyable text={INSTALL} />
       <p className="sub">
         {daemon.missing && daemon.missing.length === 1
           ? `Only ${daemon.missing[0]} is missing, but installing both is the same command.`
-          : 'The daemon does the downloading; the console is how Deployer talks to it.'}
+          : 'The daemon does the downloading; the console is how HostMan talks to it.'}
       </p>
       <button className="secondary block" onClick={onRefresh}>
         Look again
@@ -404,7 +404,7 @@ function NotInstalled({
   )
 }
 
-/** Deluge is there and Deployer's daemon is not written yet. One field and one
+/** Deluge is there and HostMan's daemon is not written yet. One field and one
  *  button: where the files go, and go. */
 function SetUp({
   host,
@@ -689,7 +689,7 @@ function TorrentCard({
  * the honest way to say "seed it for a while": a slow torrent gets longer than
  * a fast one, which is the same fairness a stopwatch would get wrong.
  *
- * It is deluge's own setting rather than a rule Deployer enforces, so it holds
+ * It is deluge's own setting rather than a rule HostMan enforces, so it holds
  * when nobody is looking at this screen — which is when torrents finish.
  */
 function SeedingRule({
@@ -762,7 +762,7 @@ function SeedingRule({
  * are small, and a torrent sitting at 0% under a limit nobody chose reads as
  * a download that is stuck rather than one that is waiting its turn.
  *
- * It is one number over deluge's three: Deployer sets the total and both
+ * It is one number over deluge's three: HostMan sets the total and both
  * per-kind limits to it, so the knob means what it says — this many at once,
  * whatever they are doing.
  */

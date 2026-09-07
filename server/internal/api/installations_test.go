@@ -184,7 +184,7 @@ func TestInstallationWithoutPortsSaysNothing(t *testing.T) {
 		t.Errorf("response names ports for an app that has none: %s", w.Body)
 	}
 	if strings.Contains(w.Body.String(), `"url"`) {
-		t.Errorf("response names a url for an app Deployer cannot place: %s", w.Body)
+		t.Errorf("response names a url for an app HostMan cannot place: %s", w.Body)
 	}
 	if strings.Contains(w.Body.String(), `"version"`) {
 		t.Errorf("response names a version for an app that pins none: %s", w.Body)

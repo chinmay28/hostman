@@ -10,7 +10,7 @@ import (
 	"github.com/chinmay28/deployer/server/internal/store"
 )
 
-// Nothing ever tells Deployer which ports an app serves on, but an app that
+// Nothing ever tells HostMan which ports an app serves on, but an app that
 // has been set up properly says so twice over: an HTTP health check names the
 // port that answers, and install commands take the port as a parameter. Those
 // two are enough to show "on nakedpi · port 8899" beside an app, which is the

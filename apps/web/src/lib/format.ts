@@ -86,7 +86,7 @@ export function renderCommand(template: string, values: Record<string, string>):
   )
 }
 
-/** "port 8899", or "ports 8080, 8443" — and nothing at all when Deployer has
+/** "port 8899", or "ports 8080, 8443" — and nothing at all when HostMan has
  *  no port to name, which reads better than an empty label. */
 export function ports(list: number[] | undefined): string {
   if (!list || list.length === 0) return ''

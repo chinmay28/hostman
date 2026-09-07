@@ -14,7 +14,7 @@ export default function DeploymentDetail() {
   const { data: initial, error } = useLoader(
     () => api.deployment(deploymentId),
     [deploymentId],
-    // Deployer may be restarting mid-deployment; keep re-checking so the page
+    // HostMan may be restarting mid-deployment; keep re-checking so the page
     // recovers on its own once it is back.
     5000,
   )
@@ -31,7 +31,7 @@ export default function DeploymentDetail() {
   // log text — no need to merge it with the initial fetch.
   useEffect(() => {
     const source = new EventSource(`/api/deployments/${deploymentId}/stream`)
-    // A self-update restarts Deployer underneath this page. EventSource
+    // A self-update restarts HostMan underneath this page. EventSource
     // reconnects on its own and the server replays the log from the start, so
     // clear what is on screen rather than appending a second copy.
     source.onopen = () => setLog('')
@@ -54,7 +54,7 @@ export default function DeploymentDetail() {
       setFinishedAt(payload.finishedAt)
       source.close()
     })
-    // The stream ends without a verdict when Deployer hands the deployment
+    // The stream ends without a verdict when HostMan hands the deployment
     // over mid-restart. EventSource reconnects on its own.
     source.addEventListener('handover', () => setLog((current) => current))
     source.onerror = () => {
@@ -106,7 +106,7 @@ export default function DeploymentDetail() {
       {error && !deployment && <Banner tone="bad">{error}</Banner>}
       {error && deployment && running && (
         <Banner tone="warn">
-          Lost contact with Deployer — it may be restarting as part of this update. Reconnecting…
+          Lost contact with HostMan — it may be restarting as part of this update. Reconnecting…
         </Banner>
       )}
 
