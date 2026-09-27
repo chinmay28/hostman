@@ -36,7 +36,7 @@ restored automatically.
 curl -fsSL .../quickstart.sh | sudo HOSTMAN_PIN=1234 HOSTMAN_PORT=9000 HOSTMAN_REF=v1.0 bash
 
 # remove the service (your data and SSH key are kept)
-curl -fsSL .../quickstart.sh | sudo bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/chinmay28/hostman/main/scripts/quickstart.sh | sudo bash -s -- --uninstall
 ```
 
 ## The home host
