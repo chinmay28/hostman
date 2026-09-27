@@ -29,7 +29,8 @@ database, service, service account and build tree all come across, and the old
 `deployer.service` is retired. Upgrades build first and only then touch the
 running service: the database is snapshotted, the new binary is health-checked
 after it starts, and if it doesn't come up the previous binary and database are
-restored automatically.
+restored automatically. The same command with `--uninstall` removes the service
+and keeps the data.
 
 ```sh
 # a PIN for the web UI, a different port, a specific version
@@ -152,6 +153,12 @@ first, because an install script rarely knows how to undo itself:
 ```
 curl -fsSL https://raw.githubusercontent.com/chinmay28/countroster/main/scripts/quickstart.sh | sudo bash -s -- --uninstall
 ```
+
+Every sibling app's quickstart — CountRoster, HomeAPI, bip39-explorer, Clip
+Hanger, SAND Vault, Thought Mesh, Tickers, todo-matrix, Janma Kundali and
+Bulls and Bears — takes that `--uninstall` flag, so for any of them the
+uninstall command is the install command's URL piped to
+`sudo bash -s -- --uninstall`. Each keeps its data and prints how to delete it.
 
 It is written the same way, takes the same parameters, and is checked when the
 app is saved rather than when somebody is trying to remove something. It is
