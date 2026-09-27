@@ -4,6 +4,10 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/chinmay28/hostman/main/scripts/quickstart.sh | sudo bash
 #
+# and removes it again (the data directory is kept) with:
+#
+#   curl -fsSL https://raw.githubusercontent.com/chinmay28/hostman/main/scripts/quickstart.sh | sudo bash -s -- --uninstall
+#
 # Re-running upgrades in place: the database is snapshotted, the new build is
 # health-checked after it starts, and a failed upgrade rolls back to the
 # previous binary and database.
