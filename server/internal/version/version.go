@@ -33,7 +33,7 @@ import "strconv"
 // upgrade is called out in the changelog, which is the thing to read.
 const (
 	Year  = 2026
-	Month = 9
+	Month = 10
 )
 
 // Patch is the repository's commit count, stamped at link time (see the

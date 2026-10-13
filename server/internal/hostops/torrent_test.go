@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The downloader is a unit file, a settings file and three short scripts that
@@ -21,8 +22,16 @@ import (
 // whatever the test wants it to.
 func delugeStubs(t *testing.T, dir, consoleBody string) map[string]string {
 	t.Helper()
+	return delugeStubsAt(t, dir, "2.1.1", consoleBody)
+}
+
+// delugeStubsAt is a host with a particular deluge installed. The daemon answers
+// --version the way a real one does: its name, a space, the number, and then a
+// line each for libtorrent and python that nobody asked about.
+func delugeStubsAt(t *testing.T, dir, version, consoleBody string) map[string]string {
+	t.Helper()
 	return map[string]string{
-		"deluged":        `[ "$1" = --version ] && { echo "deluged: 2.1.1"; echo "libtorrent: 2.0.7"; exit 0; }; exit 0`,
+		"deluged":        `[ "$1" = --version ] && { echo "deluged ` + version + `"; echo "libtorrent: 2.0.7"; exit 0; }; exit 0`,
 		"deluge-console": `printf '%s\n' "$*" >> ` + filepath.Join(dir, "console.log") + "\n" + consoleBody,
 	}
 }
@@ -32,10 +41,15 @@ func torrentSetupFor(root, user, downloads, reset string) string {
 }
 
 func torrentStatusFor(root, user string) string {
-	return asUser(fmt.Sprintf(torrentStatusScript,
-		torrentStateDir, consoleScript(), strings.Join(torrentPieces, " "),
-		TorrentUnit, MaxTorrentListBytes, strings.Join(settingKeys, " ")), root, user)
+	return asUser(renderTorrentStatus(), root, user)
 }
+
+func torrentUpdateFor(root, user string) string {
+	return asUser(renderTorrentUpdate(), root, user, torrentRevision())
+}
+
+// torrentHomeDir is where a script under test put HostMan's own deluge.
+func torrentHomeDir(root string) string { return filepath.Join(root, torrentHome) }
 
 func torrentAddFor(root, name, source, path string) string {
 	return asUser(fmt.Sprintf(torrentAddScript, torrentStateDir, consoleScript(), TorrentUnit),
@@ -110,12 +124,14 @@ func stateDir(root string) string { return filepath.Join(root, torrentStateDir) 
 func TestTorrentScriptsParse(t *testing.T) {
 	scripts := map[string]string{
 		"setup":   renderTorrentSetup(),
-		"status":  fmt.Sprintf(torrentStatusScript, torrentStateDir, consoleScript(), "deluged", TorrentUnit, 1024, "a b"),
+		"status":  renderTorrentStatus(),
 		"seeding": fmt.Sprintf(torrentSeedingScript, torrentStateDir, consoleScript(), TorrentUnit),
 		"limit":   fmt.Sprintf(torrentLimitScript, torrentStateDir, consoleScript(), TorrentUnit),
 		"add":     fmt.Sprintf(torrentAddScript, torrentStateDir, consoleScript(), TorrentUnit),
 		"action":  fmt.Sprintf(torrentActionScript, torrentStateDir, consoleScript()),
-		"remove":  fmt.Sprintf(torrentRemoveScript, torrentStateDir, TorrentUnit),
+		"remove":  fmt.Sprintf(torrentRemoveScript, torrentStateDir, TorrentUnit, torrentHome),
+		"update":  renderTorrentUpdate(),
+		"runner":  fmt.Sprintf(torrentUpdateRunScript, torrentHome, torrentStateDir, MinDelugeVersion, TorrentUnit),
 	}
 	for name, script := range scripts {
 		t.Run(name, func(t *testing.T) {
@@ -580,12 +596,21 @@ func TestTorrentRemoveScriptLeavesTheFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	script := asUser(fmt.Sprintf(torrentRemoveScript, torrentStateDir, TorrentUnit), root)
+	// HostMan's own deluge, had the update put one here, goes with the
+	// downloader: nothing else runs it.
+	if err := os.MkdirAll(filepath.Join(torrentHomeDir(root), "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	script := asUser(fmt.Sprintf(torrentRemoveScript, torrentStateDir, TorrentUnit, torrentHome), root)
 	if out, code := runScript(t, script, "", bin); code != 0 {
 		t.Fatalf("remove exited %d: %s", code, out)
 	}
 	if _, err := os.Stat(stateDir(root)); err == nil {
 		t.Error("deluge's state was left behind")
+	}
+	if _, err := os.Stat(torrentHomeDir(root)); err == nil {
+		t.Error("HostMan's own deluge was left behind")
 	}
 	if _, err := os.Stat(filepath.Join(root, "etc/systemd/system", TorrentUnit)); err == nil {
 		t.Error("the unit was left behind")
@@ -1162,5 +1187,403 @@ func TestCleanSeedRatio(t *testing.T) {
 		if _, err := cleanSeedRatio(ratio); err == nil {
 			t.Errorf("cleanSeedRatio(%v) allowed it", ratio)
 		}
+	}
+}
+
+// --- the update ---
+
+// What distributions package is years behind what deluge's authors ship, and
+// the number is read out of what `deluged --version` prints, in both the
+// spellings it has used.
+func TestDelugeVersionNumber(t *testing.T) {
+	cases := map[string]string{
+		"deluged 2.1.1":   "2.1.1",
+		"deluged: 2.0.3":  "2.0.3",
+		"  deluged 2.2.0": "2.2.0",
+		"2.2.0":           "2.2.0",
+		"":                "",
+	}
+	for in, want := range cases {
+		if got := delugeVersionNumber(in); got != want {
+			t.Errorf("delugeVersionNumber(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A packager's suffix says nothing about which deluge it is, and a version that
+// cannot be read is not before anything.
+func TestVersionBefore(t *testing.T) {
+	before := []string{"2.1.1", "2.0.3", "2.1.2~dev0+20240121-1", "1.3.15", "2"}
+	for _, have := range before {
+		if !versionBefore(have, MinDelugeVersion) {
+			t.Errorf("%q does not read as older than %s", have, MinDelugeVersion)
+		}
+	}
+	notBefore := []string{"2.2", "2.2.0", "2.2.1~dev0+20250824-3", "2.3", "3.0.0", "2.10.0", "", "unknown"}
+	for _, have := range notBefore {
+		if versionBefore(have, MinDelugeVersion) {
+			t.Errorf("%q reads as older than %s", have, MinDelugeVersion)
+		}
+	}
+	if !versionBefore("2.2.0", "2.2.1") || versionBefore("2.2.1", "2.2.0") {
+		t.Error("the patch number is not compared")
+	}
+}
+
+// A host whose deluge is older than HostMan wants is told so — and one whose
+// deluge is new enough, or whose version cannot be read, is not.
+func TestTorrentStatusSaysWhenDelugeIsTooOld(t *testing.T) {
+	for version, outdated := range map[string]bool{"2.0.3": true, "2.1.1": true, "2.2.0": false, "2.2.1~dev0+20250824": false} {
+		root := t.TempDir()
+		work := t.TempDir()
+		bin := stubBin(t, rootStubs(delugeStubsAt(t, work, version, "exit 0")))
+		out, code := runScript(t, torrentStatusFor(root, "pi"), "", bin)
+		if code != 0 {
+			t.Fatalf("status exited %d: %s", code, out)
+		}
+		daemon := parseTorrentStatus(out, "pi")
+		if daemon.Version != version {
+			t.Errorf("version = %q, want %q", daemon.Version, version)
+		}
+		if daemon.Outdated != outdated {
+			t.Errorf("deluge %s: outdated = %v, want %v", version, daemon.Outdated, outdated)
+		}
+		if daemon.MinVersion != MinDelugeVersion {
+			t.Errorf("minVersion = %q, want %q", daemon.MinVersion, MinDelugeVersion)
+		}
+		if daemon.Update != nil {
+			t.Errorf("a host that never updated reports an update: %+v", daemon.Update)
+		}
+	}
+	// A host with no deluge is missing, not outdated: those are fixed by
+	// different sentences.
+	out, code := runBare(t, torrentStatusFor(t.TempDir(), "pi"), bareBin(t, rootStubs(nil)))
+	if code != 0 {
+		t.Fatalf("status exited %d: %s", code, out)
+	}
+	if daemon := parseTorrentStatus(out, "pi"); daemon.Outdated {
+		t.Error("a host with no deluge reads as having an old one")
+	}
+}
+
+// pythonStubs are a host with python on it, as far as the update needs one: a
+// python3 whose venv module makes a directory with the pip and python a real
+// one would have, and an apt-get and systemctl that record what they were
+// asked.
+//
+// The commands are written by the test beforehand, under one fixture directory:
+// venv copies pip and python out of it, and the pip in it puts deluged and
+// deluge-console there when it "installs" — so a pip that fails leaves no
+// deluge behind, as a real one would not. A test can make pip fail, or the new
+// deluged say what it likes, by handing in its own.
+func pythonStubs(t *testing.T, work string, venvBin map[string]string) map[string]string {
+	t.Helper()
+	fixture := t.TempDir()
+	for name, body := range venvBin {
+		body = strings.ReplaceAll(body, "FIXTURE", fixture)
+		if err := os.WriteFile(filepath.Join(fixture, name), []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return map[string]string{
+		"python3": `case "$1" in
+  -c) exit 0 ;;
+  -m) for a; do d=$a; done; mkdir -p "$d/bin" && cp ` + fixture + `/pip ` + fixture + `/python "$d/bin/" && exit 0; exit 1 ;;
+esac
+exit 0`,
+		"apt-get":   `printf '%s\n' "$*" >> ` + filepath.Join(work, "apt.log") + `; exit 0`,
+		"systemctl": `printf '%s\n' "$*" >> ` + filepath.Join(work, "systemctl.log") + `; exit 0`,
+	}
+}
+
+// newDelugeBin is what the fake venv is made of: a pip that records what it was
+// asked and installs the two deluge commands beside itself, a python, and a
+// deluge that reports the version the update is after.
+func newDelugeBin(work string) map[string]string {
+	return map[string]string{
+		"pip":            `printf '%s\n' "$*" >> ` + filepath.Join(work, "pip.log") + `; cp FIXTURE/deluged FIXTURE/deluge-console "$(dirname "$0")/"; exit 0`,
+		"python":         `exit 0`,
+		"deluged":        `[ "$1" = --version ] && echo "deluged 2.2.0"; exit 0`,
+		"deluge-console": `printf '%s\n' "$*" >> ` + filepath.Join(work, "console.log") + `; exit 0`,
+	}
+}
+
+// waitForUpdate waits for the detached runner to say how it ended.
+func waitForUpdate(t *testing.T, root string) string {
+	t.Helper()
+	path := filepath.Join(torrentHomeDir(root), "update.state")
+	for i := 0; i < 250; i++ {
+		// An empty file is one the runner is between truncating and writing.
+		if body, err := os.ReadFile(path); err == nil {
+			if state := strings.TrimSpace(string(body)); state != "" && state != "running" {
+				return state
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("the update never finished:\n%s", read(t, filepath.Join(torrentHomeDir(root), "update.log")))
+	return ""
+}
+
+// The update puts a newer deluge in an environment of HostMan's own, points the
+// downloader's unit at it, and restarts a daemon that was running — and the
+// status afterwards reads that deluge's version rather than the host's.
+func TestUpdateGivesTheDaemonANewerDeluge(t *testing.T) {
+	root := t.TempDir()
+	work := t.TempDir()
+	stubs := rootStubs(delugeStubs(t, work, "exit 0"))
+	for name, body := range pythonStubs(t, work, newDelugeBin(work)) {
+		stubs[name] = body
+	}
+	bin := stubBin(t, stubs)
+
+	if out, code := runScript(t, torrentSetupFor(root, "pi", "", ""), "", bin); code != 0 {
+		t.Fatalf("setup exited %d: %s", code, out)
+	}
+	before := read(t, filepath.Join(root, "etc/systemd/system", TorrentUnit))
+	if !strings.Contains(before, "ExecStart="+filepath.Join(bin, "deluged")) {
+		t.Fatalf("before the update the unit does not run the host's deluged:\n%s", before)
+	}
+
+	out, code := runScript(t, torrentUpdateFor(root, "pi"), "", bin)
+	if code != 0 {
+		t.Fatalf("update exited %d: %s", code, out)
+	}
+	if !strings.Contains(out, "started") {
+		t.Errorf("update said %q, want started", out)
+	}
+	if state := waitForUpdate(t, root); state != "ok" {
+		t.Fatalf("the update ended %q:\n%s", state, read(t, filepath.Join(torrentHomeDir(root), "update.log")))
+	}
+
+	// pip was asked for the version HostMan wants, into the environment that
+	// sees the host's own libtorrent.
+	pip := read(t, filepath.Join(work, "pip.log"))
+	if !strings.Contains(pip, "install --upgrade deluge>="+MinDelugeVersion) {
+		t.Errorf("pip was asked %q, want deluge %s or newer", pip, MinDelugeVersion)
+	}
+	// Nothing needed fetching: this host's python can make a venv and sees
+	// libtorrent already.
+	if _, err := os.Stat(filepath.Join(work, "apt.log")); err == nil {
+		t.Errorf("apt was run on a host that needed nothing:\n%s", read(t, filepath.Join(work, "apt.log")))
+	}
+
+	// The unit now runs HostMan's own deluged, and the daemon was restarted so
+	// it does.
+	after := read(t, filepath.Join(root, "etc/systemd/system", TorrentUnit))
+	if !strings.Contains(after, "ExecStart="+filepath.Join(torrentHomeDir(root), "bin/deluged")) {
+		t.Errorf("after the update the unit does not run HostMan's own deluged:\n%s", after)
+	}
+	if sc := read(t, filepath.Join(work, "systemctl.log")); !strings.Contains(sc, "restart -- "+TorrentUnit) {
+		t.Errorf("the daemon was not restarted:\n%s", sc)
+	}
+
+	// And the screen sees the new one: its version, no longer outdated, an
+	// update that finished, and a console that is the new one too.
+	out, code = runScript(t, torrentStatusFor(root, "pi"), "", bin)
+	if code != 0 {
+		t.Fatalf("status exited %d: %s", code, out)
+	}
+	daemon := parseTorrentStatus(out, "pi")
+	if daemon.Version != "2.2.0" || daemon.Outdated {
+		t.Errorf("after the update: version %q, outdated %v", daemon.Version, daemon.Outdated)
+	}
+	if daemon.Stale {
+		t.Error("setting up again inside the update left the host reading as stale")
+	}
+	if daemon.Update == nil || daemon.Update.State != "ok" {
+		t.Fatalf("update = %+v, want ok", daemon.Update)
+	}
+	if !strings.Contains(daemon.Update.Log, "== ready") {
+		t.Errorf("the log did not come back:\n%s", daemon.Update.Log)
+	}
+	if console := read(t, filepath.Join(work, "console.log")); !strings.Contains(console, "info --verbose") {
+		t.Errorf("the status did not ask through HostMan's own console:\n%s", console)
+	}
+}
+
+// A daemon that was stopped stays stopped: the update is not a reason to start
+// downloading. And a host where the downloader was never set up gets the deluge
+// and no unit.
+func TestUpdateLeavesAStoppedDaemonAlone(t *testing.T) {
+	root := t.TempDir()
+	work := t.TempDir()
+	stubs := rootStubs(delugeStubs(t, work, "exit 0"))
+	for name, body := range pythonStubs(t, work, newDelugeBin(work)) {
+		stubs[name] = body
+	}
+	stubs["systemctl"] = `printf '%s\n' "$*" >> ` + filepath.Join(work, "systemctl.log") + `; [ "$1" = is-active ] && exit 3; exit 0`
+	bin := stubBin(t, stubs)
+
+	if out, code := runScript(t, torrentSetupFor(root, "pi", "", ""), "", bin); code != 0 {
+		t.Fatalf("setup exited %d: %s", code, out)
+	}
+	if out, code := runScript(t, torrentUpdateFor(root, "pi"), "", bin); code != 0 {
+		t.Fatalf("update exited %d: %s", code, out)
+	}
+	if state := waitForUpdate(t, root); state != "ok" {
+		t.Fatalf("the update ended %q", state)
+	}
+	if sc := read(t, filepath.Join(work, "systemctl.log")); strings.Contains(sc, "restart") {
+		t.Errorf("a stopped daemon was restarted:\n%s", sc)
+	}
+
+	// Not set up at all: the deluge arrives, and nothing is written for a
+	// downloader nobody asked for.
+	bare := t.TempDir()
+	if out, code := runScript(t, torrentUpdateFor(bare, "pi"), "", bin); code != 0 {
+		t.Fatalf("update exited %d: %s", code, out)
+	}
+	if state := waitForUpdate(t, bare); state != "ok" {
+		t.Fatalf("the update ended %q", state)
+	}
+	if _, err := os.Stat(filepath.Join(bare, "etc/systemd/system", TorrentUnit)); err == nil {
+		t.Error("updating deluge set up a downloader nobody asked for")
+	}
+	if _, err := os.Stat(filepath.Join(torrentHomeDir(bare), "bin/deluged")); err != nil {
+		t.Error("HostMan's own deluge was not put there")
+	}
+}
+
+// Debian packages the piece venv needs separately, and the engine under deluge
+// is the host's package too. What the host's python cannot do, apt is asked for.
+func TestUpdateFetchesWhatTheHostIsMissing(t *testing.T) {
+	root := t.TempDir()
+	work := t.TempDir()
+	stubs := rootStubs(delugeStubs(t, work, "exit 0"))
+	for name, body := range pythonStubs(t, work, newDelugeBin(work)) {
+		stubs[name] = body
+	}
+	// A python that can neither make a venv nor see libtorrent.
+	stubs["python3"] = strings.Replace(stubs["python3"], "-c) exit 0 ;;", "-c) exit 1 ;;", 1)
+	bin := stubBin(t, stubs)
+
+	if out, code := runScript(t, torrentUpdateFor(root, "pi"), "", bin); code != 0 {
+		t.Fatalf("update exited %d: %s", code, out)
+	}
+	if state := waitForUpdate(t, root); state != "ok" {
+		t.Fatalf("the update ended %q:\n%s", state, read(t, filepath.Join(torrentHomeDir(root), "update.log")))
+	}
+	apt := read(t, filepath.Join(work, "apt.log"))
+	if !strings.Contains(apt, "install -y python3-venv python3-libtorrent") {
+		t.Errorf("apt was not asked for the missing pieces:\n%s", apt)
+	}
+}
+
+// When pip cannot do it, the screen is told that, with pip's own last words.
+func TestUpdateReportsAFailedPip(t *testing.T) {
+	root := t.TempDir()
+	work := t.TempDir()
+	venv := newDelugeBin(work)
+	venv["pip"] = `printf 'ERROR: Could not find a version that satisfies the requirement deluge>=2.2\n' >&2; exit 1`
+	stubs := rootStubs(delugeStubs(t, work, "exit 0"))
+	for name, body := range pythonStubs(t, work, venv) {
+		stubs[name] = body
+	}
+	bin := stubBin(t, stubs)
+
+	if out, code := runScript(t, torrentUpdateFor(root, "pi"), "", bin); code != 0 {
+		t.Fatalf("update exited %d: %s", code, out)
+	}
+	if state := waitForUpdate(t, root); state != "failed:13" {
+		t.Fatalf("the update ended %q, want failed:13", state)
+	}
+	out, code := runScript(t, torrentStatusFor(root, "pi"), "", bin)
+	if code != 0 {
+		t.Fatalf("status exited %d: %s", code, out)
+	}
+	daemon := parseTorrentStatus(out, "pi")
+	if daemon.Update == nil || daemon.Update.State != "failed" || daemon.Update.Exit != 13 {
+		t.Fatalf("update = %+v, want failed with exit 13", daemon.Update)
+	}
+	if !strings.Contains(daemon.Update.Log, "Could not find a version") {
+		t.Errorf("pip's own words did not come back:\n%s", daemon.Update.Log)
+	}
+	// The host's deluge is still the one in use, and still too old.
+	if daemon.Version != "2.1.1" || !daemon.Outdated {
+		t.Errorf("after a failed update: version %q, outdated %v", daemon.Version, daemon.Outdated)
+	}
+}
+
+// An update that is running is not started again alongside itself; one that
+// says it is running and is gone is reported as lost, and may be started again.
+func TestUpdateRunsOnceAtATime(t *testing.T) {
+	root := t.TempDir()
+	work := t.TempDir()
+	stubs := rootStubs(delugeStubs(t, work, "exit 0"))
+	for name, body := range pythonStubs(t, work, newDelugeBin(work)) {
+		stubs[name] = body
+	}
+	bin := stubBin(t, stubs)
+
+	home := torrentHomeDir(root)
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// This test's own process is one that is certainly alive.
+	writeTestFile(t, filepath.Join(home, "update.state"), "running\n")
+	writeTestFile(t, filepath.Join(home, "update.pid"), fmt.Sprintf("%d\n", os.Getpid()))
+	writeTestFile(t, filepath.Join(home, "update.log"), "== still at it\n")
+
+	out, code := runScript(t, torrentUpdateFor(root, "pi"), "", bin)
+	if code != 0 || !strings.Contains(out, "already") {
+		t.Fatalf("a second update exited %d and said %q, want already", code, out)
+	}
+	if log := read(t, filepath.Join(home, "update.log")); log != "== still at it\n" {
+		t.Errorf("the running update's log was replaced:\n%s", log)
+	}
+	out, code = runScript(t, torrentStatusFor(root, "pi"), "", bin)
+	if code != 0 {
+		t.Fatalf("status exited %d: %s", code, out)
+	}
+	if daemon := parseTorrentStatus(out, "pi"); daemon.Update == nil || daemon.Update.State != "running" {
+		t.Errorf("update = %+v, want running", daemon.Update)
+	}
+
+	// A pid nothing has: the machine rebooted in the middle of pip.
+	writeTestFile(t, filepath.Join(home, "update.pid"), "2147483647\n")
+	out, code = runScript(t, torrentStatusFor(root, "pi"), "", bin)
+	if code != 0 {
+		t.Fatalf("status exited %d: %s", code, out)
+	}
+	if daemon := parseTorrentStatus(out, "pi"); daemon.Update == nil || daemon.Update.State != "lost" {
+		t.Errorf("update = %+v, want lost", daemon.Update)
+	}
+	if out, code := runScript(t, torrentUpdateFor(root, "pi"), "", bin); code != 0 || !strings.Contains(out, "started") {
+		t.Fatalf("after a lost update a new one exited %d and said %q, want started", code, out)
+	}
+	if state := waitForUpdate(t, root); state != "ok" {
+		t.Errorf("the new update ended %q", state)
+	}
+}
+
+// The update builds on the host's own deluge packages, so a host without them
+// is told to install them first, in the same words as setup. And deluge is
+// python: a host without that is told so too.
+func TestUpdateRefusesWhatItCannotBuildOn(t *testing.T) {
+	root := t.TempDir()
+	if out, code := runBare(t, torrentUpdateFor(root, "pi"), bareBin(t, rootStubs(nil))); code != 8 {
+		t.Fatalf("update on a host without deluge exited %d, want 8: %s", code, out)
+	}
+	work := t.TempDir()
+	if out, code := runBare(t, torrentUpdateFor(root, "pi"), bareBin(t, rootStubs(delugeStubs(t, work, "exit 0")))); code != 10 {
+		t.Fatalf("update on a host without python exited %d, want 10: %s", code, out)
+	}
+	if _, err := os.Stat(torrentHomeDir(root)); err == nil {
+		t.Error("a refused update left a directory behind")
+	}
+
+	// And it needs root, like setup.
+	stubs := rootStubs(delugeStubs(t, work, "exit 0"))
+	stubs["id"] = `[ "$1" = -u ] && { echo 1000; exit 0; }; echo pi`
+	if out, code := runScript(t, torrentUpdateFor(root, "pi"), "", stubBin(t, stubs)); code != 3 {
+		t.Fatalf("update without root exited %d, want 3: %s", code, out)
+	}
+}
+
+func writeTestFile(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

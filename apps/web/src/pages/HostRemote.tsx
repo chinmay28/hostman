@@ -1,9 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { LaunchIcon } from '../components/launch'
 import { Page } from '../components/Layout'
-import { Banner, Card, Copyable, Field, Loading, SectionTitle, Sheet, useLoader } from '../components/ui'
+import {
+  Banner,
+  Card,
+  Copyable,
+  Field,
+  Loading,
+  SectionTitle,
+  Sheet,
+  TailLog,
+  useLoader,
+} from '../components/ui'
 import { ago, bytes } from '../lib/format'
 import { openApp, reachable } from '../lib/launch'
 import type { RemoteSession } from '../types'
@@ -363,36 +373,8 @@ function Installing({ session }: { session: RemoteSession }) {
         Installing on the host — a few minutes on a Pi. It carries on if you leave this screen or
         lock your phone.
       </Banner>
-      <SetupLog log={session.setupLog} />
+      <TailLog log={session.setupLog} />
     </>
-  )
-}
-
-/** The tail of the install log, followed as it is written. What apt is doing
- *  now is at the bottom, so that is where this opens — unless somebody has
- *  scrolled up to read something, which is a decision to leave alone. */
-function SetupLog({ log }: { log?: string }) {
-  const element = useRef<HTMLPreElement>(null)
-  const pinned = useRef(true)
-
-  useEffect(() => {
-    const node = element.current
-    if (node && pinned.current) node.scrollTop = node.scrollHeight
-  }, [log])
-
-  if (!log) return null
-  return (
-    <pre
-      className="log"
-      ref={element}
-      onScroll={() => {
-        const node = element.current
-        if (!node) return
-        pinned.current = node.scrollHeight - node.scrollTop - node.clientHeight < 40
-      }}
-    >
-      {log}
-    </pre>
   )
 }
 
@@ -405,7 +387,7 @@ function Failed({ session }: { session: RemoteSession }) {
         The install stopped{session.setupExit ? ` (exit ${session.setupExit})` : ''}. The end of its
         log is below — apt's last line is usually the reason.
       </Banner>
-      <SetupLog log={session.setupLog} />
+      <TailLog log={session.setupLog} />
     </>
   )
 }

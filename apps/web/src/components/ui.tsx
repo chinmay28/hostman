@@ -157,6 +157,35 @@ export function Sheet({
   )
 }
 
+/** The tail of a log written by something still running on the host, followed
+ *  as it is written. What is happening now is at the bottom, so that is where
+ *  this opens — unless somebody has scrolled up to read something, which is a
+ *  decision to leave alone. */
+export function TailLog({ log }: { log?: string }) {
+  const element = useRef<HTMLPreElement>(null)
+  const pinned = useRef(true)
+
+  useEffect(() => {
+    const node = element.current
+    if (node && pinned.current) node.scrollTop = node.scrollHeight
+  }, [log])
+
+  if (!log) return null
+  return (
+    <pre
+      className="log"
+      ref={element}
+      onScroll={() => {
+        const node = element.current
+        if (!node) return
+        pinned.current = node.scrollHeight - node.scrollTop - node.clientHeight < 40
+      }}
+    >
+      {log}
+    </pre>
+  )
+}
+
 /** Copyable shows a command with a one-tap copy button. */
 export function Copyable({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)

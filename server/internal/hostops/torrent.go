@@ -52,6 +52,18 @@ import (
 // carried in an API response and not shown on a screen, because nothing here
 // needs it — the only client is a command running on the same machine.
 //
+// One thing bends the first rule without breaking it. **The version is
+// HostMan's to insist on.** The deluge a distribution packages is years behind
+// the one its authors ship — Debian 12 has 2.0, Ubuntu 24.04 has 2.1, and 2.2
+// is in neither — and the console HostMan drives is where the age shows. So a
+// deluge older than MinDelugeVersion is reported as such, and HostMan offers to
+// update it. The update does not touch the host's packages: it gives HostMan's
+// own daemon a newer deluge in a python environment of its own, under
+// /opt/hostman-deluge, built on the libtorrent the host's packages already
+// brought. The host's deluge stays what it was, for whatever else runs it. And
+// a host with no deluge at all is still told to install one first: the engine
+// underneath is the host's, and so is the decision.
+//
 // Nothing on the host is sourced. The settings file is written as lines to be
 // parsed, torrent ids are checked against a hash's alphabet before they reach a
 // command line, and every value the caller supplied arrives as a quoted
@@ -81,6 +93,19 @@ const (
 	// already uses on this host carries on working.
 	torrentAccount = "hostman"
 
+	// torrentHome is where HostMan keeps a deluge of its own, where the host's
+	// is too old: a python environment with the newer deluge in it, and
+	// alongside it the log and the state of putting it there. Its bin directory
+	// goes ahead of the host's on every script's PATH, which is how the daemon
+	// and the console both end up being the newer one.
+	torrentHome = "/opt/hostman-deluge"
+
+	// MinDelugeVersion is the oldest deluge HostMan is happy to drive. 2.2 is
+	// the first release in three years and the first the console's own fixes
+	// landed in; what distributions package is older, which is what the update
+	// is for.
+	MinDelugeVersion = "2.2"
+
 	// MaxTorrentFileBytes is the largest .torrent file HostMan will carry to a
 	// host. A torrent file is a list of hashes: a few kilobytes is ordinary and
 	// a megabyte is a very large one, so anything past this is not a torrent
@@ -105,8 +130,17 @@ type TorrentDaemon struct {
 	// Missing names the deluge commands that are not there, which is what the
 	// screen turns into an apt line to run.
 	Missing []string `json:"missing,omitempty"`
-	// Version is deluged's own version, as it reports it.
+	// Version is deluged's own version, as it reports it — HostMan's own
+	// deluge where the update has put one, the host's otherwise.
 	Version string `json:"version,omitempty"`
+	// MinVersion is the oldest deluge HostMan is happy to drive, and Outdated
+	// reports the one here being older than that. An outdated deluge still
+	// works; it is what the update offers to fix.
+	MinVersion string `json:"minVersion"`
+	Outdated   bool   `json:"outdated,omitempty"`
+	// Update is where updating deluge got to, on a host where an update has
+	// been started — and nothing on one where none has.
+	Update *TorrentUpdate `json:"update,omitempty"`
 	// Configured reports HostMan having written the daemon onto this host.
 	Configured bool `json:"configured"`
 	// Ready means a torrent could be added right now: deluge installed, the
@@ -194,6 +228,22 @@ type Torrent struct {
 	PeersTotal int `json:"peersTotal"`
 }
 
+// TorrentUpdate is where an update of deluge got to, for the screen to follow.
+// The update runs detached on the host, so this is read back from the state
+// file and the log it leaves rather than from anything HostMan held on to.
+type TorrentUpdate struct {
+	// State is "running", "ok", "failed" — or "lost": started, and then gone
+	// without saying how it ended, which is what a reboot in the middle of it
+	// looks like.
+	State string `json:"state"`
+	// Exit is the status behind a failed update, for the log to be read
+	// against.
+	Exit int `json:"exit,omitempty"`
+	// Log is the tail of the update's log: what pip is doing, or why it
+	// stopped.
+	Log string `json:"log,omitempty"`
+}
+
 // TorrentSeeding is what deluge does with a torrent once it has finished
 // downloading. Left alone it seeds for ever, which is polite and is also how a
 // list nobody is watching fills up with things that finished last month.
@@ -250,6 +300,9 @@ var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
 
 // torrentConsole is the one way HostMan talks to deluged, shared by every
 // script that needs it so there is a single place where a connection is made.
+// It also decides which deluge that is: HostMan's own, where the update has put
+// one, ahead of the host's on the PATH — so the console that talks and the
+// daemon the unit runs are the same version.
 //
 // Four things about it are deluge's doing rather than choices:
 //
@@ -276,7 +329,8 @@ var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
 //     which another user on the host could read out of `ps` — the same trade
 //     the `connect` form makes, on a daemon that only listens on loopback, and
 //     the alternative is HostMan holding the password instead.
-const torrentConsole = `console() {
+const torrentConsole = `PATH="$r%[3]s/bin:$PATH"; export PATH
+console() {
   pw=$(awk -F: '$1 == "%[1]s" { print $2; exit }' "$conf/auth" 2>/dev/null)
   if [ -z "$pw" ]; then
     printf 'this host has no deluge account for HostMan yet\n' >&2
@@ -293,7 +347,7 @@ const torrentConsole = `console() {
 
 // consoleScript renders the shared console helper for a script to embed.
 func consoleScript() string {
-	return fmt.Sprintf(torrentConsole, torrentAccount, torrentPort)
+	return fmt.Sprintf(torrentConsole, torrentAccount, torrentPort, torrentHome)
 }
 
 // torrentStatusScript answers everything about the downloader in one round
@@ -377,6 +431,21 @@ printf '@@ask\n%%s\n' "$ask"
 printf '@@torrents\n'
 printf '%%s\n' "$list" | head -c %[5]d
 
+# Where an update of deluge got to, if one was ever started here. The runner
+# writes its own pid; one that says it is running and is not there any more
+# died without saying so, and a reboot in the middle of pip is how that happens.
+own="$r%[7]s"
+state=$(cat "$own/update.state" 2>/dev/null)
+if [ "$state" = running ]; then
+  pid=$(cat "$own/update.pid" 2>/dev/null)
+  [ -n "$pid" ] && [ -d "/proc/$pid" ] || state=lost
+fi
+printf '@@update\n%%s\n' "$state"
+printf '@@updatelogsize\n'
+wc -c < "$own/update.log" 2>/dev/null || printf '0\n'
+printf '@@updatelog\n'
+tail -c %[8]d "$own/update.log" 2>/dev/null | base64 2>/dev/null
+
 # Reading the state of the downloader never fails: every part of it is
 # optional, and a piece that is not there is an answer rather than an error.
 # What comes back from a host with none of it is "deluge is not installed",
@@ -388,16 +457,25 @@ exit 0
 // lines a torrent, sixty torrents, and room for a daemon in a bad mood.
 const MaxTorrentListBytes = 64 << 10
 
+// MaxTorrentUpdateLogBytes is how much of the update's log comes back. pip is
+// chatty and the end is the part worth reading.
+const MaxTorrentUpdateLogBytes = 16 << 10
+
+// renderTorrentStatus builds the script that reads the downloader.
+func renderTorrentStatus() string {
+	return fmt.Sprintf(torrentStatusScript,
+		torrentStateDir, consoleScript(), strings.Join(torrentPieces, " "),
+		TorrentUnit, MaxTorrentListBytes, strings.Join(settingKeys, " "),
+		torrentHome, MaxTorrentUpdateLogBytes)
+}
+
 // TorrentStatus reports on a host's downloader: what is installed, what is set
 // up, and what it is working on.
 func (s *Service) TorrentStatus(ctx context.Context, h *store.Host) (*TorrentDaemon, error) {
 	if !userPattern.MatchString(h.Username) {
 		return nil, invalid("%q is not a user a downloader can run as", h.Username)
 	}
-	script := fmt.Sprintf(torrentStatusScript,
-		torrentStateDir, consoleScript(), strings.Join(torrentPieces, " "),
-		TorrentUnit, MaxTorrentListBytes, strings.Join(settingKeys, " "))
-	res, err := s.run(ctx, h, asUser(script, "", h.Username), "")
+	res, err := s.run(ctx, h, asUser(renderTorrentStatus(), "", h.Username), "")
 	if err != nil {
 		return nil, err
 	}
@@ -413,10 +491,11 @@ func (s *Service) TorrentStatus(ctx context.Context, h *store.Host) (*TorrentDae
 func parseTorrentStatus(out, user string) *TorrentDaemon {
 	found := sections(out)
 	daemon := &TorrentDaemon{
-		Unit:      TorrentUnit,
-		User:      user,
-		Downloads: first(found["downloads"]),
-		Torrents:  []Torrent{},
+		Unit:       TorrentUnit,
+		User:       user,
+		MinVersion: MinDelugeVersion,
+		Downloads:  first(found["downloads"]),
+		Torrents:   []Torrent{},
 	}
 
 	have := map[string]bool{}
@@ -429,9 +508,9 @@ func parseTorrentStatus(out, user string) *TorrentDaemon {
 		}
 	}
 	daemon.Installed = len(daemon.Missing) == 0
-	// "deluged: 2.0.3", or "deluged 2.0.3" depending on the version doing the
-	// answering. The number is the part anybody wanted.
-	daemon.Version = strings.TrimSpace(strings.TrimPrefix(first(found["version"]), "deluged:"))
+	daemon.Version = delugeVersionNumber(first(found["version"]))
+	daemon.Outdated = daemon.Installed && versionBefore(daemon.Version, MinDelugeVersion)
+	daemon.Update = parseTorrentUpdate(found)
 
 	// A settings file with anything in it is a host HostMan has written the
 	// downloader onto, whether or not every line of it still parses.
@@ -490,6 +569,83 @@ func parseTorrentStatus(out, user string) *TorrentDaemon {
 		daemon.Trouble = ""
 	}
 	return daemon
+}
+
+// parseTorrentUpdate reads where an update got to out of the status sections,
+// or nothing where none was ever started on this host.
+func parseTorrentUpdate(found map[string][]string) *TorrentUpdate {
+	state := first(found["update"])
+	if state == "" {
+		return nil
+	}
+	update := &TorrentUpdate{State: state}
+	// "failed:13" carries the exit status the runner died on, which is the
+	// difference between "pip could not reach PyPI" and "there is no python".
+	if code, ok := strings.CutPrefix(state, "failed:"); ok {
+		update.State = "failed"
+		update.Exit, _ = strconv.Atoi(strings.TrimSpace(code))
+	}
+	// The log arrives as a tail, so its first line is usually half of one. Told
+	// how big the whole file was, decodeLog drops that half rather than showing
+	// it as a line pip never wrote.
+	if log, _ := decodeLog(found["updatelog"], first(found["updatelogsize"])); strings.TrimSpace(log) != "" {
+		update.Log = log
+	}
+	return update
+}
+
+// delugeVersionNumber reads the number out of what `deluged --version` prints
+// first: "deluged 2.1.1", or "deluged: 2.0.3" from an older one. The number is
+// the part anybody wanted.
+func delugeVersionNumber(line string) string {
+	line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "deluged"))
+	return strings.TrimSpace(strings.TrimPrefix(line, ":"))
+}
+
+// versionNumbers reads the leading dotted numbers out of a version:
+// "2.1.2~dev0+20240121-1" is 2, 1, 2. The rest is the packager's, and says
+// nothing about which deluge this is.
+func versionNumbers(version string) []int {
+	var numbers []int
+	for _, part := range strings.Split(strings.TrimSpace(version), ".") {
+		end := 0
+		for end < len(part) && part[end] >= '0' && part[end] <= '9' {
+			end++
+		}
+		if end == 0 {
+			break
+		}
+		n, _ := strconv.Atoi(part[:end])
+		numbers = append(numbers, n)
+		if end < len(part) {
+			break
+		}
+	}
+	return numbers
+}
+
+// versionBefore reports have being an older version than want: 2.1.1 is before
+// 2.2, and 2.2.0 is not. A version that cannot be read is not before anything —
+// it is unknown, and a screen that called an unknown deluge too old would be
+// guessing.
+func versionBefore(have, want string) bool {
+	got, min := versionNumbers(have), versionNumbers(want)
+	if len(got) == 0 {
+		return false
+	}
+	for i := 0; i < len(got) || i < len(min); i++ {
+		a, b := 0, 0
+		if i < len(got) {
+			a = got[i]
+		}
+		if i < len(min) {
+			b = min[i]
+		}
+		if a != b {
+			return a < b
+		}
+	}
+	return false
 }
 
 // splitSettings takes the settings lines out of what the console printed and
@@ -806,12 +962,18 @@ type TorrentSetup struct {
 // It refuses a host without deluge rather than installing it. A BitTorrent
 // client is a decision about what a machine does on a network, and the message
 // says exactly which packages to install.
+//
+// The deluged the unit runs is whichever is first on the PATH, and HostMan's
+// own — where the update has put one — goes ahead of the host's. That is how
+// an update takes effect: it runs this script again, and the unit comes out
+// pointing at the newer daemon.
 const torrentSetupScript = `set -u
 r=$1
 u=$2
 dl=$3
 reset=$4
 rev=$5
+PATH="$r%[7]s/bin:$PATH"; export PATH
 
 if [ "$(id -u 2>/dev/null || echo 1)" != 0 ]; then
   printf 'setting up the downloader needs root\n' >&2
@@ -927,7 +1089,7 @@ printf 'written\n'
 func renderTorrentSetup() string {
 	return fmt.Sprintf(torrentSetupScript,
 		torrentStateDir, torrentPort, strings.Join(torrentPieces, " "),
-		TorrentUnit, torrentAccount, TorrentPackages)
+		TorrentUnit, torrentAccount, TorrentPackages, torrentHome)
 }
 
 // torrentRevision names the unit and settings this build writes, as a hash of
@@ -973,20 +1135,22 @@ func (s *Service) SetupTorrent(ctx context.Context, h *store.Host, opts TorrentS
 // so nothing is left pointing at a directory that has gone, then deluge's state
 // and HostMan's settings.
 //
-// Two things it does not touch. Deluge itself stays, because the host installed
-// it and something else may be using it. The downloaded files stay, always and
-// without being asked — they are the entire reason any of this ran, and a
-// remove button that deleted a week of downloading would be a trap.
+// Two things it does not touch. The host's deluge stays, because the host
+// installed it and something else may be using it — the one HostMan put under
+// /opt for its own daemon goes, since nothing else runs it. The downloaded files
+// stay, always and without being asked — they are the entire reason any of this
+// ran, and a remove button that deleted a week of downloading would be a trap.
 const torrentRemoveScript = `set -u
 r=$1
 conf="$r%[1]s"
 unit="$r/etc/systemd/system/%[2]s"
+home="$r%[3]s"
 
 if command -v systemctl >/dev/null 2>&1; then
   systemctl disable --now -- %[2]s >/dev/null 2>&1 || true
 fi
 rm -f -- "$unit" || exit 3
-rm -rf -- "$conf" || exit 3
+rm -rf -- "$conf" "$home" || exit 3
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload >/dev/null 2>&1 || true
   systemctl reset-failed -- %[2]s >/dev/null 2>&1 || true
@@ -994,10 +1158,10 @@ fi
 printf 'removed\n'
 `
 
-// RemoveTorrent deletes the downloader from a host. Deluge and everything
-// already downloaded stay where they are.
+// RemoveTorrent deletes the downloader from a host. The host's deluge and
+// everything already downloaded stay where they are.
 func (s *Service) RemoveTorrent(ctx context.Context, h *store.Host) error {
-	script := fmt.Sprintf(torrentRemoveScript, torrentStateDir, TorrentUnit)
+	script := fmt.Sprintf(torrentRemoveScript, torrentStateDir, TorrentUnit, torrentHome)
 	res, err := s.run(ctx, h, elevate(script, ""), "")
 	if err != nil {
 		return err
@@ -1006,6 +1170,180 @@ func (s *Service) RemoveTorrent(ctx context.Context, h *store.Host) error {
 		return failure(res, "could not remove the downloader from "+h.Name)
 	}
 	return nil
+}
+
+// torrentUpdateScript starts an update of deluge: it writes the runner and a
+// copy of the setup script under HostMan's own directory and hands the slow
+// half to the host to get on with.
+//
+// Like the remote session's install, the minutes of pip are detached — nohup
+// setsid, output to a log, the exit status recorded by an EXIT trap — because
+// an SSH session that ends takes its command with it, and a phone that locks
+// its screen must not be able to cancel an install half way through a package.
+// What comes back from this call is only "it started". Where it got to is what
+// the status script is for.
+//
+// It still refuses a host without deluge. The update builds on the host's
+// packages rather than replacing them — the libtorrent underneath is the one
+// they brought — so a host with none is told to install them first, in the
+// same words as setup.
+const torrentUpdateScript = `set -u
+r=$1
+u=$2
+rev=$3
+home="$r%[1]s"
+
+if [ "$(id -u 2>/dev/null || echo 1)" != 0 ]; then
+  printf 'updating deluge needs root\n' >&2
+  exit 3
+fi
+for b in %[3]s; do
+  command -v "$b" >/dev/null 2>&1 || {
+    printf 'this host has no %%s — install deluge first: apt install %[4]s\n' "$b" >&2
+    exit 8
+  }
+done
+command -v python3 >/dev/null 2>&1 || {
+  printf 'deluge is python, and this host has no python3\n' >&2
+  exit 10
+}
+
+mkdir -p "$home" || { printf 'could not write to %%s\n' "$home" >&2; exit 4; }
+
+# An update already under way is left to finish rather than started again
+# alongside itself. One that says it is running and is not there any more is
+# not under way, whatever its state file says.
+if [ "$(cat "$home/update.state" 2>/dev/null)" = running ]; then
+  pid=$(cat "$home/update.pid" 2>/dev/null)
+  if [ -n "$pid" ] && [ -d "/proc/$pid" ]; then
+    printf 'already\n'
+    exit 0
+  fi
+fi
+
+cat > "$home/update.sh" <<'UPDATE'
+%[5]s
+UPDATE
+cat > "$home/setup.sh" <<'SETUP'
+%[6]s
+SETUP
+chmod 750 "$home/update.sh" "$home/setup.sh" || exit 5
+
+: > "$home/update.log" || exit 7
+printf 'running\n' > "$home/update.state" || exit 7
+nohup setsid sh "$home/update.sh" "$r" "$u" "$rev" >> "$home/update.log" 2>&1 < /dev/null &
+printf 'started\n'
+`
+
+// torrentUpdateRunScript is the half that takes minutes. It runs detached, so
+// its only way of reporting anything is the log it writes and the state file
+// its EXIT trap leaves behind — which is what the status script reads back.
+//
+// The newer deluge goes into a python environment of HostMan's own, made with
+// the host's own python and able to see the host's own packages. That last part
+// is what makes it small: libtorrent, the engine, is a compiled binding the
+// distribution built against this very python, and the environment uses it
+// rather than fetching one. What pip adds is deluge itself and whatever of its
+// python dependencies the host's packages are too old for.
+//
+// Having installed it, it sets the downloader up again where it was set up —
+// the unit then points at the newer daemon — and restarts a daemon that was
+// running so it picks the new one up. One that was stopped stays stopped.
+const torrentUpdateRunScript = `set -u
+r=$1
+u=$2
+rev=$3
+home="$r%[1]s"
+conf="$r%[2]s"
+printf '%%s\n' "$$" > "$home/update.pid"
+
+trap 'code=$?; if [ "$code" -eq 0 ]; then printf "ok\n" > "$home/update.state"; else printf "failed:%%s\n" "$code" > "$home/update.state"; fi' EXIT
+
+printf '== this host has %%s\n' "$(deluged --version 2>/dev/null | head -1)"
+
+# python3 -m venv needs ensurepip, which Debian packages separately, and the
+# engine underneath deluge is a binding the host's packages provide. Either
+# that is not here is fetched; a host with no apt-get cannot be helped.
+need=""
+python3 -c 'import ensurepip' >/dev/null 2>&1 || need="$need python3-venv"
+python3 -c 'import libtorrent' >/dev/null 2>&1 || need="$need python3-libtorrent"
+if [ -n "$need" ]; then
+  command -v apt-get >/dev/null 2>&1 || {
+    printf 'this host needs%%s and has no apt-get to fetch them with\n' "$need" >&2
+    exit 11
+  }
+  export DEBIAN_FRONTEND=noninteractive
+  printf '== installing%%s\n' "$need"
+  apt-get update || exit 11
+  apt-get install -y $need || exit 11
+fi
+
+printf '== making deluge a python environment of its own at %[1]s\n'
+python3 -m venv --system-site-packages "$home" || exit 12
+
+printf '== installing deluge %[3]s or newer\n'
+"$home/bin/pip" install --upgrade "deluge>=%[3]s" || exit 13
+
+printf '== checking it runs\n'
+"$home/bin/python" -c 'import libtorrent' || { printf 'the new deluge cannot see libtorrent\n' >&2; exit 14; }
+got=$("$home/bin/deluged" --version 2>&1 | head -1)
+case "$got" in
+  deluged*) printf '== %%s\n' "$got" ;;
+  *) printf 'the new deluged will not run: %%s\n' "$got" >&2; exit 14 ;;
+esac
+
+# The daemon HostMan runs picks the new deluge up only once its unit points at
+# it, and the unit is setup's to write.
+if [ -f "$conf/hostman.conf" ]; then
+  printf '== pointing the downloader at it\n'
+  dl=$(sed -n 's/^DOWNLOADS=//p' "$conf/hostman.conf" 2>/dev/null | head -1)
+  sh "$home/setup.sh" "$r" "$u" "$dl" "" "$rev" || exit 15
+  if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet -- %[4]s 2>/dev/null; then
+    printf '== restarting the downloader\n'
+    systemctl restart -- %[4]s || exit 16
+  fi
+fi
+printf '== ready\n'
+`
+
+// renderTorrentUpdate builds the script that starts an update: the runner and
+// the setup script are embedded in it, so this one string is everything HostMan
+// would put there.
+func renderTorrentUpdate() string {
+	runner := fmt.Sprintf(torrentUpdateRunScript, torrentHome, torrentStateDir, MinDelugeVersion, TorrentUnit)
+	return fmt.Sprintf(torrentUpdateScript,
+		torrentHome, torrentStateDir, strings.Join(torrentPieces, " "), TorrentPackages,
+		runner, renderTorrentSetup())
+}
+
+// UpdateDeluge gives HostMan's daemon a deluge of at least MinDelugeVersion. It
+// returns as soon as the update is under way; TorrentStatus is how its progress
+// is read, and where the version it ended up with shows.
+//
+// It is idempotent: an update already running is left to finish, and one run
+// on a host that already has the newer deluge installs nothing new. The host's
+// own deluge packages are never touched.
+func (s *Service) UpdateDeluge(ctx context.Context, h *store.Host) (*TorrentDaemon, error) {
+	if !userPattern.MatchString(h.Username) {
+		return nil, invalid("%q is not a user a downloader can run as", h.Username)
+	}
+	res, err := s.run(ctx, h, elevate(renderTorrentUpdate(), "", h.Username, torrentRevision()), "")
+	if err != nil {
+		return nil, err
+	}
+	switch res.ExitCode {
+	case 0:
+	case 3:
+		return nil, errNeedsRoot(h.Username, h.Name)
+	case 8:
+		return nil, invalid("deluge is not installed on %s. Install it there first: apt install %s",
+			h.Name, TorrentPackages)
+	case 10:
+		return nil, invalid("deluge is python, and %s has no python3", h.Name)
+	default:
+		return nil, failure(res, "could not start updating deluge on "+h.Name)
+	}
+	return s.TorrentStatus(ctx, h)
 }
 
 // TorrentAdd is a torrent to start downloading, in one of the two forms a phone

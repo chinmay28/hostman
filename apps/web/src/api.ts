@@ -181,10 +181,12 @@ export const api = {
     input: { source?: string; file?: string; name?: string; path?: string },
   ) => request<TorrentDaemon>(`/api/hosts/${id}/torrents`, { method: 'POST', ...json(input) }),
   /** Runs the daemon, or acts on one torrent. Removing takes the files with it
-   *  only when asked — that is the one thing here that cannot be undone. */
+   *  only when asked — that is the one thing here that cannot be undone.
+   *  "update" starts updating deluge itself, which runs on for minutes after
+   *  this answers: the daemon's `update` field is where it is followed. */
   torrentAction: (
     id: number,
-    action: 'start' | 'stop' | 'pause' | 'resume' | 'remove',
+    action: 'start' | 'stop' | 'pause' | 'resume' | 'remove' | 'update',
     torrentId = '',
     data = false,
   ) =>

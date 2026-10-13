@@ -12,6 +12,7 @@ import {
   Meter,
   SectionTitle,
   Sheet,
+  TailLog,
   useLoader,
 } from '../components/ui'
 import { bytes, uptime } from '../lib/format'
@@ -114,14 +115,18 @@ export default function HostTorrents() {
 
   // Following it while it is only seeding is the point of the slower pace: the
   // ratio and the upload figure are what somebody is watching then, and they
-  // are still moving after the download has finished.
+  // are still moving after the download has finished. An update of deluge is
+  // followed at the quick pace too: pip takes minutes, and a screen that made
+  // you tap to find out whether it had finished would be worse company than
+  // one that asks for you.
+  const updating = daemon?.update?.state === 'running'
   useEffect(() => {
-    if (!visible || !daemon?.running) {
+    if (!visible || (!daemon?.running && !updating)) {
       setPace(undefined)
       return
     }
-    setPace(moving ? BUSY_POLL_MS : CALM_POLL_MS)
-  }, [visible, daemon?.running, moving])
+    setPace(moving || updating ? BUSY_POLL_MS : CALM_POLL_MS)
+  }, [visible, daemon?.running, moving, updating])
 
   // The folder field opens on the folder the host named — the one it is using,
   // or, before setup, the one it would use. It follows the host rather than
@@ -145,6 +150,7 @@ export default function HostTorrents() {
 
   const setup = () => act('setup', () => api.setupTorrents(hostId, { downloads: folder }))
   const start = () => act('start', () => api.torrentAction(hostId, 'start'))
+  const update = () => act('update', () => api.torrentAction(hostId, 'update'))
   const stop = () => act('stop', () => api.torrentAction(hostId, 'stop'))
   const add = (input: { source?: string; file?: string; name?: string }) =>
     act('add', () => api.addTorrent(hostId, input))
@@ -170,136 +176,149 @@ export default function HostTorrents() {
         </Card>
       ) : !daemon.installed ? (
         <NotInstalled daemon={daemon} host={host?.name ?? 'this host'} onRefresh={reload} />
-      ) : !daemon.configured ? (
-        <SetUp
-          host={host?.name ?? 'this host'}
-          user={daemon.user}
-          sudo={host?.sudoOk !== false}
-          folder={folder}
-          onFolder={setFolder}
-          busy={busy}
-          onSetup={setup}
-        />
       ) : (
         <>
-          {daemon.stale && (
-            <Card>
-              <Banner tone="warn">
-                This host is running a unit an older HostMan wrote. Updating HostMan does not
-                reach back and rewrite it — setting the downloader up again does.
-              </Banner>
-              <p className="sub" style={{ marginTop: 0 }}>
-                Nothing is lost by it: deluge keeps its state, and everything downloading carries
-                on from where it is.
-              </p>
-              <button className="secondary block" onClick={setup} disabled={!!busy}>
-                {busy === 'setup' ? 'Setting up…' : 'Set it up again'}
-              </button>
-            </Card>
+          {(daemon.outdated || updating) && (
+            <Outdated
+              daemon={daemon}
+              host={host?.name ?? 'this host'}
+              sudo={host?.sudoOk !== false}
+              busy={busy}
+              onUpdate={update}
+            />
           )}
+          {!daemon.configured ? (
+            <SetUp
+              host={host?.name ?? 'this host'}
+              user={daemon.user}
+              sudo={host?.sudoOk !== false}
+              folder={folder}
+              onFolder={setFolder}
+              busy={busy}
+              onSetup={setup}
+            />
+          ) : (
+            <>
+              {daemon.stale && (
+                <Card>
+                  <Banner tone="warn">
+                    This host is running a unit an older HostMan wrote. Updating HostMan does not
+                    reach back and rewrite it — setting the downloader up again does.
+                  </Banner>
+                  <p className="sub" style={{ marginTop: 0 }}>
+                    Nothing is lost by it: deluge keeps its state, and everything downloading carries
+                    on from where it is.
+                  </p>
+                  <button className="secondary block" onClick={setup} disabled={!!busy}>
+                    {busy === 'setup' ? 'Setting up…' : 'Set it up again'}
+                  </button>
+                </Card>
+              )}
 
-          <AddTorrent daemon={daemon} busy={busy} onAdd={add} onFail={setFailure} />
+              <AddTorrent daemon={daemon} busy={busy} onAdd={add} onFail={setFailure} />
 
-          {daemon.trouble && !stale && (
-            <Banner tone="bad">
-              Deluge is set up here but would not answer: {daemon.trouble}. Its journal is on the{' '}
-              <Link to={`/hosts/${hostId}/service?name=${encodeURIComponent(daemon.unit)}`}>
-                Services
-              </Link>{' '}
-              screen.
-            </Banner>
+              {daemon.trouble && !stale && (
+                <Banner tone="bad">
+                  Deluge is set up here but would not answer: {daemon.trouble}. Its journal is on the{' '}
+                  <Link to={`/hosts/${hostId}/service?name=${encodeURIComponent(daemon.unit)}`}>
+                    Services
+                  </Link>{' '}
+                  screen.
+                </Banner>
+              )}
+
+              <Torrents
+                daemon={daemon}
+                torrents={torrents}
+                stale={stale}
+                busy={busy}
+                onPause={(t) => act('pause', () => api.torrentAction(hostId, 'pause', t.id))}
+                onResume={(t) => act('resume', () => api.torrentAction(hostId, 'resume', t.id))}
+                onRemove={setRemoving}
+              />
+
+              <Where daemon={daemon} hostId={hostId} />
+
+              <SectionTitle>The downloader</SectionTitle>
+              <Card>
+                <div className="row between" style={{ marginBottom: 10 }}>
+                  <div className="grow">
+                    <div className="title">
+                      {daemon.running ? 'Running' : 'Stopped'}
+                      {daemon.active === 'failed' ? ' — it failed' : ''}
+                    </div>
+                    <div className="sub">
+                      deluged {daemon.version ?? ''} as {daemon.user}
+                      {daemon.enabled ? ', back after a reboot' : ''}
+                    </div>
+                  </div>
+                  <Badge tone={daemon.running ? 'good' : daemon.active === 'failed' ? 'bad' : 'neutral'} dot>
+                    {daemon.sub ?? (daemon.running ? 'running' : 'stopped')}
+                  </Badge>
+                </div>
+                <p className="sub" style={{ marginTop: 0 }}>
+                  Stopping it pauses everything; deluge writes down where each torrent got to and picks
+                  it up again from there. Adding a torrent starts it if it is off, so there is usually
+                  no reason to touch this.
+                </p>
+                <button
+                  className="secondary block"
+                  onClick={daemon.running ? stop : start}
+                  disabled={!!busy}
+                >
+                  {busy === 'start' || busy === 'stop'
+                    ? 'Asking systemd…'
+                    : daemon.running
+                      ? 'Stop the downloader'
+                      : 'Start the downloader'}
+                </button>
+                <p className="sub" style={{ marginBottom: 0 }}>
+                  It is an ordinary service, so its log is on the{' '}
+                  <Link to={`/hosts/${hostId}/service?name=${encodeURIComponent(daemon.unit)}`}>
+                    Services
+                  </Link>{' '}
+                  screen.
+                </p>
+              </Card>
+
+              <SectionTitle>Settings</SectionTitle>
+              <SeedingRule
+                seeding={daemon.seeding}
+                busy={busy}
+                onSave={(ratio, removeIt) =>
+                  act('seeding', () => api.torrentSeeding(hostId, ratio, removeIt))
+                }
+              />
+              <ActiveLimit
+                limit={daemon.activeLimit ?? 0}
+                busy={busy}
+                onSave={(limit) => act('limit', () => api.torrentLimit(hostId, limit))}
+              />
+              <Card>
+                <FolderField folder={folder} onFolder={setFolder} />
+                <p className="sub" style={{ marginTop: 0 }}>
+                  Changing it is where the next torrent goes; the ones already downloading stay where
+                  they were put. Writing the downloader again is also how a host takes a newer
+                  HostMan's unit.
+                </p>
+                <button className="secondary block" onClick={setup} disabled={!!busy}>
+                  {busy === 'setup' ? 'Saving…' : 'Save and write it again'}
+                </button>
+              </Card>
+
+              <SectionTitle>Danger zone</SectionTitle>
+              <Card>
+                <p className="sub" style={{ marginTop: 0 }}>
+                  Removing takes the service and deluge's own state off {host?.name ?? 'the host'}, and
+                  with it the list of what was downloading. The deluge {host?.name ?? 'the host'}{' '}
+                  installed stays, and every file already downloaded stays exactly where it is.
+                </p>
+                <button className="danger block" onClick={() => setDropping(true)} disabled={!!busy}>
+                  Remove the downloader
+                </button>
+              </Card>
+            </>
           )}
-
-          <Torrents
-            daemon={daemon}
-            torrents={torrents}
-            stale={stale}
-            busy={busy}
-            onPause={(t) => act('pause', () => api.torrentAction(hostId, 'pause', t.id))}
-            onResume={(t) => act('resume', () => api.torrentAction(hostId, 'resume', t.id))}
-            onRemove={setRemoving}
-          />
-
-          <Where daemon={daemon} hostId={hostId} />
-
-          <SectionTitle>The downloader</SectionTitle>
-          <Card>
-            <div className="row between" style={{ marginBottom: 10 }}>
-              <div className="grow">
-                <div className="title">
-                  {daemon.running ? 'Running' : 'Stopped'}
-                  {daemon.active === 'failed' ? ' — it failed' : ''}
-                </div>
-                <div className="sub">
-                  deluged {daemon.version ?? ''} as {daemon.user}
-                  {daemon.enabled ? ', back after a reboot' : ''}
-                </div>
-              </div>
-              <Badge tone={daemon.running ? 'good' : daemon.active === 'failed' ? 'bad' : 'neutral'} dot>
-                {daemon.sub ?? (daemon.running ? 'running' : 'stopped')}
-              </Badge>
-            </div>
-            <p className="sub" style={{ marginTop: 0 }}>
-              Stopping it pauses everything; deluge writes down where each torrent got to and picks
-              it up again from there. Adding a torrent starts it if it is off, so there is usually
-              no reason to touch this.
-            </p>
-            <button
-              className="secondary block"
-              onClick={daemon.running ? stop : start}
-              disabled={!!busy}
-            >
-              {busy === 'start' || busy === 'stop'
-                ? 'Asking systemd…'
-                : daemon.running
-                  ? 'Stop the downloader'
-                  : 'Start the downloader'}
-            </button>
-            <p className="sub" style={{ marginBottom: 0 }}>
-              It is an ordinary service, so its log is on the{' '}
-              <Link to={`/hosts/${hostId}/service?name=${encodeURIComponent(daemon.unit)}`}>
-                Services
-              </Link>{' '}
-              screen.
-            </p>
-          </Card>
-
-          <SectionTitle>Settings</SectionTitle>
-          <SeedingRule
-            seeding={daemon.seeding}
-            busy={busy}
-            onSave={(ratio, removeIt) =>
-              act('seeding', () => api.torrentSeeding(hostId, ratio, removeIt))
-            }
-          />
-          <ActiveLimit
-            limit={daemon.activeLimit ?? 0}
-            busy={busy}
-            onSave={(limit) => act('limit', () => api.torrentLimit(hostId, limit))}
-          />
-          <Card>
-            <FolderField folder={folder} onFolder={setFolder} />
-            <p className="sub" style={{ marginTop: 0 }}>
-              Changing it is where the next torrent goes; the ones already downloading stay where
-              they were put. Writing the downloader again is also how a host takes a newer
-              HostMan's unit.
-            </p>
-            <button className="secondary block" onClick={setup} disabled={!!busy}>
-              {busy === 'setup' ? 'Saving…' : 'Save and write it again'}
-            </button>
-          </Card>
-
-          <SectionTitle>Danger zone</SectionTitle>
-          <Card>
-            <p className="sub" style={{ marginTop: 0 }}>
-              Removing takes the service and deluge's own state off {host?.name ?? 'the host'}, and
-              with it the list of what was downloading. Deluge stays installed, and every file
-              already downloaded stays exactly where it is.
-            </p>
-            <button className="danger block" onClick={() => setDropping(true)} disabled={!!busy}>
-              Remove the downloader
-            </button>
-          </Card>
         </>
       )}
 
@@ -400,6 +419,82 @@ function NotInstalled({
       <button className="secondary block" onClick={onRefresh}>
         Look again
       </button>
+    </Card>
+  )
+}
+
+/** Deluge is there and it is older than HostMan wants. What distributions
+ *  package is years behind what deluge's authors ship, and the console HostMan
+ *  drives is where the age shows — so the screen offers to update it. The
+ *  update leaves the host's own deluge packages alone: HostMan's daemon gets a
+ *  newer deluge in a python environment of its own, built on the libtorrent
+ *  the host already has, and its service is pointed at it. */
+function Outdated({
+  daemon,
+  host,
+  sudo,
+  busy,
+  onUpdate,
+}: {
+  daemon: TorrentDaemon
+  host: string
+  sudo: boolean
+  busy: string | null
+  onUpdate: () => void
+}) {
+  const update = daemon.update
+  const running = update?.state === 'running'
+  return (
+    <Card>
+      <div className="title">
+        Deluge {daemon.version ?? ''} on {host} is older than {daemon.minVersion}
+      </div>
+      <p className="sub">
+        It works, but deluge {daemon.minVersion} is what HostMan drives best. Updating does not
+        touch the deluge {host} installed: HostMan's own downloader gets a newer deluge in a
+        python environment of its own, under /opt/hostman-deluge, and its service is pointed at
+        it. Anything downloading carries on from where it is.
+      </p>
+      {running && (
+        <>
+          <Banner tone="warn">
+            Updating on the host — a few minutes on a Pi. It carries on if you leave this screen
+            or lock your phone.
+          </Banner>
+          <TailLog log={update.log} />
+        </>
+      )}
+      {update?.state === 'failed' && (
+        <>
+          <Banner tone="bad">
+            The update stopped{update.exit ? ` (exit ${update.exit})` : ''}. The end of its log is
+            below — pip's last line is usually the reason. The deluge that was here is still in
+            use.
+          </Banner>
+          <TailLog log={update.log} />
+        </>
+      )}
+      {update?.state === 'lost' && (
+        <Banner tone="bad">
+          An update started here and stopped without saying how it ended — a reboot in the
+          middle of it would do that. Starting it again picks up cleanly.
+        </Banner>
+      )}
+      {!sudo && !running && (
+        <Banner tone="warn">
+          {daemon.user} needs passwordless sudo here first — installing wants root. Set up access
+          from the host's page.
+        </Banner>
+      )}
+      {!running && (
+        <button className="primary block" onClick={onUpdate} disabled={!!busy || !sudo}>
+          {busy === 'update'
+            ? 'Starting…'
+            : update?.state === 'ok'
+              ? 'Update deluge again'
+              : `Update deluge to ${daemon.minVersion}`}
+        </button>
+      )}
     </Card>
   )
 }
