@@ -493,6 +493,21 @@ a host where it has no business being at all. So a host without it gets the line
 to run, copyable, and nothing else until it has been run: `sudo apt install -y
 deluged deluge-console`.
 
+**But the version is HostMan's to insist on.** The deluge a distribution
+packages is years behind the one its authors ship — Debian 12 has 2.0, Ubuntu
+24.04 has 2.1, and 2.2 is in neither — and `deluge-console`, which is how HostMan
+drives it, is where the age shows. So a host whose deluge is older than 2.2 is
+told so, and offered an update. The update does not touch the host's packages:
+HostMan's own daemon gets a newer deluge in a python environment of its own,
+under `/opt/hostman-deluge`, made with the host's python and built on the
+`python3-libtorrent` the host's packages already brought — pip fetches deluge
+and whatever of its python dependencies the host is too old for, and nothing
+else. The service is then pointed at it and restarted if it was running; the
+`deluged` the host installed stays exactly what it was, for whatever else runs
+it. Like the remote session's install it runs detached and takes minutes, and
+the screen follows its log. Removing the downloader takes HostMan's copy of
+deluge with it, and never the host's.
+
 **The daemon HostMan sets up is HostMan's own.** Its state lives in
 `/var/lib/hostman-torrent`, it runs as the SSH user, and it answers on port
 58946 rather than deluge's own 58846 — so a `deluged` the host already runs
@@ -553,8 +568,9 @@ are doing — and like the seeding rule it lives on the daemon itself.
 
 Removing a torrent asks whether the part already downloaded goes with it, because
 that is the one thing here that cannot be undone. Removing the downloader never
-touches the files at all: the service and deluge's state go, deluge stays
-installed, and everything already downloaded stays exactly where it is.
+touches the files at all: the service, deluge's state and HostMan's own copy of
+deluge go, the deluge the host installed stays, and everything already downloaded
+stays exactly where it is.
 
 **Terminal** is a login shell on the host, with a pty behind it — the same
 thing `ssh you@host` gives you, so `htop` draws, `vim` works, tab completion
@@ -977,11 +993,11 @@ Quoting is tested the same way — every path a person could type is handed to
 | `POST`   | `/api/hosts/{id}/remote`            | install or reconfigure it; the packages install detached |
 | `DELETE` | `/api/hosts/{id}/remote`            | remove it, `?purge=true` to delete the browser profile too |
 | `POST`   | `/api/hosts/{id}/remote/action`     | start it (with the page to open) or stop it |
-| `GET`    | `/api/hosts/{id}/torrents`          | the downloader: whether deluge is installed, what is set up, and what it is downloading |
+| `GET`    | `/api/hosts/{id}/torrents`          | the downloader: whether deluge is installed and new enough, what is set up, and what it is downloading |
 | `POST`   | `/api/hosts/{id}/torrents`          | add one: a magnet link, the address of a `.torrent`, or the file itself, base64 |
-| `POST`   | `/api/hosts/{id}/torrents/action`   | start or stop the daemon; pause, resume or remove a torrent (`"data":true` deletes what it downloaded); or `"seeding"` with a `ratio` and `remove` to set what happens after a torrent finishes |
+| `POST`   | `/api/hosts/{id}/torrents/action`   | start or stop the daemon; pause, resume or remove a torrent (`"data":true` deletes what it downloaded); `"seeding"` with a `ratio` and `remove` to set what happens after a torrent finishes; `"limit"` to set how many run at once; or `"update"` to give the daemon a deluge of at least 2.2 (detached; followed through `GET`) |
 | `POST`   | `/api/hosts/{id}/torrents/setup`    | write the daemon onto the host, or change where it downloads |
-| `DELETE` | `/api/hosts/{id}/torrents/setup`    | take it off; deluge and the downloaded files stay |
+| `DELETE` | `/api/hosts/{id}/torrents/setup`    | take it off; the host's deluge and the downloaded files stay |
 | `GET`    | `/api/hosts/{id}/files`             | list a directory, `?path=` (default: home) |
 | `DELETE` | `/api/hosts/{id}/files`             | delete `?path=`, `&recursive=true` for a full directory |
 | `GET`    | `/api/hosts/{id}/files/content`     | read a file, `?path=`                |

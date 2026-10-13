@@ -463,8 +463,15 @@ export interface TorrentDaemon {
   /** The deluge commands that are missing, which the screen turns into the
    *  line to run. */
   missing?: string[]
-  /** deluged's own version. */
+  /** deluged's own version — HostMan's own deluge where the update has put
+   *  one, the host's otherwise. */
   version?: string
+  /** The oldest deluge HostMan is happy to drive, and whether the one here is
+   *  older than that. An outdated deluge still works; the update is offered. */
+  minVersion: string
+  outdated?: boolean
+  /** Where updating deluge got to, on a host where one has been started. */
+  update?: TorrentUpdate
   /** Whether HostMan has written the daemon onto this host. */
   configured: boolean
   /** Whether a torrent could be added right now. */
@@ -500,6 +507,18 @@ export interface TorrentDaemon {
   /** What deluge said when it could not be asked. A state to report rather
    *  than an error: everything else on the screen is still true. */
   trouble?: string
+}
+
+/** Where an update of deluge got to. It runs detached on the host, so this is
+ *  read back from what it left there rather than from anything the app held. */
+export interface TorrentUpdate {
+  /** "lost" is one that started and then went without saying how it ended,
+   *  which is what a reboot in the middle of it looks like. */
+  state: 'running' | 'ok' | 'failed' | 'lost'
+  /** The exit status behind a failed update. */
+  exit?: number
+  /** The tail of its log: what pip is doing, or why it stopped. */
+  log?: string
 }
 
 /** What becomes of a torrent once it has finished. Left alone deluge seeds for
