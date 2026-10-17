@@ -244,6 +244,11 @@ func (m *Manager) Open(ctx context.Context, h *store.Host, opts Options) (*Sessi
 	if opts.Mode == "" {
 		opts.Mode = claudecli.ModeDefault
 	}
+	if opts.Resume != "" {
+		// Picking a conversation up keeps its id; the CLI's hello confirms
+		// it, or corrects it if the conversation was forked.
+		opts.SessionID = opts.Resume
+	}
 	if opts.SessionID == "" {
 		opts.SessionID = claudecli.NewSessionID()
 	}
@@ -278,7 +283,7 @@ func (m *Manager) Open(ctx context.Context, h *store.Host, opts Options) (*Sessi
 	m.mu.Lock()
 	m.sessions[s.id] = s
 	m.mu.Unlock()
-	m.log.Info("claude: opened a session", "host", h.Name, "session", s.id, "dir", opts.Dir, "model", opts.Model, "mode", opts.Mode)
+	m.log.Info("claude: opened a session", "host", h.Name, "session", s.id, "dir", opts.Dir, "model", opts.Model, "mode", opts.Mode, "resumed", opts.Resume)
 	return s, nil
 }
 
@@ -334,6 +339,23 @@ func (m *Manager) ForHost(hostID int64) []*Session {
 	}
 	sortByStart(out)
 	return out
+}
+
+// Holding returns the running session holding a CLI conversation on a host,
+// if there is one, so a conversation listed from the host's files can be
+// rejoined rather than resumed a second time.
+func (m *Manager) Holding(hostID int64, cliSessionID string) (*Session, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, s := range m.sessions {
+		if s.hostID != hostID || !s.Running() {
+			continue
+		}
+		if s.Info().CLISessionID == cliSessionID {
+			return s, true
+		}
+	}
+	return nil, false
 }
 
 // Close ends a session and forgets it.
@@ -735,6 +757,9 @@ func (s *Session) handle(ev claudecli.Event) {
 	switch ev.Kind {
 	case claudecli.KindInit:
 		s.model, s.mode, s.cwd = ev.Model, ev.Mode, ev.Cwd
+		if ev.SessionID != "" {
+			s.opts.SessionID = ev.SessionID
+		}
 	case claudecli.KindPermission:
 		s.pending[ev.RequestID] = ev
 	case claudecli.KindPermissionCancelled:

@@ -91,6 +91,37 @@ func TestSendLogsTheMessageAndNamesTheSession(t *testing.T) {
 	}
 }
 
+func TestAResumedConversationKeepsItsIDUnlessTheCLISaysOtherwise(t *testing.T) {
+	m, _ := testManager(t)
+	id := claudecli.NewSessionID()
+	s, p := adopt(t, m, Options{Resume: id, SessionID: id})
+	if got := s.Info().CLISessionID; got != id {
+		t.Fatalf("cli session id = %s, want the resumed %s", got, id)
+	}
+	if held, ok := m.Holding(1, id); !ok || held != s {
+		t.Fatal("the session holding the conversation was not found")
+	}
+	if _, ok := m.Holding(2, id); ok {
+		t.Fatal("found on the wrong host")
+	}
+	// The CLI forked the conversation: its hello names the new id, and that
+	// is the one to resume from now on.
+	forked := claudecli.NewSessionID()
+	p.Emit(`{"type":"system","subtype":"init","session_id":"` + forked + `","model":"m","permissionMode":"default","cwd":"/h"}`)
+	read(t, s, 0)
+	if got := s.Info().CLISessionID; got != forked {
+		t.Fatalf("cli session id = %s, want the forked %s", got, forked)
+	}
+	if _, ok := m.Holding(1, id); ok {
+		t.Fatal("still found under the id the CLI moved away from")
+	}
+	p.Exit(0, "")
+	read(t, s, 1)
+	if _, ok := m.Holding(1, forked); ok {
+		t.Fatal("an ended session is not holding anything")
+	}
+}
+
 func TestReadResumesWhereAScreenLeftOff(t *testing.T) {
 	m, _ := testManager(t)
 	s, p := adopt(t, m, Options{})

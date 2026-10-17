@@ -689,8 +689,16 @@ CLI's acknowledgement is what the screen waits for before saying so.
 
 **The conversation is the CLI's, so it survives HostMan.** Each session has a
 CLI session id, and `claude --resume` on the host picks the same conversation
-up in a terminal — which is also the way back in after HostMan has been
-restarted, since the process itself dies with it.
+up in a terminal. HostMan does the same from the phone: under the open sessions
+the Claude screen lists every conversation the CLI has on file for the SSH user
+— the title the CLI gave it or the first thing you said, the folder, when it
+was last touched — and **Resume** starts a new process on the same conversation
+with everything that was said. That is the way back in after a session was let
+go for being idle, or after HostMan was restarted, since the process itself dies
+with it; a conversation a running session already holds says **Open** instead
+and rejoins it, so there is never a second process writing the same file. The
+list is read from the CLI's own files on the host, head and tail of each, so
+fifty long conversations cost one round trip.
 
 **Scheduled jobs** edits the crontab, the whole file at once, the way
 `crontab -e` does — for the user HostMan signs in as, and for root. Cron is
@@ -980,7 +988,8 @@ Quoting is tested the same way — every path a person could type is handed to
 | `DELETE` | `/api/hosts/{id}/claude/login`      | cancel a waiting sign-in             |
 | `POST`   | `/api/hosts/{id}/claude/key`        | store an API key in the CLI's settings, `{"key"}` |
 | `GET`    | `/api/hosts/{id}/claude/sessions`   | the conversations open on this host  |
-| `POST`   | `/api/hosts/{id}/claude/sessions`   | start one, `{"dir","model","mode","name"}` |
+| `GET`    | `/api/hosts/{id}/claude/history`    | the conversations the CLI has on file for the SSH user, newest first, with the session holding each open if one is |
+| `POST`   | `/api/hosts/{id}/claude/sessions`   | start one, `{"dir","model","mode","name"}`, or pick one up from the history with `{"resume","dir","mode"}` |
 | `GET`    | `/api/claude/{sid}`                 | one session: model, mode, busy, pending questions, cost |
 | `DELETE` | `/api/claude/{sid}`                 | end it                               |
 | `GET`    | `/api/claude/{sid}/stream`          | the conversation as server-sent events, `?from=` an event number to resume |

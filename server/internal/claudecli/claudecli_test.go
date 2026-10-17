@@ -22,6 +22,13 @@ func one(t *testing.T, line string) Event {
 	return evs[0]
 }
 
+func TestDecodeInitCarriesTheSessionID(t *testing.T) {
+	evs, err := Decode([]byte(`{"type":"system","subtype":"init","session_id":"abc-1","model":"m","permissionMode":"default","cwd":"/h"}`))
+	if err != nil || len(evs) != 1 || evs[0].SessionID != "abc-1" {
+		t.Fatalf("init = %+v, %v", evs, err)
+	}
+}
+
 func TestDecodeInit(t *testing.T) {
 	ev := one(t, `{"type":"system","subtype":"init","cwd":"/home/pi/apps","session_id":"11d9","tools":["Bash"],"model":"claude-opus-5[1m]","permissionMode":"default"}`)
 	if ev.Kind != KindInit || ev.Model != "claude-opus-5[1m]" || ev.Mode != "default" || ev.Cwd != "/home/pi/apps" {
@@ -236,6 +243,36 @@ func TestCommand(t *testing.T) {
 	}
 	if _, err := Command(Options{Mode: ModeDefault}); err == nil {
 		t.Error("a session without an id was accepted")
+	}
+}
+
+func TestCommandResumesInsteadOfNaming(t *testing.T) {
+	id := NewSessionID()
+	cmd, err := Command(Options{Dir: "~/apps", Mode: ModeDefault, Resume: id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(cmd, "'--resume' '"+id+"'") {
+		t.Errorf("command does not resume %s:\n%s", id, cmd)
+	}
+	if strings.Contains(cmd, "--session-id") {
+		t.Errorf("a resumed conversation was also given a new id:\n%s", cmd)
+	}
+	for _, bad := range []string{"latest", "../x", "0000-1", id + "'"} {
+		if _, err := Command(Options{Mode: ModeDefault, Resume: bad}); err == nil {
+			t.Errorf("resume %q was accepted", bad)
+		}
+	}
+}
+
+func TestIsSessionID(t *testing.T) {
+	if !IsSessionID(NewSessionID()) || !IsSessionID("F205A364-BA18-51AB-9425-3171ADFA3E1F") {
+		t.Error("a UUID was refused")
+	}
+	for _, bad := range []string{"", "f205a364ba1851ab94253171adfa3e1f", "f205a364-ba18-51ab-9425-3171adfa3e1", "g205a364-ba18-51ab-9425-3171adfa3e1f"} {
+		if IsSessionID(bad) {
+			t.Errorf("%q passed as a session id", bad)
+		}
 	}
 }
 

@@ -68,6 +68,32 @@ type Options struct {
 	// SessionID is the CLI's session id, a UUID chosen up front so the same
 	// conversation can be resumed later. NewSessionID makes one.
 	SessionID string
+	// Resume is the id of a conversation already on the host, to pick up
+	// where it was left instead of starting a new one. The CLI keeps the
+	// conversation under the same id, which is what SessionID then is.
+	Resume string
+}
+
+// IsSessionID reports whether s has the shape of a CLI session id: a UUID in
+// its hyphenated form. It is the one thing --resume is handed, so nothing
+// else reaches the command line.
+func IsSessionID(s string) bool {
+	if len(s) != 36 {
+		return false
+	}
+	for i, c := range s {
+		switch i {
+		case 8, 13, 18, 23:
+			if c != '-' {
+				return false
+			}
+		default:
+			if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // NewSessionID returns a random version-4 UUID, which is the only id the CLI
@@ -107,7 +133,10 @@ func Command(o Options) (string, error) {
 	if !ValidMode(o.Mode) {
 		return "", fmt.Errorf("%q is not a permission mode", o.Mode)
 	}
-	if o.SessionID == "" {
+	if o.Resume != "" && !IsSessionID(o.Resume) {
+		return "", fmt.Errorf("%q is not a session id", o.Resume)
+	}
+	if o.SessionID == "" && o.Resume == "" {
 		return "", errors.New("a session id is required")
 	}
 	args := []string{
@@ -120,7 +149,13 @@ func Command(o Options) (string, error) {
 		// Lets a session switch to bypassing permissions later; starting in
 		// that mode still needs the flag below.
 		"--allow-dangerously-skip-permissions",
-		"--session-id", o.SessionID,
+	}
+	// A resumed conversation already has its id; a new one is told its id
+	// up front so it can be resumed in turn.
+	if o.Resume != "" {
+		args = append(args, "--resume", o.Resume)
+	} else {
+		args = append(args, "--session-id", o.SessionID)
 	}
 	if o.Mode == ModeBypass {
 		args = append(args, "--dangerously-skip-permissions")
@@ -279,10 +314,13 @@ const (
 type Event struct {
 	Kind string `json:"kind"`
 
-	// Init, and the model and mode changes.
-	Model string `json:"model,omitempty"`
-	Mode  string `json:"mode,omitempty"`
-	Cwd   string `json:"cwd,omitempty"`
+	// Init, and the model and mode changes. SessionID is the id the CLI
+	// gave the conversation, which is the one asked for unless a resumed
+	// conversation was forked.
+	Model     string `json:"model,omitempty"`
+	Mode      string `json:"mode,omitempty"`
+	Cwd       string `json:"cwd,omitempty"`
+	SessionID string `json:"sessionId,omitempty"`
 
 	// Assistant: what was said and what was used, in order.
 	Blocks []Block `json:"blocks,omitempty"`
@@ -437,7 +475,7 @@ func Decode(data []byte) ([]Event, error) {
 func decodeSystem(m *message) []Event {
 	switch m.Subtype {
 	case "init":
-		return []Event{{Kind: KindInit, Model: m.Model, Mode: m.PermissionMode, Cwd: m.Cwd}}
+		return []Event{{Kind: KindInit, Model: m.Model, Mode: m.PermissionMode, Cwd: m.Cwd, SessionID: m.SessionID}}
 	case "api_retry":
 		text := "Retrying the API"
 		if m.Retries > 0 {

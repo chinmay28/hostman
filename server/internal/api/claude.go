@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/chinmay28/hostman/server/internal/claude"
+	"github.com/chinmay28/hostman/server/internal/claudecli"
 	"github.com/chinmay28/hostman/server/internal/hostops"
 )
 
@@ -176,6 +177,45 @@ type claudeOpenRequest struct {
 	Model string `json:"model"`
 	Mode  string `json:"mode"`
 	Name  string `json:"name"`
+	// Resume is the CLI session id of a conversation already on the host,
+	// from the history listing, to pick up instead of starting afresh.
+	Resume string `json:"resume"`
+}
+
+// claudeHistoryEntry is a conversation on the host, and the HostMan session
+// holding it open if one is: a screen offers to rejoin that one rather than
+// start a second process on the same conversation.
+type claudeHistoryEntry struct {
+	hostops.ClaudeConversation
+	SessionID string `json:"sessionId,omitempty"`
+}
+
+// handleClaudeHistory lists the conversations the CLI has on file for the
+// SSH user, newest first. This is the answer to "where did my session go":
+// the process HostMan held may have been let go, but the conversation is on
+// the host, and any of these can be resumed.
+func (s *Server) handleClaudeHistory(w http.ResponseWriter, r *http.Request) {
+	h, err := s.hostFromPath(r)
+	if err != nil {
+		s.writeStoreError(w, err, "list Claude's conversations")
+		return
+	}
+	ctx, cancel := opContext(r)
+	defer cancel()
+	found, err := s.Ops.ClaudeConversations(ctx, h)
+	if err != nil {
+		s.writeOpError(w, err, "list Claude's conversations")
+		return
+	}
+	out := make([]claudeHistoryEntry, 0, len(found))
+	for _, c := range found {
+		e := claudeHistoryEntry{ClaudeConversation: c}
+		if sess, ok := s.Claude.Holding(h.ID, c.ID); ok {
+			e.SessionID = sess.ID()
+		}
+		out = append(out, e)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) handleListClaudeSessions(w http.ResponseWriter, r *http.Request) {
@@ -209,15 +249,26 @@ func (s *Server) handleOpenClaudeSession(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "the name is too long")
 		return
 	}
+	if req.Resume != "" && !claudecli.IsSessionID(req.Resume) {
+		writeError(w, http.StatusBadRequest, "that is not a Claude session id")
+		return
+	}
+	if req.Resume != "" {
+		// One process per conversation: a second would write the same file.
+		if sess, ok := s.Claude.Holding(h.ID, req.Resume); ok {
+			writeJSON(w, http.StatusOK, sess.Info())
+			return
+		}
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), claudeOpenTimeout)
 	defer cancel()
 
-	sess, err := s.Claude.Open(ctx, h, claude.Options{Dir: req.Dir, Model: req.Model, Mode: req.Mode, Name: req.Name})
+	sess, err := s.Claude.Open(ctx, h, claude.Options{Dir: req.Dir, Model: req.Model, Mode: req.Mode, Name: req.Name, Resume: req.Resume})
 	if err != nil {
 		s.writeClaudeError(w, err, "open a Claude session")
 		return
 	}
-	s.Log.Info("api: opened a Claude session", "host", h.Name, "session", sess.ID(), "mode", req.Mode)
+	s.Log.Info("api: opened a Claude session", "host", h.Name, "session", sess.ID(), "mode", req.Mode, "resumed", req.Resume)
 	writeJSON(w, http.StatusCreated, sess.Info())
 }
 

@@ -53,6 +53,7 @@ func TestClaudeOnAMissingHostIs404(t *testing.T) {
 		{"POST", "/api/hosts/999/claude/login/code", `{"code":"abc"}`},
 		{"POST", "/api/hosts/999/claude/key", `{"key":"sk-ant-x"}`},
 		{"GET", "/api/hosts/999/claude/sessions", ""},
+		{"GET", "/api/hosts/999/claude/history", ""},
 		{"POST", "/api/hosts/999/claude/sessions", `{}`},
 	} {
 		if w := do(t, h, tc.method, tc.path, tc.body); w.Code != http.StatusNotFound {
@@ -209,5 +210,31 @@ func TestClaudeKeyAndCodeAreCheckedBeforeTheHostIsAsked(t *testing.T) {
 	}
 	if w := do(t, h, "POST", fmt.Sprintf("/api/hosts/%d/claude/login/code", id), `{"code":"rm -rf /"}`); w.Code != http.StatusBadRequest {
 		t.Fatalf("bad code = %d (body %s)", w.Code, w.Body)
+	}
+}
+
+func TestResumingAnythingButASessionIDIsRefusedBeforeTheHostIsAsked(t *testing.T) {
+	_, h := testServer(t, "")
+	id := newHost(t, h)
+	for _, bad := range []string{"latest", "../../etc", "f205a364-ba18-51ab-9425"} {
+		w := do(t, h, "POST", fmt.Sprintf("/api/hosts/%d/claude/sessions", id), fmt.Sprintf(`{"resume":%q}`, bad))
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("resume %q = %d, want 400 (body %s)", bad, w.Code, w.Body)
+		}
+	}
+}
+
+func TestResumingAConversationAlreadyOpenRejoinsIt(t *testing.T) {
+	s, h := testServer(t, "")
+	id := newHost(t, h)
+	cli := "f205a364-ba18-51ab-9425-3171adfa3e1f"
+	sess, p := s.Claude.AdoptLoopback(id, "pi", claude.Options{Resume: cli, SessionID: cli})
+	t.Cleanup(func() { p.Close() })
+
+	// Opening the same conversation again hands back the session holding it
+	// rather than starting a second process on the same file.
+	w := do(t, h, "POST", fmt.Sprintf("/api/hosts/%d/claude/sessions", id), fmt.Sprintf(`{"resume":%q}`, cli))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"id":"`+sess.ID()+`"`) {
+		t.Fatalf("resume of an open conversation = %d %s", w.Code, w.Body)
 	}
 }
