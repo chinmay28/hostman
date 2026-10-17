@@ -5,8 +5,8 @@ import ClaudeChat from '../components/ClaudeChat'
 import { Page } from '../components/Layout'
 import { Badge, Banner, Card, Copyable, Field, Loading, SectionTitle, useLoader } from '../components/ui'
 import { MODELS, MODES, dollars, modelName } from '../lib/claude'
-import { time } from '../lib/format'
-import type { ClaudeHost, ClaudeSession } from '../types'
+import { ago, time } from '../lib/format'
+import type { ClaudeConversation, ClaudeHost, ClaudeSession } from '../types'
 
 /** The installer, for somebody who would rather run it themselves. */
 const INSTALL = 'curl -fsSL https://claude.ai/install.sh | bash'
@@ -33,6 +33,13 @@ const PREFS_KEY = 'hostman.claude.start'
  * Talking to it is the rest. A session belongs to HostMan, not to this
  * screen, exactly as a shell does: leaving keeps it open, coming back rejoins
  * it with the whole conversation, and ending it is a thing you do on purpose.
+ *
+ * The conversation, though, belongs to the CLI, and outlives the session:
+ * HostMan lets a process go after an hour alone and loses all of them on a
+ * restart, but what was said is on the host's disk, and the CLI picks it up
+ * again from there. So under the open sessions is everything the host has on
+ * file, and a conversation that "disappeared" is a tap away from where it
+ * was.
  */
 export default function HostClaude() {
   const { id } = useParams()
@@ -46,6 +53,7 @@ export default function HostClaude() {
   const host = useLoader(() => api.host(hostId), [hostId])
   const status = useLoader(() => api.claude(hostId), [hostId], pace)
   const open = useLoader(() => api.claudeSessions(hostId), [hostId], session ? undefined : 5000)
+  const history = useLoader(() => api.claudeHistory(hostId), [hostId])
 
   // Polling belongs to an install or a sign-in in progress and to nothing
   // else: it stops the moment either is settled.
@@ -71,8 +79,23 @@ export default function HostClaude() {
   const leave = useCallback(() => {
     setSession(null)
     open.reload()
+    history.reload()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Picking a conversation up: the process HostMan holds open on it if there
+  // is one, a new one on the same file otherwise.
+  const resume = (c: ClaudeConversation) => {
+    const held = (open.data ?? []).find((s) => s.running && s.cliSessionId === c.id)
+    if (held) {
+      setSession(held)
+      return
+    }
+    act('resume:' + c.id, async () => {
+      const s = await api.openClaude(hostId, { dir: c.dir, mode: 'default', resume: c.id })
+      setSession(s)
+    })
+  }
 
   const end = async () => {
     if (session) {
@@ -181,6 +204,15 @@ export default function HostClaude() {
             </>
           )}
 
+          <History
+            host={name}
+            conversations={history.data}
+            error={history.error}
+            open={open.data ?? []}
+            busy={busy}
+            onResume={resume}
+          />
+
           <SectionTitle>Claude itself</SectionTitle>
           <Card>
             <p className="sub" style={{ marginTop: 0 }}>
@@ -251,6 +283,87 @@ function SessionRow({ s, onOpen }: { s: ClaudeSession; onOpen: () => void }) {
         </Badge>
       )}
     </button>
+  )
+}
+
+/** How many earlier conversations to show before asking to see the rest. */
+const HISTORY_FOLD = 6
+
+/** What the host has on file. The ones a HostMan session holds open say so
+ *  and rejoin it; the rest resume, which starts a process on the same
+ *  conversation. Nothing is lost by a session having been let go. */
+function History({
+  host,
+  conversations,
+  error,
+  open,
+  busy,
+  onResume,
+}: {
+  host: string
+  conversations: ClaudeConversation[] | null
+  error: string | null
+  open: ClaudeSession[]
+  busy: string | null
+  onResume: (c: ClaudeConversation) => void
+}) {
+  const [all, setAll] = useState(false)
+  const heldBy = (c: ClaudeConversation) => c.sessionId ?? open.find((s) => s.running && s.cliSessionId === c.id)?.id
+  if (!conversations && !error) {
+    return (
+      <>
+        <SectionTitle>Earlier conversations</SectionTitle>
+        <Card>
+          <div className="sub">Looking on {host} for conversations to pick up…</div>
+        </Card>
+      </>
+    )
+  }
+  const list = conversations ?? []
+  const shown = all ? list : list.slice(0, HISTORY_FOLD)
+  return (
+    <>
+      <SectionTitle>Earlier conversations</SectionTitle>
+      {error && <Banner tone="bad">{error}</Banner>}
+      {!error && list.length === 0 && (
+        <Card>
+          <div className="sub">Nothing on file yet. Conversations stay on {host} after their session ends, and show up here.</div>
+        </Card>
+      )}
+      {list.length > 0 && (
+        <p className="sub" style={{ margin: '2px 4px 8px' }}>
+          Kept by Claude on {host}, newest first. A session that ended or was let go is still here; resuming it
+          carries on with everything that was said.
+        </p>
+      )}
+      {shown.map((c) => {
+        const held = heldBy(c)
+        const starting = busy === 'resume:' + c.id
+        return (
+          <button key={c.id} className="card row between" onClick={() => onResume(c)} disabled={!!busy}>
+            <div className="grow" style={{ textAlign: 'left' }}>
+              <div className="title">{c.name || 'Untitled'}</div>
+              <div className="sub">
+                {c.dir}
+                {c.branch ? ` · ${c.branch}` : ''} · {ago(c.modifiedAt)}
+              </div>
+            </div>
+            {held ? (
+              <Badge tone="good" dot>
+                Open
+              </Badge>
+            ) : (
+              <Badge tone="accent">{starting ? 'Resuming…' : 'Resume'}</Badge>
+            )}
+          </button>
+        )
+      })}
+      {list.length > HISTORY_FOLD && !all && (
+        <button className="secondary block" onClick={() => setAll(true)}>
+          Show all {list.length}
+        </button>
+      )}
+    </>
   )
 }
 

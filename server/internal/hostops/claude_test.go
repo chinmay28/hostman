@@ -283,3 +283,131 @@ func TestJobState(t *testing.T) {
 		}
 	}
 }
+
+// A conversation file is the CLI's own, one JSON object per line. These are
+// the lines a listing reads, in the shapes the CLI writes them.
+func conversationFile(t *testing.T, home, dir, id string, lines ...string) string {
+	t.Helper()
+	project := filepath.Join(home, ".claude", "projects", strings.ReplaceAll(dir, "/", "-"))
+	if err := os.MkdirAll(project, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(project, id+".jsonl")
+	if err := os.WriteFile(file, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return file
+}
+
+func userLine(dir, when, text string) string {
+	return fmt.Sprintf(`{"type":"user","message":{"role":"user","content":%q},"uuid":"u","timestamp":%q,"cwd":%q,"sessionId":"s","gitBranch":"main","isSidechain":false}`, text, when, dir)
+}
+
+func history(t *testing.T, env []string) []ClaudeConversation {
+	t.Helper()
+	out, errOut, code := runIn(t, env, asUser(fmt.Sprintf(claudeHistoryScript, MaxClaudeHistory, claudeHistoryHead, claudeHistoryTail)), "")
+	if code != 0 {
+		t.Fatalf("history exited %d: %s", code, errOut)
+	}
+	return parseClaudeHistory(out)
+}
+
+func TestClaudeHistoryOnAHostWithNoneIsEmpty(t *testing.T) {
+	_, env := claudeHome(t, true)
+	if got := history(t, env); len(got) != 0 {
+		t.Fatalf("history = %+v", got)
+	}
+}
+
+func TestClaudeHistoryListsTheCLIsConversationsNewestFirst(t *testing.T) {
+	home, env := claudeHome(t, true)
+	old := conversationFile(t, home, "/home/pi/apps", "11111111-1111-4111-8111-111111111111",
+		userLine("/home/pi/apps", "2026-09-01T10:00:00.000Z", "Fix the deploy script\nIt fails on reboot"),
+		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"On it."}]},"timestamp":"2026-09-01T10:00:05.000Z","cwd":"/home/pi/apps"}`,
+	)
+	titled := conversationFile(t, home, "/home/pi", "22222222-2222-4222-8222-222222222222",
+		`{"type":"queue-operation","operation":"enqueue","timestamp":"2026-09-02T09:00:00.000Z","sessionId":"s"}`,
+		`{"type":"user","isMeta":true,"message":{"role":"user","content":"<local-command-caveat>ignored</local-command-caveat>"},"timestamp":"2026-09-02T09:00:00.000Z","cwd":"/home/pi"}`,
+		`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"<system-reminder>not me</system-reminder>"},{"type":"text","text":"Why is the Pi hot?"}]},"timestamp":"2026-09-02T09:00:01.000Z","cwd":"/home/pi","gitBranch":""}`,
+		`{"type":"ai-title","aiTitle":"Investigating Pi temperature","sessionId":"s"}`,
+		`{"type":"custom-title","customTitle":"Hot Pi","sessionId":"s"}`,
+	)
+	// A file the CLI opened and nobody spoke into: nothing to show.
+	empty := conversationFile(t, home, "/home/pi", "33333333-3333-4333-8333-333333333333",
+		`{"type":"queue-operation","operation":"enqueue","timestamp":"2026-09-03T09:00:00.000Z","sessionId":"s"}`,
+	)
+	// A subagent's transcript lives a level down and is not resumable.
+	sub := filepath.Join(filepath.Dir(titled), "22222222-2222-4222-8222-222222222222", "subagents")
+	os.MkdirAll(sub, 0o700)
+	os.WriteFile(filepath.Join(sub, "agent-1.jsonl"), []byte(userLine("/home/pi", "2026-09-04T09:00:00.000Z", "subagent work")+"\n"), 0o600)
+
+	t1 := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
+	os.Chtimes(old, t1, t1)
+	os.Chtimes(titled, t2, t2)
+	os.Chtimes(empty, t2.Add(time.Hour), t2.Add(time.Hour))
+
+	got := history(t, env)
+	if len(got) != 2 {
+		t.Fatalf("history = %+v, want two", got)
+	}
+	a, b := got[0], got[1]
+	if a.ID != "22222222-2222-4222-8222-222222222222" || a.Name != "Hot Pi" || a.Dir != "/home/pi" || a.Branch != "" {
+		t.Errorf("newest = %+v", a)
+	}
+	if !a.ModifiedAt.Equal(t2) || a.StartedAt == nil || !a.StartedAt.Equal(time.Date(2026, 9, 2, 9, 0, 0, 0, time.UTC)) {
+		t.Errorf("newest times = %v / %v", a.ModifiedAt, a.StartedAt)
+	}
+	if b.ID != "11111111-1111-4111-8111-111111111111" || b.Name != "Fix the deploy script" || b.Dir != "/home/pi/apps" || b.Branch != "main" || b.Size == 0 {
+		t.Errorf("older = %+v", b)
+	}
+}
+
+func TestClaudeHistoryReadsTheTitleFromTheTailOfALongFile(t *testing.T) {
+	home, env := claudeHome(t, true)
+	lines := []string{userLine("/srv/app", "2026-09-05T10:00:00.000Z", "Refactor everything")}
+	// Far more than the head carries, so the title at the end is only in
+	// the tail — and the cut through the middle must not confuse anything.
+	filler := strings.Repeat("x", 3000)
+	for i := 0; i < 20; i++ {
+		lines = append(lines, fmt.Sprintf(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":%q}]},"cwd":"/srv/app"}`, filler))
+	}
+	lines = append(lines, `{"type":"custom-title","customTitle":"The big refactor","sessionId":"s"}`)
+	conversationFile(t, home, "/srv/app", "44444444-4444-4444-8444-444444444444", lines...)
+
+	got := history(t, env)
+	if len(got) != 1 || got[0].Name != "The big refactor" || got[0].Dir != "/srv/app" {
+		t.Fatalf("history = %+v", got)
+	}
+	if got[0].Size < int64(20*3000) {
+		t.Errorf("size = %d, want the whole file's", got[0].Size)
+	}
+}
+
+func TestConversationNamesFallBackInOrder(t *testing.T) {
+	base := ClaudeConversation{ID: "x"}
+	cases := []struct {
+		name  string
+		lines []string
+		want  string
+		ok    bool
+	}{
+		{"nothing", nil, "", false},
+		{"only machinery", []string{`{"type":"user","message":{"role":"user","content":"<command-name>/clear</command-name>"},"cwd":"/h"}`}, "", false},
+		{"first words", []string{userLine("/h", "2026-09-05T10:00:00.000Z", "  Hello there  ")}, "Hello there", true},
+		{"summary over words", []string{userLine("/h", "2026-09-05T10:00:00.000Z", "Hello"), `{"type":"summary","summary":"A greeting"}`}, "A greeting", true},
+		{"ai title over summary", []string{`{"type":"summary","summary":"A greeting"}`, `{"type":"ai-title","aiTitle":"Greeting"}`}, "Greeting", true},
+		{"custom over all", []string{`{"type":"ai-title","aiTitle":"Greeting"}`, `{"type":"custom-title","customTitle":"Mine"}`}, "Mine", true},
+		{"last prompt as a last resort", []string{`{"type":"last-prompt","lastPrompt":"what now"}`}, "what now", true},
+		{"a long one is cut", []string{userLine("/h", "t", strings.Repeat("é", 60))}, strings.Repeat("é", 40) + "…", true},
+		{"a cut line parses as nothing", []string{`{"type":"user","message":{"role":"user","con`, userLine("/h", "t", "After the cut")}, "After the cut", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c, ok := readConversation(base, tc.lines)
+			if ok != tc.ok || c.Name != tc.want {
+				t.Fatalf("got %q, %v; want %q, %v", c.Name, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}

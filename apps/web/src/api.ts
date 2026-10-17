@@ -1,6 +1,7 @@
 import type {
   App,
   BootReport,
+  ClaudeConversation,
   ClaudeHost,
   ClaudeSession,
   Crontab,
@@ -134,7 +135,9 @@ export const api = {
   claudeKey: (id: number, key: string) =>
     request<ClaudeHost>(`/api/hosts/${id}/claude/key`, { method: 'POST', ...json({ key }) }),
   claudeSessions: (id: number) => request<ClaudeSession[]>(`/api/hosts/${id}/claude/sessions`),
-  openClaude: (id: number, input: { dir: string; model: string; mode: string; name?: string }) =>
+  /** The conversations on the host's disk, newest first; any can be resumed. */
+  claudeHistory: (id: number) => request<ClaudeConversation[]>(`/api/hosts/${id}/claude/history`),
+  openClaude: (id: number, input: { dir: string; model?: string; mode: string; name?: string; resume?: string }) =>
     request<ClaudeSession>(`/api/hosts/${id}/claude/sessions`, { method: 'POST', ...json(input) }),
   claudeSession: (sid: string) => request<ClaudeSession>(`/api/claude/${sid}`),
   closeClaude: (sid: string) => request<void>(`/api/claude/${sid}`, { method: 'DELETE' }),

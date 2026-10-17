@@ -103,6 +103,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /api/hosts/{id}/claude/login", s.handleClaudeCancelLogin)
 	mux.HandleFunc("POST /api/hosts/{id}/claude/key", s.handleClaudeKey)
 	mux.HandleFunc("GET /api/hosts/{id}/claude/sessions", s.handleListClaudeSessions)
+	mux.HandleFunc("GET /api/hosts/{id}/claude/history", s.handleClaudeHistory)
 	mux.HandleFunc("POST /api/hosts/{id}/claude/sessions", s.handleOpenClaudeSession)
 	mux.HandleFunc("GET /api/claude/{sid}", s.handleGetClaudeSession)
 	mux.HandleFunc("DELETE /api/claude/{sid}", s.handleCloseClaudeSession)

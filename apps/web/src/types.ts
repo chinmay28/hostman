@@ -745,6 +745,26 @@ export interface ClaudeSession {
   contextWindow: number
 }
 
+/** A conversation the CLI has on file for the SSH user on a host: the thing
+ *  `claude --resume` picks up. A HostMan session is a process that may have
+ *  been let go; this is what it was talking about, still on the host. */
+export interface ClaudeConversation {
+  /** The CLI's session id, the one to resume with. */
+  id: string
+  /** The title the CLI gave it, or the first thing the user said. */
+  name: string
+  dir: string
+  branch?: string
+  startedAt?: string
+  /** When the file was last written: the last time anything was said. */
+  modifiedAt: string
+  /** The file's size in bytes, a rough measure of how much was said. */
+  size: number
+  /** The HostMan session holding it open right now, if one is: rejoin that
+   *  one rather than start another process on the same conversation. */
+  sessionId?: string
+}
+
 /** One piece of something Claude said. */
 export interface ClaudeBlock {
   type: 'text' | 'thinking' | 'tool_use'
