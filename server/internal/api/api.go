@@ -129,6 +129,11 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/hosts/{id}/torrents/setup", s.handleTorrentSetup)
 	mux.HandleFunc("DELETE /api/hosts/{id}/torrents/setup", s.handleTorrentRemove)
 
+	// VirtualBox machines on a host that has it: what is there, and one verb
+	// at a time on one of them. Nothing here makes or deletes a machine.
+	mux.HandleFunc("GET /api/hosts/{id}/vms", s.handleVMs)
+	mux.HandleFunc("POST /api/hosts/{id}/vms/action", s.handleVMAction)
+
 	mux.HandleFunc("GET /api/hosts/{id}/files", s.handleListFiles)
 	mux.HandleFunc("DELETE /api/hosts/{id}/files", s.handleRemoveFile)
 	mux.HandleFunc("GET /api/hosts/{id}/files/usage", s.handleFileUsage)

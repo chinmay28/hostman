@@ -80,6 +80,9 @@ export interface Host {
   createdAt: string
   /** True for the machine HostMan itself runs on. */
   isSelf: boolean
+  /** Whether VBoxManage was on the host at the last probe. The host's page
+   *  offers its virtual machines only where it was. */
+  virtualbox: boolean
   latest: Sample | null
 }
 
@@ -508,6 +511,46 @@ export interface TorrentDaemon {
    *  than an error: everything else on the screen is still true. */
   trouble?: string
 }
+
+/**
+ * VirtualBox on the host: the machines the SSH user owns, and their state.
+ *
+ * Making or deleting a machine is a laptop job; this screen manages what is
+ * there. The states are VirtualBox's own words rather than a boolean, because
+ * a paused or saved machine is neither running nor off.
+ */
+export interface VMList {
+  /** Whether VBoxManage is on the host — the live answer, where the host
+   *  record carries the one from the last probe. */
+  installed: boolean
+  /** VirtualBox's own version, e.g. 7.0.14r161095. */
+  version?: string
+  /** Whose machines these are: the SSH user, always. VirtualBox keeps each
+   *  user's registry in their own home, so root's machines are not yours. */
+  user: string
+  vms: VM[]
+}
+
+export interface VM {
+  /** The uuid VirtualBox knows it by, and what an action names. */
+  id: string
+  name: string
+  /** VirtualBox's own word: running, poweroff, paused, saved, aborted,
+   *  starting, stopping, saving, restoring — or inaccessible, where the
+   *  registry names a machine whose files are gone. */
+  state: string
+  /** When the state last changed, where VirtualBox said. */
+  since?: string
+  /** The guest it was told it runs, e.g. Ubuntu_64. */
+  osType?: string
+  /** What it was given, not what it is using. */
+  cpus?: number
+  memoryMb?: number
+}
+
+/** The verbs a machine takes. Stop is the ACPI power button, which lets the
+ *  guest shut itself down; poweroff pulls the plug. */
+export type VMAction = 'start' | 'stop' | 'poweroff' | 'reset' | 'pause' | 'resume' | 'save'
 
 /** Where an update of deluge got to. It runs detached on the host, so this is
  *  read back from what it left there rather than from anything the app held. */

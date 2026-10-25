@@ -104,6 +104,10 @@ var migrations = []string{
 	// Which of an app's two commands a deployment ran. Everything recorded
 	// before this column existed was an install.
 	`ALTER TABLE deployments ADD COLUMN kind TEXT NOT NULL DEFAULT 'install'`,
+	// Whether VirtualBox is on the host, read by the probe along with the
+	// other facts. The host's page shows a screen for its machines only where
+	// it is, so this has to be known before that screen is asked for.
+	`ALTER TABLE hosts ADD COLUMN virtualbox INTEGER NOT NULL DEFAULT 0`,
 }
 
 // DB wraps the SQLite handle.

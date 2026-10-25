@@ -572,6 +572,33 @@ touches the files at all: the service, deluge's state and HostMan's own copy of
 deluge go, the deluge the host installed stays, and everything already downloaded
 stays exactly where it is.
 
+**Virtual machines** lists the VirtualBox machines on a host and runs the
+handful of things anybody does to one from a phone: start it, shut it down,
+pause and resume it, save its state, reset it, or pull the plug. Each machine is
+a card with VirtualBox's own word for its state — `running`, `paused`, `saved`,
+`poweroff` — what it was given in CPUs and memory, and how long it has been the
+way it is. Making a machine, or deleting one, is a laptop job and stays one:
+nothing here can create or destroy a disk.
+
+**The card is only there on a host that has VirtualBox.** Every other card in
+Manage is a thing any host can do; this one is a thing a host has to have been
+given, so the probe that reads a host's facts also checks for `VBoxManage`, and
+the host's page offers the screen only where it was found. Install VirtualBox
+and the card appears by the next poll; remove it and the card goes. HostMan will
+not install it for you — a hypervisor is a decision about what a machine is for,
+and it comes with kernel modules the host's own package manager should build.
+
+**The machines are the SSH user's.** VirtualBox keeps each user's registry in
+their own home, so the machines root sees are not the ones you see, and a screen
+that ran `VBoxManage` as root would list nothing on a host where somebody has
+been running their machines as themselves all along. So this is the one screen
+under Manage that never elevates: it asks as the connecting user, and says whose
+machines it is showing. **Starting is always headless**, because there is no
+display at the other end of an SSH session and a phone could not show one if
+there were. Shutting down sends the ACPI power button and lets the guest shut
+itself down; powering off and resetting do not ask the guest anything, so both
+confirm first.
+
 **Terminal** is a login shell on the host, with a pty behind it — the same
 thing `ssh you@host` gives you, so `htop` draws, `vim` works, tab completion
 completes and colours are colours. There is still no agent: it is one SSH
@@ -1007,6 +1034,8 @@ Quoting is tested the same way — every path a person could type is handed to
 | `POST`   | `/api/hosts/{id}/torrents/action`   | start or stop the daemon; pause, resume or remove a torrent (`"data":true` deletes what it downloaded); `"seeding"` with a `ratio` and `remove` to set what happens after a torrent finishes; `"limit"` to set how many run at once; or `"update"` to give the daemon a deluge of at least 2.2 (detached; followed through `GET`) |
 | `POST`   | `/api/hosts/{id}/torrents/setup`    | write the daemon onto the host, or change where it downloads |
 | `DELETE` | `/api/hosts/{id}/torrents/setup`    | take it off; the host's deluge and the downloaded files stay |
+| `GET`    | `/api/hosts/{id}/vms`               | the SSH user's VirtualBox machines, with their state; `installed` says whether VirtualBox is there at all |
+| `POST`   | `/api/hosts/{id}/vms/action`        | `{"action","id"}`: start (headless), stop (ACPI), poweroff, reset, pause, resume or save one machine; answers with the list |
 | `GET`    | `/api/hosts/{id}/files`             | list a directory, `?path=` (default: home) |
 | `DELETE` | `/api/hosts/{id}/files`             | delete `?path=`, `&recursive=true` for a full directory |
 | `GET`    | `/api/hosts/{id}/files/content`     | read a file, `?path=`                |
