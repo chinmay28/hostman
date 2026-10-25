@@ -109,13 +109,16 @@ func TestHostStatusTransitions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	facts := HostFacts{Hostname: "nakedpi", OS: "Debian 12", Kernel: "6.6", Arch: "aarch64", SudoOK: true}
+	facts := HostFacts{Hostname: "nakedpi", OS: "Debian 12", Kernel: "6.6", Arch: "aarch64", SudoOK: true, VirtualBox: true}
 	if err := db.MarkHostOnline(ctx, h.ID, facts); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := db.GetHost(ctx, h.ID)
 	if got.Status != StatusOnline || !got.SudoOK || got.Hostname != "nakedpi" {
 		t.Fatalf("after MarkHostOnline: %+v", got)
+	}
+	if !got.VirtualBox {
+		t.Errorf("virtualbox = false after a probe that found it: %+v", got)
 	}
 	if got.LastSeenAt == nil {
 		t.Fatal("lastSeenAt not set")
@@ -129,8 +132,19 @@ func TestHostStatusTransitions(t *testing.T) {
 		t.Fatalf("after MarkHostFailed: %+v", got)
 	}
 	// Facts from the last successful connect stay visible while offline.
-	if got.Hostname != "nakedpi" {
+	if got.Hostname != "nakedpi" || !got.VirtualBox {
 		t.Errorf("facts cleared on failure: %+v", got)
+	}
+
+	// A probe that no longer finds VirtualBox takes the screen away again:
+	// the fact follows the host, not the first time it was seen.
+	facts.VirtualBox = false
+	if err := db.MarkHostOnline(ctx, h.ID, facts); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = db.GetHost(ctx, h.ID)
+	if got.VirtualBox {
+		t.Errorf("virtualbox still true after a probe without it: %+v", got)
 	}
 }
 

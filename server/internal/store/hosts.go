@@ -38,10 +38,13 @@ type Host struct {
 	// IsSelf marks the machine HostMan itself is running on.
 	IsSelf    bool   `json:"isSelf"`
 	MachineID string `json:"-"`
+	// VirtualBox is whether VBoxManage was on the host at the last probe. The
+	// UI offers a screen for its virtual machines only where it was.
+	VirtualBox bool `json:"virtualbox"`
 }
 
 const hostColumns = `id, name, address, port, username, host_key, status, last_error,
-	last_seen_at, hostname, os, kernel, arch, sudo_ok, created_at, is_self, machine_id`
+	last_seen_at, hostname, os, kernel, arch, sudo_ok, created_at, is_self, machine_id, virtualbox`
 
 func scanHost(row interface{ Scan(...any) error }) (*Host, error) {
 	var h Host
@@ -49,7 +52,7 @@ func scanHost(row interface{ Scan(...any) error }) (*Host, error) {
 	var created string
 	err := row.Scan(&h.ID, &h.Name, &h.Address, &h.Port, &h.Username, &h.HostKey,
 		&h.Status, &h.LastError, &lastSeen, &h.Hostname, &h.OS, &h.Kernel, &h.Arch,
-		&h.SudoOK, &created, &h.IsSelf, &h.MachineID)
+		&h.SudoOK, &created, &h.IsSelf, &h.MachineID, &h.VirtualBox)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -151,15 +154,20 @@ type HostFacts struct {
 	// machine it is running on regardless of the address used to reach it.
 	MachineID string
 	IsSelf    bool
+	// VirtualBox is whether VBoxManage is installed, which decides whether the
+	// host gets a virtual machines screen at all.
+	VirtualBox bool
 }
 
 // MarkHostOnline records a successful connection along with the host's facts.
 func (d *DB) MarkHostOnline(ctx context.Context, id int64, f HostFacts) error {
 	_, err := d.sql.ExecContext(ctx, `
 		UPDATE hosts SET status = ?, last_error = '', last_seen_at = datetime('now'),
-			hostname = ?, os = ?, kernel = ?, arch = ?, sudo_ok = ?, machine_id = ?, is_self = ?
+			hostname = ?, os = ?, kernel = ?, arch = ?, sudo_ok = ?, machine_id = ?, is_self = ?,
+			virtualbox = ?
 		WHERE id = ?`,
-		StatusOnline, f.Hostname, f.OS, f.Kernel, f.Arch, f.SudoOK, f.MachineID, f.IsSelf, id)
+		StatusOnline, f.Hostname, f.OS, f.Kernel, f.Arch, f.SudoOK, f.MachineID, f.IsSelf,
+		f.VirtualBox, id)
 	return err
 }
 

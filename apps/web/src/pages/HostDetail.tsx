@@ -397,6 +397,26 @@ export default function HostDetail() {
               <span className="chevron">›</span>
             </div>
           </Link>
+          {/* Only where the probe found VirtualBox. Every other card here is
+              a thing any host can do; this one is a thing a host has to have
+              been given, and offering it everywhere would be a screen that
+              says "not installed" on most machines. The probe keeps the fact
+              current, so installing VirtualBox makes the card appear by the
+              next poll and removing it takes the card away again. */}
+          {host.virtualbox && (
+            <Link className="card" to={`/hosts/${hostId}/vms`}>
+              <div className="row between">
+                <div className="grow">
+                  <div className="title">Virtual machines</div>
+                  <div className="sub">
+                    The VirtualBox machines {host.username} keeps on {host.name} — start, stop,
+                    pause and save them
+                  </div>
+                </div>
+                <span className="chevron">›</span>
+              </div>
+            </Link>
+          )}
           <Link className="card" to={`/hosts/${hostId}/cron`}>
             <div className="row between">
               <div className="grow">

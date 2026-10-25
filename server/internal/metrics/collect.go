@@ -39,6 +39,8 @@ printf '@@sudo\n'
 if sudo -n true 2>/dev/null; then echo yes; else echo no; fi
 printf '@@machineid\n'
 cat /etc/machine-id 2>/dev/null || cat /var/lib/dbus/machine-id 2>/dev/null || true
+printf '@@tools\n'
+if command -v VBoxManage >/dev/null 2>&1 || command -v vboxmanage >/dev/null 2>&1; then echo virtualbox; fi
 printf '@@pagesize\n'
 getconf PAGESIZE 2>/dev/null || echo 4096
 printf '@@cpu1\n'
@@ -105,6 +107,11 @@ func parseProbe(out string) (*Probe, error) {
 	p.Facts.SudoOK = len(sections["sudo"]) > 0 && sections["sudo"][0] == "yes"
 	if id := sections["machineid"]; len(id) > 0 {
 		p.Facts.MachineID = strings.TrimSpace(id[0])
+	}
+	for _, tool := range sections["tools"] {
+		if tool == "virtualbox" {
+			p.Facts.VirtualBox = true
+		}
 	}
 
 	// The jiffies the whole machine spent in the interval are the denominator

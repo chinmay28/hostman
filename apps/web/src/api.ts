@@ -28,6 +28,8 @@ import type {
   ShellSession,
   SSHKeyInfo,
   TorrentDaemon,
+  VMAction,
+  VMList,
 } from './types'
 
 /** ApiError carries the server's message so the UI can show it verbatim. */
@@ -223,6 +225,14 @@ export const api = {
    *  and every file already downloaded stays where it is. */
   removeTorrents: (id: number) =>
     request<void>(`/api/hosts/${id}/torrents/setup`, { method: 'DELETE' }),
+
+  /** The virtual machines the SSH user owns on a host, with their state. A
+   *  read: the screen asks on a timer while a machine is changing state. */
+  vms: (id: number) => request<VMList>(`/api/hosts/${id}/vms`),
+  /** Runs one verb on one machine and answers with the list afterwards. Start
+   *  is always headless — there is no display at the end of an SSH session. */
+  vmAction: (id: number, action: VMAction, vmId: string) =>
+    request<VMList>(`/api/hosts/${id}/vms/action`, { method: 'POST', ...json({ action, id: vmId }) }),
 
   /** The shells already open on a host, oldest first. A screen arriving on the
    *  terminal offers to rejoin one rather than opening another, which is what
