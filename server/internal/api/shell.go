@@ -40,6 +40,12 @@ const shellHeartbeat = 15 * time.Second
 type shellOpenRequest struct {
 	Cols int `json:"cols"`
 	Rows int `json:"rows"`
+	// Command is a line to type into the shell as soon as it opens, for a
+	// screen that sends somebody to a terminal with a program already
+	// running in it — `ollama run llama3.2`, say. It is typed, not run: the
+	// shell sees it exactly as if the person had, prompt and all, and the
+	// person can Ctrl-C it like anything else they typed. Empty types nothing.
+	Command string `json:"command"`
 }
 
 type shellInputRequest struct {
@@ -77,13 +83,44 @@ func (s *Server) handleOpenShell(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), shellOpenTimeout)
 	defer cancel()
 
+	if err := checkShellCommand(req.Command); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	sess, err := s.Shells.Open(ctx, h, req.Cols, req.Rows)
 	if err != nil {
 		s.writeShellError(w, err, "open shell")
 		return
 	}
-	s.Log.Info("api: opened a shell", "host", h.Name, "session", sess.ID())
+	if req.Command != "" {
+		// The pty's line discipline holds what is typed until the shell
+		// reads it, so this lands whether or not the prompt is up yet.
+		if err := sess.Write([]byte(req.Command + "\n")); err != nil {
+			s.Log.Warn("api: could not type into the new shell", "session", sess.ID(), "err", err)
+		}
+	}
+	s.Log.Info("api: opened a shell", "host", h.Name, "session", sess.ID(), "typed", req.Command != "")
 	writeJSON(w, http.StatusCreated, sess.Info())
+}
+
+// maxShellCommand bounds a line typed into a new shell. A command is a line,
+// and a line is short; anything longer is a paste, which has its own path.
+const maxShellCommand = 512
+
+// checkShellCommand refuses a command that is not one line. A newline would
+// be a second command typed after the first, and a control byte would be a
+// key pressed in a terminal the person is not looking at yet; both belong
+// to the keyboard, not to a link.
+func checkShellCommand(cmd string) error {
+	if len(cmd) > maxShellCommand {
+		return errors.New("the command to type is too long")
+	}
+	for _, r := range cmd {
+		if r < 0x20 || r == 0x7f {
+			return errors.New("the command to type must be one line, with no control characters")
+		}
+	}
+	return nil
 }
 
 func (s *Server) handleGetShell(w http.ResponseWriter, r *http.Request) {

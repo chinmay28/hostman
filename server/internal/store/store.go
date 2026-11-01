@@ -108,6 +108,9 @@ var migrations = []string{
 	// other facts. The host's page shows a screen for its machines only where
 	// it is, so this has to be known before that screen is asked for.
 	`ALTER TABLE hosts ADD COLUMN virtualbox INTEGER NOT NULL DEFAULT 0`,
+	// Whether ollama is on the host, for the same reason: the host's page
+	// offers a screen for its models only where there is something to show.
+	`ALTER TABLE hosts ADD COLUMN ollama INTEGER NOT NULL DEFAULT 0`,
 }
 
 // DB wraps the SQLite handle.

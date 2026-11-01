@@ -134,6 +134,14 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/hosts/{id}/vms", s.handleVMs)
 	mux.HandleFunc("POST /api/hosts/{id}/vms/action", s.handleVMAction)
 
+	// Ollama on a host that has it: what is on the disk and in memory,
+	// pulling another model (detached; followed through GET), and one verb
+	// at a time on a model or on the server. Talking to a model is the
+	// terminal with `ollama run` typed into it, so it needs nothing here.
+	mux.HandleFunc("GET /api/hosts/{id}/ollama", s.handleOllama)
+	mux.HandleFunc("POST /api/hosts/{id}/ollama/pull", s.handleOllamaPull)
+	mux.HandleFunc("POST /api/hosts/{id}/ollama/action", s.handleOllamaAction)
+
 	mux.HandleFunc("GET /api/hosts/{id}/files", s.handleListFiles)
 	mux.HandleFunc("DELETE /api/hosts/{id}/files", s.handleRemoveFile)
 	mux.HandleFunc("GET /api/hosts/{id}/files/usage", s.handleFileUsage)
