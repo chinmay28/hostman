@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 )
 
 // ErrHostKeyChanged means the host presented a different key than the one
@@ -46,6 +47,10 @@ type Client struct {
 
 	conn *ssh.Client
 	once sync.Once
+
+	// agentOnce guards the one agent-channel handler a connection may have.
+	agentOnce sync.Once
+	agentErr  error
 }
 
 // Dial opens an SSH connection using HostMan's keypair, honouring ctx for the
@@ -190,11 +195,51 @@ func (c *Client) RunInput(ctx context.Context, cmd, stdin string) (*Result, erro
 // Stream executes cmd, copying stdout and stderr into out as they arrive, and
 // returns the exit code.
 func (c *Client) Stream(ctx context.Context, cmd string, out io.Writer) (int, error) {
+	return c.stream(ctx, cmd, "", out, nil)
+}
+
+// StreamInput is Stream with stdin fed from a string, for a script that takes
+// something on its standard input as well as on its command line.
+func (c *Client) StreamInput(ctx context.Context, cmd, stdin string, out io.Writer) (int, error) {
+	return c.stream(ctx, cmd, stdin, out, nil)
+}
+
+// StreamAgent is Stream with stdin fed from a string and HostMan's key lent to
+// the command through a forwarded agent, which is what lets `ssh` run on one
+// host sign in to another as HostMan. The key itself never leaves this
+// process: the host can ask for signatures, and only for as long as the
+// session is open. Whether the command finds the agent is its own business —
+// sudo, for one, scrubs SSH_AUTH_SOCK from the environment it hands on.
+func (c *Client) StreamAgent(ctx context.Context, cmd, stdin string, out io.Writer, id *Identity) (int, error) {
+	if id == nil {
+		return -1, errors.New("no identity to forward")
+	}
+	return c.stream(ctx, cmd, stdin, out, id)
+}
+
+func (c *Client) stream(ctx context.Context, cmd, stdin string, out io.Writer, forward *Identity) (int, error) {
+	if forward != nil {
+		// A connection takes one handler for agent channels, so it is
+		// registered once and serves every session opened afterwards.
+		c.agentOnce.Do(func() { c.agentErr = agent.ForwardToAgent(c.conn, forward.Agent()) })
+		if c.agentErr != nil {
+			return -1, fmt.Errorf("forward agent: %w", c.agentErr)
+		}
+	}
 	session, err := c.conn.NewSession()
 	if err != nil {
 		return -1, fmt.Errorf("open session: %w", err)
 	}
 	defer session.Close()
+
+	if forward != nil {
+		if err := agent.RequestAgentForwarding(session); err != nil {
+			return -1, fmt.Errorf("the host refused agent forwarding: %w", err)
+		}
+	}
+	if stdin != "" {
+		session.Stdin = strings.NewReader(stdin)
+	}
 
 	// Interleave both streams in the order the remote command wrote them.
 	var mu sync.Mutex

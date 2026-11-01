@@ -110,7 +110,7 @@ func run() error {
 
 	apiSrv := &api.Server{
 		DB: db, Hosts: hostSvc, Poller: poller,
-		Runner: runner, Health: health, Ops: hostops.NewService(hostSvc), Shells: shells, Claude: claudeSessions,
+		Runner: runner, Health: health, Ops: hostops.NewService(hostSvc), Transfers: hostops.NewTransfers(hostSvc, log), Shells: shells, Claude: claudeSessions,
 		Log: log, Auth: auth,
 		Self: self, Version: appVersion(), SelfRef: *ref,
 	}

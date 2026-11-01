@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError, api } from '../api'
 import { Page } from '../components/Layout'
 import { Badge, Banner, Card, Empty, Field, Loading, Sheet, useLoader } from '../components/ui'
 import { ago, bytes } from '../lib/format'
-import type { DirEntry, DirUsage } from '../types'
+import type { DirEntry, DirUsage, FileJob } from '../types'
 
 /**
  * The file browser. One directory at a time, the path in the query string so
@@ -32,6 +32,9 @@ export default function HostFiles() {
   const [acting, setActing] = useState<DirEntry | null>(null)
   const [creating, setCreating] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  // Bumped when a job is started from here, so the strip picks it up at once
+  // rather than on its next poll.
+  const [jobsVersion, setJobsVersion] = useState(0)
 
   const go = (to: string) => setParams({ path: to })
 
@@ -84,6 +87,8 @@ export default function HostFiles() {
             </div>
           </Card>
 
+          <FileJobs hostId={hostId} version={jobsVersion} onSettled={reload} />
+
           {listing.truncated && (
             <Banner tone="warn">
               This directory has more in it than HostMan will list. Only the first{' '}
@@ -127,6 +132,11 @@ export default function HostFiles() {
             setActing(null)
             setNotice(message)
             reload()
+          }}
+          onStarted={() => {
+            setActing(null)
+            setNotice(null)
+            setJobsVersion((v) => v + 1)
           }}
         />
       )}
@@ -212,23 +222,28 @@ function describe(entry: DirEntry): string {
 }
 
 /** EntrySheet is what can be done to one entry from a phone: change its
- *  permissions, rename it, delete it. */
+ *  permissions, rename it, copy or move it elsewhere on the host, send it to
+ *  another host, delete it. */
 function EntrySheet({
   hostId,
   dir,
   entry,
   onClose,
   onDone,
+  onStarted,
 }: {
   hostId: number
   dir: string
   entry: DirEntry
   onClose: () => void
   onDone: (message: string) => void
+  /** A copy, move or send has begun; the page follows it from here. */
+  onStarted: (job: FileJob) => void
 }) {
   const path = join(dir, entry.name)
   const [renaming, setRenaming] = useState(false)
   const [permissions, setPermissions] = useState(false)
+  const [placing, setPlacing] = useState<FileJob['kind'] | null>(null)
   const [newName, setNewName] = useState(entry.name)
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -279,6 +294,16 @@ function EntrySheet({
           path={path}
           onCancel={() => setPermissions(false)}
           onDone={onDone}
+        />
+      ) : placing ? (
+        <Destination
+          hostId={hostId}
+          entry={entry}
+          path={path}
+          dir={dir}
+          kind={placing}
+          onCancel={() => setPlacing(null)}
+          onStarted={onStarted}
         />
       ) : renaming ? (
         <>
@@ -341,6 +366,18 @@ function EntrySheet({
             Rename
           </button>
           <div style={{ height: 10 }} />
+          <button className="secondary block" onClick={() => setPlacing('copy')}>
+            Copy
+          </button>
+          <div style={{ height: 10 }} />
+          <button className="secondary block" onClick={() => setPlacing('move')}>
+            Move
+          </button>
+          <div style={{ height: 10 }} />
+          <button className="secondary block" onClick={() => setPlacing('send')}>
+            Send to another host
+          </button>
+          <div style={{ height: 10 }} />
           <button className="danger block" onClick={() => setConfirming(true)}>
             Delete
           </button>
@@ -349,6 +386,243 @@ function EntrySheet({
     </Sheet>
   )
 }
+
+/**
+ * Destination asks where a copy, a move or a send should land: a folder on
+ * this host, or a host and a folder on it. The item keeps its name under that
+ * folder, and nothing is ever overwritten — a name already taken there is
+ * reported, not replaced. Starting one is the end of the sheet's part: the
+ * work takes minutes and the page follows it as a job.
+ */
+function Destination({
+  hostId,
+  entry,
+  path,
+  dir,
+  kind,
+  onCancel,
+  onStarted,
+}: {
+  hostId: number
+  entry: DirEntry
+  path: string
+  dir: string
+  kind: FileJob['kind']
+  onCancel: () => void
+  onStarted: (job: FileJob) => void
+}) {
+  const [to, setTo] = useState(dir)
+  const [destId, setDestId] = useState<number | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+  // Only a send needs the other hosts, and only those: sending something to
+  // the host it is already on is a copy with extra steps.
+  const { data: hosts, error: hostsError } = useLoader(
+    () => (kind === 'send' ? api.hosts() : Promise.resolve(null)),
+    [kind],
+  )
+  const others = (hosts ?? []).filter((h) => h.id !== hostId)
+  const dest = destId ?? others[0]?.id ?? null
+
+  const verb = VERBS[kind]
+  const folder = to.trim()
+  const ready = folder.startsWith('/') && (kind !== 'send' || dest !== null)
+
+  const start = async () => {
+    setBusy(true)
+    setFailure(null)
+    try {
+      const job =
+        kind === 'copy'
+          ? await api.copyFile(hostId, path, folder)
+          : kind === 'move'
+            ? await api.moveFile(hostId, path, folder)
+            : await api.sendFile(hostId, path, dest as number, folder)
+      onStarted(job)
+    } catch (e) {
+      setFailure(message(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      {failure && <Banner tone="bad">{failure}</Banner>}
+      <p className="sub">{verb.explain(entry.name)}</p>
+
+      {kind === 'send' && (
+        <Field label="Host">
+          {hostsError ? (
+            <p className="sub">Could not list the hosts: {hostsError}</p>
+          ) : !hosts ? (
+            <p className="sub">Loading hosts…</p>
+          ) : others.length === 0 ? (
+            <p className="sub">There is no other host to send to. Add one on Hosts.</p>
+          ) : (
+            <select value={dest ?? ''} onChange={(e) => setDestId(Number(e.target.value))}>
+              {others.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.name} ({h.address}){h.status !== 'online' ? ' — offline' : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+      )}
+
+      <Field
+        label={kind === 'send' ? 'Folder on that host' : 'Folder'}
+        help={`An absolute path. ${entry.name} keeps its name inside it.`}
+      >
+        <input
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          placeholder="/home/pi/backups"
+          autoFocus={kind !== 'send'}
+        />
+      </Field>
+
+      <div className="actions">
+        <button className="secondary" onClick={onCancel}>
+          Cancel
+        </button>
+        <button className="primary" onClick={start} disabled={busy || !ready}>
+          {busy ? 'Starting…' : verb.button}
+        </button>
+      </div>
+    </>
+  )
+}
+
+const VERBS: Record<FileJob['kind'], { button: string; explain: (name: string) => string }> = {
+  copy: {
+    button: 'Copy',
+    explain: (name) => `Makes a copy of ${name} in another folder on this host.`,
+  },
+  move: {
+    button: 'Move',
+    explain: (name) =>
+      `Moves ${name} to another folder on this host. To another disk, that is a copy and then a delete.`,
+  },
+  send: {
+    button: 'Send',
+    explain: (name) =>
+      `Copies ${name} to another host over SSH, signed in with HostMan's key. Nothing is removed here.`,
+  },
+}
+
+/**
+ * FileJobs is the strip of copies, moves and sends this host is part of. A
+ * job runs on HostMan's side of the connection, so the phone can lock and
+ * come back to it; what the strip does is ask how it is going, every couple
+ * of seconds while anything is running, and reload the listing the moment
+ * something finishes — that is when the folder appears, or goes.
+ */
+function FileJobs({
+  hostId,
+  version,
+  onSettled,
+}: {
+  hostId: number
+  version: number
+  onSettled: () => void
+}) {
+  const [running, setRunning] = useState(false)
+  const { data: jobs, reload } = useLoader(
+    () => api.fileJobs(hostId),
+    [hostId, version],
+    running ? 2000 : undefined,
+  )
+  const seen = useRef<Record<string, FileJob['state']>>({})
+
+  useEffect(() => {
+    if (!jobs) return
+    let settled = false
+    for (const job of jobs) {
+      if (seen.current[job.id] === 'running' && job.state !== 'running') settled = true
+      seen.current[job.id] = job.state
+    }
+    setRunning(jobs.some((job) => job.state === 'running'))
+    if (settled) onSettled()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs])
+
+  const cancel = async (job: FileJob) => {
+    try {
+      await api.cancelFileJob(job.id)
+    } finally {
+      reload()
+    }
+  }
+  const dismiss = async (job: FileJob) => {
+    try {
+      await api.forgetFileJob(job.id)
+    } finally {
+      reload()
+    }
+  }
+
+  if (!jobs || jobs.length === 0) return null
+  return (
+    <>
+      {jobs.map((job) => (
+        <Card key={job.id} className={`job ${job.state}`}>
+          <div className="row between">
+            <span className="grow">
+              <span className="title">{describeJob(job, hostId)}</span>
+              <span className="sub">
+                {job.state === 'running' ? `started ${ago(job.startedAt)}` : job.finishedAt ? ago(job.finishedAt) : ''}
+              </span>
+            </span>
+            {job.state === 'running' ? (
+              <button className="secondary" onClick={() => cancel(job)}>
+                Cancel
+              </button>
+            ) : (
+              <button className="ghost" onClick={() => dismiss(job)}>
+                Dismiss
+              </button>
+            )}
+          </div>
+          {job.state === 'failed' && job.error && <Banner tone="bad">{job.error}</Banner>}
+          {job.state === 'failed' && job.log.trim() && <pre className="log">{job.log.trim()}</pre>}
+        </Card>
+      ))}
+    </>
+  )
+}
+
+/** describeJob is the one line a job gets: what is happening to what, and
+ *  where it is going. Seen from the receiving host, a send reads as arriving. */
+export function describeJob(job: FileJob, viewedFrom: number): string {
+  const what = name(job.path)
+  const arriving = job.kind === 'send' && job.destHostId === viewedFrom && job.hostId !== viewedFrom
+  const where =
+    job.kind === 'send'
+      ? arriving
+        ? `${job.to} from ${job.host}`
+        : `${job.destHost}:${job.to}`
+      : job.to
+  const verb = arriving ? ARRIVING : WORDS[job.kind]
+  switch (job.state) {
+    case 'running':
+      return `${verb.doing} ${what} to ${where}…`
+    case 'done':
+      return `${verb.done} ${what} to ${where}.`
+    case 'cancelled':
+      return `Cancelled ${verb.doing.toLowerCase()} ${what} to ${where}.`
+    default:
+      return `Could not ${verb.verb} ${what} to ${where}.`
+  }
+}
+
+const WORDS: Record<FileJob['kind'], { verb: string; doing: string; done: string }> = {
+  copy: { verb: 'copy', doing: 'Copying', done: 'Copied' },
+  move: { verb: 'move', doing: 'Moving', done: 'Moved' },
+  send: { verb: 'send', doing: 'Sending', done: 'Sent' },
+}
+const ARRIVING = { verb: 'receive', doing: 'Receiving', done: 'Received' }
 
 /**
  * FolderUsage is the line a listing cannot give a folder: what is under it, all
