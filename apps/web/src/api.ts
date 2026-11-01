@@ -8,6 +8,7 @@ import type {
   Deployment,
   DirListing,
   DirUsage,
+  FileJob,
   Host,
   HostFile,
   HostProcesses,
@@ -344,6 +345,25 @@ export const api = {
       `/api/hosts/${id}/files?path=${encodeURIComponent(path)}${recursive ? '&recursive=true' : ''}`,
       { method: 'DELETE' },
     ),
+
+  /** Copying, moving and sending are jobs: these come back at once with the
+   *  job, which is then followed by its id. The item keeps its name under
+   *  the destination directory, and nothing is ever overwritten. */
+  copyFile: (id: number, path: string, to: string) =>
+    request<FileJob>(`/api/hosts/${id}/files/copy`, { method: 'POST', ...json({ path, to }) }),
+  moveFile: (id: number, path: string, to: string) =>
+    request<FileJob>(`/api/hosts/${id}/files/move`, { method: 'POST', ...json({ path, to }) }),
+  /** Sends to another host: the source signs in to it with HostMan's key
+   *  for the duration and carries the item over with tar. */
+  sendFile: (id: number, path: string, hostId: number, to: string) =>
+    request<FileJob>(`/api/hosts/${id}/files/send`, { method: 'POST', ...json({ path, hostId, to }) }),
+  /** The jobs a host is part of, as source or destination, newest first. */
+  fileJobs: (id: number) => request<FileJob[]>(`/api/hosts/${id}/files/jobs`),
+  fileJob: (jobId: string) => request<FileJob>(`/api/files/jobs/${jobId}`),
+  cancelFileJob: (jobId: string) =>
+    request<FileJob>(`/api/files/jobs/${jobId}/cancel`, { method: 'POST' }),
+  /** Drops a finished job from the list. */
+  forgetFileJob: (jobId: string) => request<void>(`/api/files/jobs/${jobId}`, { method: 'DELETE' }),
 
   apps: () => request<App[]>('/api/apps'),
   app: (id: number) => request<App>(`/api/apps/${id}`),

@@ -271,6 +271,29 @@ and a failure part way through leaves the original alone. An existing file keeps
 its mode and its owner. A symlink is followed: editing `/etc/resolv.conf` edits
 what it points at rather than replacing the link.
 
+**Copy, Move and Send to another host** are on the same sheet as rename and
+delete. All three put the item, under its own name, into a folder you name, and
+none of them overwrites: a name already taken there is reported, not replaced.
+They run as jobs rather than requests, because copying a media folder takes
+minutes and a phone cannot be trusted to keep a request open that long — the
+job runs on HostMan's side of the SSH connection, the page follows it and
+reloads when it finishes, and a running one can be cancelled. A copy that stops
+part way is removed rather than left looking like a copy that worked. A move to
+another disk is a copy and then a delete, which is why it is a job and not a
+rename. The price of living on HostMan's side is that HostMan restarting ends
+its jobs; a self-update in the middle of a transfer is a transfer to start again.
+
+Sending is `tar` over `ssh` from the source host to the destination, as root
+on both ends where sudo allows it, so modes, owners and symlinks arrive as
+they left and a folder can land somewhere only root may write. The source signs
+in to the destination with HostMan's own key, lent to it through a forwarded
+SSH agent for exactly as long as the job runs — the private key never leaves
+HostMan, and the host only gets to ask for signatures. The destination's host
+key is the one HostMan pinned when it first connected there, handed over as a
+one-line `known_hosts` file the source is told to accept nothing else from.
+The destination must be known to HostMan by an address other hosts can reach:
+a home host added as `127.0.0.1` means nothing to another machine.
+
 **Permissions** are set from the same sheet the rename and delete live on, laid
 out as the three-by-three grid the octal digits already are: a row per audience,
 a tap per bit, with the digits themselves still editable for anyone who arrived

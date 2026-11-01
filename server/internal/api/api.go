@@ -31,6 +31,9 @@ type Server struct {
 	Health *deploy.Checker
 	// Ops runs administrative work on a host: files, crontabs, restarts.
 	Ops *hostops.Service
+	// Transfers holds the copies, moves and sends under way. They outlive
+	// the requests that started them, which is why they live on the server.
+	Transfers *hostops.Transfers
 	// Shells holds the login shells open on hosts. They outlive the requests
 	// that made them, which is why they live on the server and not in a handler.
 	Shells *shell.Manager
@@ -150,6 +153,17 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/hosts/{id}/files/mkdir", s.handleMkdir)
 	mux.HandleFunc("POST /api/hosts/{id}/files/rename", s.handleRenameFile)
 	mux.HandleFunc("POST /api/hosts/{id}/files/chmod", s.handleChmodFile)
+
+	// Copying, moving and sending are jobs: started under the host they run
+	// on, listed under every host they touch, and followed, cancelled and
+	// dismissed by their own id.
+	mux.HandleFunc("POST /api/hosts/{id}/files/copy", s.handleCopyFile)
+	mux.HandleFunc("POST /api/hosts/{id}/files/move", s.handleMoveFile)
+	mux.HandleFunc("POST /api/hosts/{id}/files/send", s.handleSendFile)
+	mux.HandleFunc("GET /api/hosts/{id}/files/jobs", s.handleListFileJobs)
+	mux.HandleFunc("GET /api/files/jobs/{jid}", s.handleGetFileJob)
+	mux.HandleFunc("POST /api/files/jobs/{jid}/cancel", s.handleCancelFileJob)
+	mux.HandleFunc("DELETE /api/files/jobs/{jid}", s.handleForgetFileJob)
 
 	mux.HandleFunc("GET /api/apps", s.handleListApps)
 	mux.HandleFunc("POST /api/apps", s.handleCreateApp)

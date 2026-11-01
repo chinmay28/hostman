@@ -1213,6 +1213,31 @@ button.block {
   margin-bottom: 4px;
 }
 
+/* ---------- file jobs ---------- */
+
+/* A job's one line is a sentence, which wraps; the button beside it does not
+   shrink to make room. */
+.job .title {
+  display: block;
+  white-space: normal;
+}
+
+.job .sub {
+  display: block;
+  margin-top: 2px;
+}
+
+.job .row > button {
+  flex: none;
+  margin-left: 10px;
+}
+
+.job .banner,
+.job .log {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
 /* ---------- segmented control and chips ---------- */
 
 .segmented {

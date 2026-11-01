@@ -38,16 +38,17 @@ func testServer(t *testing.T, pin string) (*Server, http.Handler) {
 	svc := hosts.NewService(db, id, nil)
 	health := deploy.NewChecker(db, svc, log)
 	s := &Server{
-		DB:     db,
-		Hosts:  svc,
-		Poller: hosts.NewPoller(svc, db, log),
-		Runner: deploy.NewRunner(db, svc, health, log),
-		Health: health,
-		Ops:    hostops.NewService(svc),
-		Shells: shell.NewManager(svc, log),
-		Claude: claude.NewManager(svc, log),
-		Log:    log,
-		Auth:   NewPinAuth(pin),
+		DB:        db,
+		Hosts:     svc,
+		Poller:    hosts.NewPoller(svc, db, log),
+		Runner:    deploy.NewRunner(db, svc, health, log),
+		Health:    health,
+		Ops:       hostops.NewService(svc),
+		Transfers: hostops.NewTransfers(svc, log),
+		Shells:    shell.NewManager(svc, log),
+		Claude:    claude.NewManager(svc, log),
+		Log:       log,
+		Auth:      NewPinAuth(pin),
 	}
 	return s, s.Auth.Middleware(s.Routes())
 }

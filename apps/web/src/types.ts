@@ -160,6 +160,30 @@ export interface DirUsage {
   asUser: string
 }
 
+/** A copy, move or send under way or lately finished. A job runs on
+ *  HostMan's side of the connection, so it survives the phone locking, but
+ *  not HostMan restarting. */
+export interface FileJob {
+  id: string
+  kind: 'copy' | 'move' | 'send'
+  /** Where it runs: the source host. */
+  hostId: number
+  host: string
+  /** What is being copied, moved or sent. */
+  path: string
+  /** The destination directory. The item keeps its name under it. */
+  to: string
+  /** For a send: where `to` is. */
+  destHostId?: number
+  destHost?: string
+  state: 'running' | 'done' | 'failed' | 'cancelled'
+  error?: string
+  /** The tail of what the host printed. */
+  log: string
+  startedAt: string
+  finishedAt?: string
+}
+
 export interface HostFile {
   path: string
   size: number
