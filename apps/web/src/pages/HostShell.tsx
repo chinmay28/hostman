@@ -1,5 +1,5 @@
-import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { Page } from '../components/Layout'
 import { Badge, Banner, Card, Loading, Sheet, useLoader } from '../components/ui'
@@ -30,6 +30,13 @@ const TerminalView = lazy(() => import('../components/Terminal'))
 export default function HostShell() {
   const { id } = useParams()
   const hostId = Number(id)
+  // Another screen can send somebody here with a program to start — the
+  // ollama screen's "Talk to it" is this page with `ollama run` in the
+  // query. The command is typed into a new shell, once, and the query is
+  // dropped so that coming back from the terminal does not type it again.
+  const [query, setQuery] = useSearchParams()
+  const run = query.get('run') ?? ''
+  const ran = useRef(false)
 
   const [session, setSession] = useState<ShellSession | null>(null)
   const [starting, setStarting] = useState(false)
@@ -42,20 +49,28 @@ export default function HostShell() {
   // says how the session is doing, and polling behind it would be noise.
   const open = useLoader(() => api.shells(hostId), [hostId], session ? undefined : 5000)
 
-  const start = async () => {
+  const start = async (command = '') => {
     setStarting(true)
     setError(null)
     setEnded(null)
     try {
       // A size worth having before the terminal has measured itself: it fits
       // properly a frame later, and the host is told again when it does.
-      setSession(await api.openShell(hostId, 80, 24))
+      setSession(await api.openShell(hostId, 80, 24, command))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setStarting(false)
     }
   }
+
+  useEffect(() => {
+    if (!run || ran.current) return
+    ran.current = true
+    setQuery({}, { replace: true })
+    void start(run)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run])
 
   const attach = (existing: ShellSession) => {
     setEnded(null)
@@ -221,7 +236,7 @@ export default function HostShell() {
             ? ' HostMan signs in to this host as root, so the shell is root: there is no sudo to forget.'
             : ' It is not root, whatever HostMan does elsewhere: sudo is there when you mean it.'}
         </p>
-        <button className="block" onClick={start} disabled={starting || !host.data}>
+        <button className="block" onClick={() => start()} disabled={starting || !host.data}>
           {starting ? 'Opening…' : 'Start a shell'}
         </button>
       </Card>

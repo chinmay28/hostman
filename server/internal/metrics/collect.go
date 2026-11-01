@@ -41,6 +41,7 @@ printf '@@machineid\n'
 cat /etc/machine-id 2>/dev/null || cat /var/lib/dbus/machine-id 2>/dev/null || true
 printf '@@tools\n'
 if command -v VBoxManage >/dev/null 2>&1 || command -v vboxmanage >/dev/null 2>&1; then echo virtualbox; fi
+if command -v ollama >/dev/null 2>&1 || [ -x /usr/local/bin/ollama ]; then echo ollama; fi
 printf '@@pagesize\n'
 getconf PAGESIZE 2>/dev/null || echo 4096
 printf '@@cpu1\n'
@@ -109,8 +110,11 @@ func parseProbe(out string) (*Probe, error) {
 		p.Facts.MachineID = strings.TrimSpace(id[0])
 	}
 	for _, tool := range sections["tools"] {
-		if tool == "virtualbox" {
+		switch tool {
+		case "virtualbox":
 			p.Facts.VirtualBox = true
+		case "ollama":
+			p.Facts.Ollama = true
 		}
 	}
 

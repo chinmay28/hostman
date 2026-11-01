@@ -83,6 +83,9 @@ export interface Host {
   /** Whether VBoxManage was on the host at the last probe. The host's page
    *  offers its virtual machines only where it was. */
   virtualbox: boolean
+  /** Whether the ollama command was on the host at the last probe. The
+   *  host's page offers its models only where it was. */
+  ollama: boolean
   latest: Sample | null
 }
 
@@ -551,6 +554,80 @@ export interface VM {
 /** The verbs a machine takes. Stop is the ACPI power button, which lets the
  *  guest shut itself down; poweroff pulls the plug. */
 export type VMAction = 'start' | 'stop' | 'poweroff' | 'reset' | 'pause' | 'resume' | 'save'
+
+/**
+ * Ollama on the host: whether it is there, whether its server answers, what
+ * is on the disk and in memory, and where a pull got to.
+ *
+ * Everything goes through the `ollama` command as the SSH user, which talks
+ * to the server over localhost — so listing, pulling and removing need no
+ * root whoever the server runs as.
+ */
+export interface OllamaHost {
+  /** Whether the command is on the host — the live answer, where the host
+   *  record carries the one from the last probe. */
+  installed: boolean
+  /** Ollama's own version, e.g. 0.6.2, read whether or not the server is up. */
+  version?: string
+  /** Who asked: the SSH user, who is also who a pull runs as. */
+  user: string
+  /** Whether the server answered. When it is false the lists are empty and
+   *  `error` says what the command said instead. */
+  running: boolean
+  error?: string
+  /** systemd's word for ollama.service — active, inactive, failed — or absent
+   *  where there is no such unit, which is how a server started by hand looks. */
+  unit?: string
+  models: OllamaModel[]
+  loaded: OllamaLoaded[]
+  /** The pull that is running or the last one that ran, until it is cleared. */
+  pull?: OllamaPull
+}
+
+/** One model on the disk, as `ollama list` describes it. */
+export interface OllamaModel {
+  /** What ollama knows it by, tag included: llama3.2:latest. */
+  name: string
+  id: string
+  /** Ollama's own figure, "4.7 GB", and the same number for adding up. */
+  size: string
+  sizeBytes: number
+  /** Ollama's own relative wording: "2 weeks ago". */
+  modified: string
+}
+
+/** One model in memory, as `ollama ps` describes it. */
+export interface OllamaLoaded {
+  name: string
+  id: string
+  size: string
+  /** Where it runs: "100% GPU", "100% CPU", or a split. */
+  processor: string
+  /** The context window it was loaded with, where ollama says. */
+  context?: string
+  /** When it unloads if nothing asks for it: "4 minutes from now". */
+  until: string
+}
+
+/** Where a pull got to. It runs detached on the host, so this is read back
+ *  from the files the runner leaves behind. */
+export interface OllamaPull {
+  model: string
+  /** running, ok, failed, cancelled — or lost, where the runner disappeared
+   *  without recording how it ended. */
+  state: 'running' | 'ok' | 'failed' | 'cancelled' | 'lost'
+  exit?: number
+  /** The last figure the progress bar showed, or -1 before it has shown one. */
+  percent: number
+  /** The last line ollama printed, with the bar drawing stripped. */
+  status?: string
+  /** The tail of the pull's log, one line per step. */
+  log?: string
+}
+
+/** The verbs the ollama screen offers. remove and stop name a model; start
+ *  is the server, cancel and clear are the pull. */
+export type OllamaAction = 'remove' | 'stop' | 'start' | 'cancel' | 'clear'
 
 /** Where an update of deluge got to. It runs detached on the host, so this is
  *  read back from what it left there rather than from anything the app held. */

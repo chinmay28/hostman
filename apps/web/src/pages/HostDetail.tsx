@@ -417,6 +417,24 @@ export default function HostDetail() {
               </div>
             </Link>
           )}
+          {/* Only where the probe found ollama, for the same reason as the
+              machines: a model server is a thing a host has been given, and
+              a card that said "not installed" on most machines would be
+              noise. It appears by the next poll after ollama is installed. */}
+          {host.ollama && (
+            <Link className="card" to={`/hosts/${hostId}/ollama`}>
+              <div className="row between">
+                <div className="grow">
+                  <div className="title">Ollama</div>
+                  <div className="sub">
+                    The models on {host.name} — pull one, drop one, see what is loaded, and talk
+                    to one
+                  </div>
+                </div>
+                <span className="chevron">›</span>
+              </div>
+            </Link>
+          )}
           <Link className="card" to={`/hosts/${hostId}/cron`}>
             <div className="row between">
               <div className="grow">

@@ -16,6 +16,7 @@ Debian GNU/Linux 12 (bookworm)
 yes
 @@tools
 virtualbox
+ollama
 @@pagesize
 4096
 @@cpu1
@@ -68,6 +69,9 @@ func TestParseProbe(t *testing.T) {
 	}
 	if !p.Facts.VirtualBox {
 		t.Error("virtualbox = false, want true: the tools section named it")
+	}
+	if !p.Facts.Ollama {
+		t.Error("ollama = false, want true: the tools section named it")
 	}
 
 	// busy delta 142 of 562 total jiffies.
@@ -161,6 +165,9 @@ cpu  10 0 5 100 0 0 0 0 0 0
 	}
 	if p.Facts.VirtualBox {
 		t.Error("virtualbox = true on a host whose probe had no tools section")
+	}
+	if p.Facts.Ollama {
+		t.Error("ollama = true on a host whose probe had no tools section")
 	}
 	if p.Sample.TempC != nil {
 		t.Errorf("tempC = %v, want nil when no thermal zone", *p.Sample.TempC)

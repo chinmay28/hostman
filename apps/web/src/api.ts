@@ -15,6 +15,8 @@ import type {
   Installation,
   JournalStorage,
   MetricSummary,
+  OllamaAction,
+  OllamaHost,
   Overview,
   ProvisionResult,
   RemoteSession,
@@ -234,14 +236,37 @@ export const api = {
   vmAction: (id: number, action: VMAction, vmId: string) =>
     request<VMList>(`/api/hosts/${id}/vms/action`, { method: 'POST', ...json({ action, id: vmId }) }),
 
+  /** Ollama on a host: whether it is there, whether the server answers, what
+   *  is on the disk and in memory, and where a pull got to. A read: the
+   *  screen asks on a timer while a pull is running. */
+  ollama: (id: number) => request<OllamaHost>(`/api/hosts/${id}/ollama`),
+  /** Starts pulling a model, which runs on for minutes after this answers:
+   *  the status's `pull` field is where it is followed. One at a time. */
+  pullOllama: (id: number, model: string) =>
+    request<OllamaHost>(`/api/hosts/${id}/ollama/pull`, { method: 'POST', ...json({ model }) }),
+  /** Removes or unloads a model, starts the server, cancels the pull that is
+   *  running, or clears the record of the last one; answers with the status
+   *  afterwards. Talking to a model is the terminal with `ollama run` typed
+   *  into it, which openShell does. */
+  ollamaAction: (id: number, action: OllamaAction, model = '') =>
+    request<OllamaHost>(`/api/hosts/${id}/ollama/action`, {
+      method: 'POST',
+      ...json({ action, model }),
+    }),
+
   /** The shells already open on a host, oldest first. A screen arriving on the
    *  terminal offers to rejoin one rather than opening another, which is what
    *  makes coming back to a half-typed command the normal case. */
   shells: (id: number) => request<ShellSession[]>(`/api/hosts/${id}/shell`),
   /** Opens a login shell. The size is what the screen measured; the server
-   *  clamps it, so a bad measurement is a small terminal and not an error. */
-  openShell: (id: number, cols: number, rows: number) =>
-    request<ShellSession>(`/api/hosts/${id}/shell`, { method: 'POST', ...json({ cols, rows }) }),
+   *  clamps it, so a bad measurement is a small terminal and not an error. A
+   *  command is typed into the shell as soon as it opens — typed, not run, so
+   *  it shows at the prompt and Ctrl-C stops it like anything else typed. */
+  openShell: (id: number, cols: number, rows: number, command = '') =>
+    request<ShellSession>(`/api/hosts/${id}/shell`, {
+      method: 'POST',
+      ...json({ cols, rows, command }),
+    }),
   shell: (sid: string) => request<ShellSession>(`/api/shell/${sid}`),
   /** Keystrokes, base64. A terminal's most important keys are not text: Ctrl-C
    *  is one byte, an arrow key is three, and neither survives being a string. */

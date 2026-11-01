@@ -12,6 +12,7 @@ import HostDetail from './pages/HostDetail'
 import HostFile from './pages/HostFile'
 import HostFiles from './pages/HostFiles'
 import HostForm from './pages/HostForm'
+import HostOllama from './pages/HostOllama'
 import HostRemote from './pages/HostRemote'
 import HostService from './pages/HostService'
 import HostServiceNew from './pages/HostServiceNew'
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="/hosts/:id/claude" element={<HostClaude />} />
         <Route path="/hosts/:id/torrents" element={<HostTorrents />} />
         <Route path="/hosts/:id/vms" element={<HostVMs />} />
+        <Route path="/hosts/:id/ollama" element={<HostOllama />} />
         <Route path="/apps" element={<Apps />} />
         <Route path="/apps/new" element={<AppForm />} />
         <Route path="/apps/:id" element={<AppDetail />} />

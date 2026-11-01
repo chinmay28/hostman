@@ -599,6 +599,38 @@ there were. Shutting down sends the ACPI power button and lets the guest shut
 itself down; powering off and resetting do not ask the guest anything, so both
 confirm first.
 
+**Ollama** is the model server on a host that has one, driven from the phone:
+what is on the disk and what is loaded in memory, pulling another model,
+dropping one, unloading one, and talking to one. Each model is a card with
+ollama's own id, size and age; each loaded one says where it runs — `100% GPU`,
+`100% CPU`, a split — and when it unloads. Pulling takes a name as ollama
+spells one, `llama3.2:3b`, or a tap on one of a few small suggestions, and the
+download runs **detached on the host** the way a deluge update does: a job
+with a log and a state file of its own, which the screen follows as a progress
+bar and which a phone that locks its screen cannot interrupt. One pull at a
+time, because two downloads on one link are each slower than one. A pull can
+be cancelled, and the record of the last one dismissed.
+
+**Talking to a model is the Terminal with `ollama run` typed in.** A chat is a
+terminal program, and the terminal is already there — so "Talk to it" opens a
+shell on the host with the command typed at the prompt, exactly as if you had,
+and the shell stays after `/bye`. The shell endpoint takes a `command` for this,
+which is typed rather than run: one line, no control characters, visible at the
+prompt and stoppable with Ctrl-C like anything else typed.
+
+**The card is only there on a host that has ollama**, for the same reason as
+the machines: the probe checks for the `ollama` command, and the host's page
+offers the screen only where it was found. HostMan will not install it — a
+model server is a decision about what a machine is for, with gigabytes of disk
+behind it — but the screen says the one line that does, and the card appears by
+the next poll once it is there. **Everything goes through the command as the
+SSH user**: it talks to the server over localhost, so listing, pulling and
+removing need no root whoever the server runs as, and the official install's
+arrangement — its own `ollama` user under systemd — is exactly what this
+expects to find. The one thing that elevates is starting a stopped server,
+which is `systemctl start` through sudo where the installer left a unit, and
+`ollama serve` detached as the SSH user where it did not.
+
 **Terminal** is a login shell on the host, with a pty behind it — the same
 thing `ssh you@host` gives you, so `htop` draws, `vim` works, tab completion
 completes and colours are colours. There is still no agent: it is one SSH
@@ -1002,7 +1034,7 @@ Quoting is tested the same way — every path a person could type is handed to
 | `POST`   | `/api/hosts/{id}/services/action`   | start, stop, restart, reload, enable or disable |
 | `POST`   | `/api/hosts/{id}/services/reload`   | `daemon-reload` after a unit file changes |
 | `GET`    | `/api/hosts/{id}/shell`             | the login shells open on this host   |
-| `POST`   | `/api/hosts/{id}/shell`             | open one, `{"cols","rows"}`; the size is clamped, never refused |
+| `POST`   | `/api/hosts/{id}/shell`             | open one, `{"cols","rows","command"}`; the size is clamped, never refused; the command, if any, is typed into the shell as it opens |
 | `GET`    | `/api/shell/{sid}`                  | one shell: its size, its byte offset, whether it is still running |
 | `DELETE` | `/api/shell/{sid}`                  | end it                               |
 | `GET`    | `/api/shell/{sid}/stream`           | the screen as server-sent events, `?from=` a byte offset to resume |
@@ -1036,6 +1068,9 @@ Quoting is tested the same way — every path a person could type is handed to
 | `DELETE` | `/api/hosts/{id}/torrents/setup`    | take it off; the host's deluge and the downloaded files stay |
 | `GET`    | `/api/hosts/{id}/vms`               | the SSH user's VirtualBox machines, with their state; `installed` says whether VirtualBox is there at all |
 | `POST`   | `/api/hosts/{id}/vms/action`        | `{"action","id"}`: start (headless), stop (ACPI), poweroff, reset, pause, resume or save one machine; answers with the list |
+| `GET`    | `/api/hosts/{id}/ollama`            | ollama on the host: whether it is installed, whether the server answers, the models on the disk and in memory, and where a pull got to |
+| `POST`   | `/api/hosts/{id}/ollama/pull`       | `{"model"}`: start pulling one (detached; followed through `GET`); one at a time |
+| `POST`   | `/api/hosts/{id}/ollama/action`     | `{"action","model"}`: remove or stop (unload) a model; start the server; cancel the running pull; or clear the record of the last one; answers with the status |
 | `GET`    | `/api/hosts/{id}/files`             | list a directory, `?path=` (default: home) |
 | `DELETE` | `/api/hosts/{id}/files`             | delete `?path=`, `&recursive=true` for a full directory |
 | `GET`    | `/api/hosts/{id}/files/content`     | read a file, `?path=`                |
