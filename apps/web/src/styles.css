@@ -1238,6 +1238,55 @@ button.block {
   margin-bottom: 0;
 }
 
+/* ---------- uploads ---------- */
+
+/* The pickers are buttons; the inputs behind them stay out of sight, because
+   a bare file input is the one control no two browsers draw alike. */
+.upload-input {
+  display: none;
+}
+
+.upload-list {
+  margin: 12px 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.upload-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  font-size: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.upload-list > div:first-child {
+  border-top: 0;
+}
+
+.upload-list .name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-list .size {
+  flex: none;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.upload-progress {
+  margin: 14px 0 6px;
+}
+
+.upload-progress .bar {
+  margin-bottom: 8px;
+}
+
 /* ---------- segmented control and chips ---------- */
 
 .segmented {

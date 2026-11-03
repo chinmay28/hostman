@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError, api } from '../api'
 import { Page } from '../components/Layout'
 import { Badge, Banner, Card, Empty, Field, Loading, Sheet, useLoader } from '../components/ui'
 import { ago, bytes } from '../lib/format'
+import { plan, run, summarize, totalBytes, type Outcome, type Progress, type UploadItem } from '../lib/upload'
 import type { DirEntry, DirUsage, FileJob } from '../types'
 
 /**
@@ -31,6 +32,7 @@ export default function HostFiles() {
   } = useLoader(() => api.files(hostId, path), [hostId, path])
   const [acting, setActing] = useState<DirEntry | null>(null)
   const [creating, setCreating] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   // Bumped when a job is started from here, so the strip picks it up at once
   // rather than on its next poll.
@@ -63,9 +65,14 @@ export default function HostFiles() {
       title={listing ? name(listing.path) : 'Files'}
       back={up}
       action={
-        <button className="ghost" onClick={() => setCreating(true)}>
-          New
-        </button>
+        <>
+          <button className="ghost" onClick={() => setUploading(true)}>
+            Upload
+          </button>
+          <button className="ghost" onClick={() => setCreating(true)}>
+            New
+          </button>
+        </>
       }
     >
       <Loading error={error} offline={offline} hasData={!!listing} />
@@ -137,6 +144,19 @@ export default function HostFiles() {
             setActing(null)
             setNotice(null)
             setJobsVersion((v) => v + 1)
+          }}
+        />
+      )}
+
+      {uploading && listing && (
+        <UploadSheet
+          hostId={hostId}
+          dir={listing.path}
+          onClose={() => setUploading(false)}
+          onDone={(message) => {
+            setUploading(false)
+            setNotice(message)
+            reload()
           }}
         />
       )}
@@ -906,6 +926,229 @@ function CreateSheet({
         </button>
       </div>
     </Sheet>
+  )
+}
+
+/**
+ * UploadSheet brings files from this device into the folder on screen. Pick
+ * files, or a whole folder where the browser allows it, and they go up one at
+ * a time — one request each, so a photo that will not go does not take the
+ * other forty with it, and the bar can say which one is going. A file already
+ * on the host by that name is left alone unless replacing is asked for, and
+ * one that gets cut off part way never lands at all.
+ */
+function UploadSheet({
+  hostId,
+  dir,
+  onClose,
+  onDone,
+}: {
+  hostId: number
+  dir: string
+  onClose: () => void
+  /** Something was uploaded, or tried; the listing wants reloading. */
+  onDone: (message: string) => void
+}) {
+  const filesInput = useRef<HTMLInputElement>(null)
+  const folderInput = useRef<HTMLInputElement>(null)
+  const controller = useRef<AbortController | null>(null)
+  const [items, setItems] = useState<UploadItem[]>([])
+  const [replace, setReplace] = useState(false)
+  const [phase, setPhase] = useState<'pick' | 'sending' | 'done'>('pick')
+  const [progress, setProgress] = useState<Progress | null>(null)
+  const [outcomes, setOutcomes] = useState<Outcome[]>([])
+
+  const picked = (e: ChangeEvent<HTMLInputElement>) => {
+    setItems(plan(Array.from(e.target.files ?? [])))
+    // Cleared so picking the same files again still counts as a change.
+    e.target.value = ''
+  }
+
+  // send runs a queue, with replacing on or off, and puts its outcomes after
+  // the ones kept from before — which is how "replace the ones that were
+  // already there" reports on the whole upload and not only its second half.
+  const send = async (queue: UploadItem[], replacing: boolean, keep: Outcome[]) => {
+    const ctl = new AbortController()
+    controller.current = ctl
+    setPhase('sending')
+    setProgress(null)
+    const results = await run(
+      queue,
+      async (item, onBytes) => {
+        try {
+          await api.uploadFile(hostId, dir, item.name, item.file, {
+            replace: replacing,
+            onProgress: onBytes,
+            signal: ctl.signal,
+          })
+          return 'done'
+        } catch (e) {
+          // 409 is the host saying the name is taken, which is a question for
+          // afterwards rather than a failure.
+          if (e instanceof ApiError && e.status === 409) return 'exists'
+          throw e
+        }
+      },
+      setProgress,
+      ctl.signal,
+    )
+    controller.current = null
+    setOutcomes([...keep, ...results])
+    setPhase('done')
+  }
+
+  const stop = () => controller.current?.abort()
+  // Closing after anything was sent hands the summary back, so the listing
+  // behind the sheet shows what arrived.
+  const close = () => (outcomes.length > 0 ? onDone(summarize(outcomes)) : onClose())
+
+  const existing = outcomes.filter((o) => o.state === 'exists').map((o) => o.item)
+  const failures = outcomes.filter((o) => o.state === 'failed')
+  const tone = failures.length > 0 ? 'bad' : existing.length > 0 ? 'warn' : 'good'
+
+  return (
+    <Sheet title="Upload" subtitle={`to ${dir}`} onClose={phase === 'sending' ? stop : close}>
+      {phase === 'sending' ? (
+        <>
+          <UploadProgress progress={progress} />
+          <div className="actions">
+            <button className="secondary" onClick={stop}>
+              Stop
+            </button>
+          </div>
+        </>
+      ) : phase === 'done' ? (
+        <>
+          <Banner tone={tone}>{summarize(outcomes)}</Banner>
+          {failures.length > 0 && (
+            <div className="upload-list">
+              {failures.slice(0, SHOWN).map((o) => (
+                <div key={o.item.name}>
+                  <span className="name">{o.item.name}</span>
+                  <span className="size">{o.state === 'failed' ? o.error : ''}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="actions">
+            {existing.length > 0 && (
+              <button
+                className="secondary"
+                onClick={() =>
+                  send(
+                    existing,
+                    true,
+                    outcomes.filter((o) => o.state !== 'exists'),
+                  )
+                }
+              >
+                Replace {existing.length === 1 ? 'it' : `those ${existing.length}`}
+              </button>
+            )}
+            <button className="primary" onClick={close}>
+              Done
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="sub">
+            Files from this device go into {dir}. Anything already there by the same name is left
+            alone unless you say otherwise.
+          </p>
+          <input
+            className="upload-input"
+            type="file"
+            multiple
+            ref={filesInput}
+            onChange={picked}
+            aria-label="Choose files"
+          />
+          <input
+            className="upload-input"
+            type="file"
+            ref={folderInput}
+            onChange={picked}
+            aria-label="Choose a folder"
+            {...FOLDER_PICKER}
+          />
+          <div className="actions" style={{ marginTop: 4 }}>
+            <button className="secondary" onClick={() => filesInput.current?.click()}>
+              Choose files
+            </button>
+            <button className="secondary" onClick={() => folderInput.current?.click()}>
+              Choose a folder
+            </button>
+          </div>
+          {items.length > 0 && (
+            <>
+              <div className="upload-list">
+                {items.slice(0, SHOWN).map((item) => (
+                  <div key={item.name}>
+                    <span className="name">{item.name}</span>
+                    <span className="size">{bytes(item.file.size)}</span>
+                  </div>
+                ))}
+                {items.length > SHOWN && (
+                  <div>
+                    <span className="name sub">and {items.length - SHOWN} more</span>
+                  </div>
+                )}
+              </div>
+              <p className="sub">
+                {items.length} file{items.length === 1 ? '' : 's'} · {bytes(totalBytes(items))}
+              </p>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={replace}
+                  onChange={(e) => setReplace(e.target.checked)}
+                />
+                Replace files already there
+              </label>
+              <div className="actions">
+                <button className="secondary" onClick={onClose}>
+                  Cancel
+                </button>
+                <button className="primary" onClick={() => send(items, replace, [])}>
+                  Upload {items.length === 1 ? '1 file' : `${items.length} files`}
+                </button>
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </Sheet>
+  )
+}
+
+/** How many names a list in the sheet shows before it says "and N more": a
+ *  folder of photos is hundreds, and the point is to confirm the pick. */
+const SHOWN = 8
+
+/** The attributes that make a file input pick a folder. They are vendor ones
+ *  React's typings do not know, so they are spread in rather than written. */
+const FOLDER_PICKER = { webkitdirectory: '', directory: '' } as Record<string, string>
+
+/** UploadProgress is the bar and the line under it: what is going now, how
+ *  many are done, how much of the whole has gone. */
+function UploadProgress({ progress }: { progress: Progress | null }) {
+  const sent = progress?.bytesSent ?? 0
+  const total = progress?.bytesTotal ?? 0
+  const pct = total > 0 ? Math.min(100, Math.round((sent / total) * 100)) : 0
+  return (
+    <div className="upload-progress">
+      <div className="bar">
+        <span style={{ width: `${pct}%` }} />
+      </div>
+      <div className="row between sub">
+        <span className="truncate">{progress?.current ?? (progress ? 'Finishing…' : 'Starting…')}</span>
+        <span>
+          {progress ? `${progress.finished} of ${progress.total} · ` : ''}
+          {bytes(sent)} of {bytes(total)}
+        </span>
+      </div>
+    </div>
   )
 }
 

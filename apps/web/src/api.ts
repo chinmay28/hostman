@@ -31,6 +31,7 @@ import type {
   ShellSession,
   SSHKeyInfo,
   TorrentDaemon,
+  Uploaded,
   VMAction,
   VMList,
 } from './types'
@@ -64,6 +65,52 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 const json = (body: unknown): RequestInit => ({ body: JSON.stringify(body) })
+
+export interface UploadOptions {
+  /** Replace a file already there by that name. Off, it is a 409. */
+  replace?: boolean
+  /** Called with the bytes sent so far, as often as the browser knows. */
+  onProgress?: (sent: number) => void
+  /** Aborting it stops the upload; the host throws away what arrived. */
+  signal?: AbortSignal
+}
+
+/**
+ * upload puts one file's bytes on the wire to a folder on a host. It is the
+ * one request made with XMLHttpRequest rather than fetch, because it is the
+ * one where how much has been sent matters and fetch does not say.
+ */
+function upload(url: string, body: Blob, opts: UploadOptions): Promise<Uploaded> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', url)
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream')
+    xhr.upload.onprogress = (e) => opts.onProgress?.(e.loaded)
+    xhr.onload = () => {
+      let parsed: { error?: string } | undefined
+      try {
+        parsed = xhr.responseText ? JSON.parse(xhr.responseText) : undefined
+      } catch {
+        parsed = undefined
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(parsed as unknown as Uploaded)
+      } else {
+        reject(new ApiError(xhr.status, parsed?.error ?? `Request failed (${xhr.status})`))
+      }
+    }
+    xhr.onerror = () => reject(new ApiError(0, 'Could not reach HostMan. Is it still running?'))
+    xhr.onabort = () => reject(new ApiError(0, 'The upload was stopped.'))
+    if (opts.signal) {
+      if (opts.signal.aborted) {
+        reject(new ApiError(0, 'The upload was stopped.'))
+        return
+      }
+      opts.signal.addEventListener('abort', () => xhr.abort(), { once: true })
+    }
+    xhr.send(body)
+  })
+}
 
 export interface HostInput {
   name: string
@@ -340,6 +387,16 @@ export const api = {
       method: 'POST',
       ...json({ path, mode, recursive }),
     }),
+  /** Sends one file to a folder on the host. `name` is its path under `dir`:
+   *  a bare name, or one with the folder it came from in front. */
+  uploadFile: (id: number, dir: string, name: string, body: Blob, opts: UploadOptions = {}) =>
+    upload(
+      `/api/hosts/${id}/files/upload?dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(name)}${
+        opts.replace ? '&replace=true' : ''
+      }`,
+      body,
+      opts,
+    ),
   deleteFile: (id: number, path: string, recursive = false) =>
     request<void>(
       `/api/hosts/${id}/files?path=${encodeURIComponent(path)}${recursive ? '&recursive=true' : ''}`,

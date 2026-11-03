@@ -160,6 +160,12 @@ export interface DirUsage {
   asUser: string
 }
 
+/** Where an uploaded file landed on the host, and how big it is there. */
+export interface Uploaded {
+  path: string
+  size: number
+}
+
 /** A copy, move or send under way or lately finished. A job runs on
  *  HostMan's side of the connection, so it survives the phone locking, but
  *  not HostMan restarting. */

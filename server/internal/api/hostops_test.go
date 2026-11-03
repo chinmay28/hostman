@@ -3,6 +3,8 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -54,6 +56,52 @@ func TestFileRequestsValidateThePath(t *testing.T) {
 			}
 		})
 	}
+}
+
+// An upload's directory and name are checked before a byte is sent anywhere:
+// the name is joined to the directory on the host, so one that could climb out
+// of it is refused here. And the host needs to know how long the file is, to
+// throw away one that arrives short, so an upload without a length is refused
+// too — as a 411, which is what that code is for.
+func TestUploadRequestsValidateWhereTheFileGoes(t *testing.T) {
+	_, h := testServer(t, "")
+	id := newHost(t, h)
+
+	cases := []struct{ name, query string }{
+		{"no directory", "name=photo.jpg"},
+		{"a relative directory", "dir=photos&name=photo.jpg"},
+		{"no name", "dir=/home/pi"},
+		{"an absolute name", "dir=/home/pi&name=/etc/passwd"},
+		{"a name that climbs out", "dir=/home/pi&name=../.ssh/authorized_keys"},
+		{"a name with a dot segment", "dir=/home/pi&name=a/./b"},
+		{"a name with an empty segment", "dir=/home/pi&name=a//b"},
+		{"a name ending in a slash", "dir=/home/pi&name=folder/"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest("POST", fmt.Sprintf("/api/hosts/%d/files/upload?%s", id, tc.query), strings.NewReader("bytes"))
+			r.Header.Set("Content-Type", "application/octet-stream")
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400 (body %s)", w.Code, w.Body)
+			}
+			if decode[apiError](t, w).Error == "" {
+				t.Error("a 400 should say what was wrong with the request")
+			}
+		})
+	}
+
+	t.Run("no length", func(t *testing.T) {
+		r := httptest.NewRequest("POST", fmt.Sprintf("/api/hosts/%d/files/upload?dir=/home/pi&name=photo.jpg", id), strings.NewReader("bytes"))
+		r.ContentLength = -1
+		r.Header.Set("Content-Type", "application/octet-stream")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != http.StatusLengthRequired {
+			t.Fatalf("status = %d, want 411 (body %s)", w.Code, w.Body)
+		}
+	})
 }
 
 // The service screens name a unit in the query string or the body. Services and
