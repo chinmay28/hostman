@@ -4,7 +4,7 @@ import { ApiError, api } from '../api'
 import { Page } from '../components/Layout'
 import { Badge, Banner, Card, Empty, Field, Loading, Sheet, useLoader } from '../components/ui'
 import { ago, bytes } from '../lib/format'
-import { plan, run, summarize, totalBytes, type Outcome, type Progress, type UploadItem } from '../lib/upload'
+import { merge, plan, run, summarize, totalBytes, type Outcome, type Progress, type UploadItem } from '../lib/upload'
 import type { DirEntry, DirUsage, FileJob } from '../types'
 
 /**
@@ -958,10 +958,20 @@ function UploadSheet({
   const [progress, setProgress] = useState<Progress | null>(null)
   const [outcomes, setOutcomes] = useState<Outcome[]>([])
 
+  // Each pick adds to the list rather than replacing it: a phone's picker
+  // often hands over one file at a time, and "upload these three" should not
+  // need three uploads. The input is left alone afterwards — on iOS a file
+  // picked from Photos can stop being readable once the input that produced
+  // it is cleared — and only remade when the list is emptied on purpose.
+  const [generation, setGeneration] = useState(0)
   const picked = (e: ChangeEvent<HTMLInputElement>) => {
-    setItems(plan(Array.from(e.target.files ?? [])))
-    // Cleared so picking the same files again still counts as a change.
-    e.target.value = ''
+    const added = plan(Array.from(e.target.files ?? []))
+    setItems((current) => merge(current, added))
+  }
+  const remove = (name: string) => setItems((current) => current.filter((item) => item.name !== name))
+  const clear = () => {
+    setItems([])
+    setGeneration((g) => g + 1)
   }
 
   // send runs a queue, with replacing on or off, and puts its outcomes after
@@ -1053,10 +1063,11 @@ function UploadSheet({
       ) : (
         <>
           <p className="sub">
-            Files from this device go into {dir}. Anything already there by the same name is left
-            alone unless you say otherwise.
+            Files from this device go into {dir}. Choose as many times as you like to add to the
+            list. Anything already there by the same name is left alone unless you say otherwise.
           </p>
           <input
+            key={`files-${generation}`}
             className="upload-input"
             type="file"
             multiple
@@ -1065,6 +1076,7 @@ function UploadSheet({
             aria-label="Choose files"
           />
           <input
+            key={`folder-${generation}`}
             className="upload-input"
             type="file"
             ref={folderInput}
@@ -1087,6 +1099,13 @@ function UploadSheet({
                   <div key={item.name}>
                     <span className="name">{item.name}</span>
                     <span className="size">{bytes(item.file.size)}</span>
+                    <button
+                      className="remove"
+                      onClick={() => remove(item.name)}
+                      aria-label={`Remove ${item.name}`}
+                    >
+                      ×
+                    </button>
                   </div>
                 ))}
                 {items.length > SHOWN && (
@@ -1095,9 +1114,14 @@ function UploadSheet({
                   </div>
                 )}
               </div>
-              <p className="sub">
-                {items.length} file{items.length === 1 ? '' : 's'} · {bytes(totalBytes(items))}
-              </p>
+              <div className="row between sub">
+                <span>
+                  {items.length} file{items.length === 1 ? '' : 's'} · {bytes(totalBytes(items))}
+                </span>
+                <button className="ghost" onClick={clear}>
+                  Clear
+                </button>
+              </div>
               <label className="checkbox">
                 <input
                   type="checkbox"
