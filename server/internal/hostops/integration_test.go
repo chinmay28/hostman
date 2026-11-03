@@ -1,7 +1,9 @@
 package hostops
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -154,6 +156,62 @@ func TestFilesOverSSH(t *testing.T) {
 // multi-argument command carrying a shell script twice, and two base64 chunks of
 // log coming back. The scripts and the verdict are tested elsewhere; what this
 // proves is that the whole of it survives a real channel.
+// An upload streams raw bytes down the channel's stdin rather than a base64
+// string, so the SSH path is the part worth proving: that every byte value
+// arrives, that a promised length is held to, and that a refusal comes back as
+// the error the API tells apart.
+func TestUploadOverSSH(t *testing.T) {
+	svc, host := sshEnv(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := make([]byte, 300_000)
+	for i := range body {
+		body[i] = byte(i * 7)
+	}
+
+	up, err := svc.Upload(ctx, host, dir, "trip/photo.bin", int64(len(body)), bytes.NewReader(body), false)
+	if err != nil {
+		t.Fatalf("Upload: %v", err)
+	}
+	want := filepath.Join(dir, "trip", "photo.bin")
+	if up.Path != want || up.Size != int64(len(body)) {
+		t.Errorf("uploaded = %+v, want %s with %d bytes", up, want, len(body))
+	}
+	onDisk, err := os.ReadFile(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(onDisk, body) {
+		t.Errorf("on disk differs from what was sent (%d bytes vs %d)", len(onDisk), len(body))
+	}
+
+	// The same name again is refused, and refused in a way the API can turn
+	// into a 409 — until it is asked to replace.
+	_, err = svc.Upload(ctx, host, dir, "trip/photo.bin", 3, strings.NewReader("new"), false)
+	if !errors.Is(err, ErrExists) {
+		t.Errorf("second upload err = %v, want ErrExists", err)
+	}
+	if _, err := svc.Upload(ctx, host, dir, "trip/photo.bin", 3, strings.NewReader("new"), true); err != nil {
+		t.Fatalf("replace: %v", err)
+	}
+	if got, _ := os.ReadFile(want); string(got) != "new" {
+		t.Errorf("on disk = %q, want it replaced", got)
+	}
+
+	// A body shorter than promised never lands.
+	if _, err := svc.Upload(ctx, host, dir, "short.bin", 1000, strings.NewReader("tiny"), false); err == nil {
+		t.Error("a short upload succeeded, want it refused")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "short.bin")); !errors.Is(err, os.ErrNotExist) {
+		t.Error("a short upload should leave no file behind")
+	}
+}
+
 func TestLastBootOverSSH(t *testing.T) {
 	svc, host := sshEnv(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)

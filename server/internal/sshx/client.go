@@ -158,6 +158,19 @@ func (c *Client) Run(ctx context.Context, cmd string) (*Result, error) {
 // wants the password on stdin — passing it on the command line would put it in
 // the host's process list.
 func (c *Client) RunInput(ctx context.Context, cmd, stdin string) (*Result, error) {
+	if stdin == "" {
+		return c.RunReader(ctx, cmd, nil)
+	}
+	return c.RunReader(ctx, cmd, strings.NewReader(stdin))
+}
+
+// RunReader is Run with stdin streamed from a reader, for a command whose
+// input is too big to hold in memory first — a file arriving from a browser
+// on its way to the host's disk. The bytes go through untouched: an SSH channel
+// is binary-safe, so nothing needs encoding on the way. The command sees EOF
+// when the reader ends, and the call returns once the command has exited. A
+// nil reader means no input at all.
+func (c *Client) RunReader(ctx context.Context, cmd string, stdin io.Reader) (*Result, error) {
 	session, err := c.conn.NewSession()
 	if err != nil {
 		return nil, fmt.Errorf("open session: %w", err)
@@ -167,8 +180,8 @@ func (c *Client) RunInput(ctx context.Context, cmd, stdin string) (*Result, erro
 	var stdout, stderr bytes.Buffer
 	session.Stdout = &stdout
 	session.Stderr = &stderr
-	if stdin != "" {
-		session.Stdin = strings.NewReader(stdin)
+	if stdin != nil {
+		session.Stdin = stdin
 	}
 
 	stop := context.AfterFunc(ctx, func() { session.Signal(ssh.SIGKILL); session.Close() })

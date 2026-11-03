@@ -41,6 +41,9 @@ func (s *Server) writeOpError(w http.ResponseWriter, err error, action string) {
 	case errors.Is(err, hostops.ErrNotEmpty):
 		// The caller can retry asking for the contents to go too.
 		writeError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, hostops.ErrExists):
+		// The caller can retry asking for the file to be replaced.
+		writeError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, hostops.ErrUnitRunning):
 		// Stopping it first is a step the caller can take, not a mistake.
 		writeError(w, http.StatusConflict, err.Error())
@@ -629,6 +632,52 @@ func (s *Server) handleRemoveFile(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Log.Info("api: deleted", "host", h.Name, "path", path, "recursive", recursive)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// uploadTimeout bounds one file's upload. The body is streamed from the browser
+// to the host as it arrives, so the time it takes is the time the network
+// takes: a backup over wifi is minutes, not seconds, and the only limit worth
+// having is one that frees a session the far end has stopped talking to.
+const uploadTimeout = 6 * time.Hour
+
+// handleUploadFile receives one file and places it under a directory on the
+// host. The body is the file's bytes, untouched — no JSON, no encoding — and
+// its length has to be declared, because the host checks what arrived against
+// it and throws away anything short. ?dir= is where it goes and ?name= is its
+// path inside that directory, which for a file from an uploaded folder has
+// the folder's structure in it. An existing file is a 409 unless
+// ?replace=true says it may go.
+func (s *Server) handleUploadFile(w http.ResponseWriter, r *http.Request) {
+	h, err := s.hostFromPath(r)
+	if err != nil {
+		s.writeStoreError(w, err, "upload file")
+		return
+	}
+	dir, err := hostops.CleanPath(r.URL.Query().Get("dir"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	name, err := hostops.CleanRelPath(r.URL.Query().Get("name"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if r.ContentLength < 0 {
+		writeError(w, http.StatusLengthRequired, "an upload has to say how long it is: send a Content-Length")
+		return
+	}
+	replace := r.URL.Query().Get("replace") == "true"
+	ctx, cancel := context.WithTimeout(r.Context(), uploadTimeout)
+	defer cancel()
+
+	up, err := s.Ops.Upload(ctx, h, dir, name, r.ContentLength, r.Body, replace)
+	if err != nil {
+		s.writeOpError(w, err, "upload file")
+		return
+	}
+	s.Log.Info("api: uploaded file", "host", h.Name, "path", up.Path, "bytes", up.Size, "replaced", replace)
+	writeJSON(w, http.StatusCreated, up)
 }
 
 // queryPath reads and validates the ?path= parameter, answering the request

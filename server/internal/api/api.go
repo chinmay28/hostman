@@ -153,6 +153,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/hosts/{id}/files/mkdir", s.handleMkdir)
 	mux.HandleFunc("POST /api/hosts/{id}/files/rename", s.handleRenameFile)
 	mux.HandleFunc("POST /api/hosts/{id}/files/chmod", s.handleChmodFile)
+	// An upload is the file's own bytes, streamed through to the host.
+	mux.HandleFunc("POST /api/hosts/{id}/files/upload", s.handleUploadFile)
 
 	// Copying, moving and sending are jobs: started under the host they run
 	// on, listed under every host they touch, and followed, cancelled and
