@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { plan, relativeName, run, summarize, totalBytes, type Outcome, type Picked, type UploadItem } from './upload'
+import {
+  merge,
+  plan,
+  relativeName,
+  run,
+  summarize,
+  totalBytes,
+  type Outcome,
+  type Picked,
+  type UploadItem,
+} from './upload'
 
 const pick = (name: string, size = 10, webkitRelativePath?: string): Picked => ({ name, size, webkitRelativePath })
 
@@ -24,6 +34,18 @@ describe('plan', () => {
   it('drops a leading slash a browser may put on a relative path', () => {
     expect(relativeName(pick('a.jpg', 1, '/trip/a.jpg'))).toBe('trip/a.jpg')
     expect(relativeName(pick('a.jpg', 1, ''))).toBe('a.jpg')
+  })
+
+  it('grows by a later pick, keeping a name picked twice once', () => {
+    const first = plan([pick('a.jpg', 1)])
+    const second = plan([pick('b.jpg', 2), pick('a.jpg', 3)])
+    expect(merge(first, second).map((i) => [i.name, i.file.size])).toEqual([
+      ['a.jpg', 1],
+      ['b.jpg', 2],
+    ])
+    expect(merge([], second).map((i) => i.name)).toEqual(['b.jpg', 'a.jpg'])
+    // Merging leaves the earlier list as it was.
+    expect(first).toHaveLength(1)
   })
 
   it('adds the sizes up', () => {

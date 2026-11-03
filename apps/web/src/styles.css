@@ -1275,8 +1275,21 @@ button.block {
 
 .upload-list .size {
   flex: none;
+  margin-left: auto;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
+}
+
+/* Taking one back out of the list: a small cross, but a full-height tap. */
+.upload-list .remove {
+  flex: none;
+  min-height: 0;
+  margin: -8px -8px -8px 0;
+  padding: 0 10px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 20px;
+  line-height: 1;
 }
 
 .upload-progress {

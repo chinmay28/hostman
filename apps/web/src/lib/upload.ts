@@ -41,6 +41,22 @@ export function plan<F extends Picked>(files: Iterable<F>): UploadItem<F>[] {
   return items
 }
 
+/**
+ * merge adds a later pick to an earlier one. The picker on a phone often
+ * hands over one file at a time, so a list that is replaced by each pick
+ * could never hold two; this one grows, and a name picked twice stays once.
+ */
+export function merge<F extends Picked>(existing: UploadItem<F>[], added: UploadItem<F>[]): UploadItem<F>[] {
+  const seen = new Set(existing.map((item) => item.name))
+  const items = existing.slice()
+  for (const item of added) {
+    if (seen.has(item.name)) continue
+    seen.add(item.name)
+    items.push(item)
+  }
+  return items
+}
+
 /** relativeName is the path a file takes under the destination: what the
  *  folder picker said, with any leading slashes gone, or else the file name. */
 export function relativeName(file: Picked): string {
