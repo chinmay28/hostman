@@ -4,7 +4,8 @@ import { api } from '../api'
 import { LaunchButton } from '../components/launch'
 import { Page } from '../components/Layout'
 import { DeploymentBadge, HealthBadge } from '../components/status'
-import { Banner, Card, Empty, Field, Loading, SectionTitle, Sheet, useLoader } from '../components/ui'
+import { Badge, Banner, Card, Empty, Field, Loading, SectionTitle, Sheet, useLoader } from '../components/ui'
+import { forwardSummary, forwardURL } from '../lib/forward'
 import { ago, parts, ports, renderCommand, time } from '../lib/format'
 import type { App, Host, Installation } from '../types'
 
@@ -20,6 +21,7 @@ export default function AppDetail() {
     [],
     10000,
   )
+  const { data: forwards } = useLoader(() => api.forwards(), [], 10000)
   const { data: history, reload: reloadHistory } = useLoader(
     () => api.deployments({ appId, limit: 10 }),
     [appId],
@@ -32,6 +34,7 @@ export default function AppDetail() {
   const [actionError, setActionError] = useState<string | null>(null)
 
   const mine = useMemo(() => installs?.filter((i) => i.appId === appId) ?? [], [installs, appId])
+  const myForward = forwards?.find((f) => f.appId === appId)
 
   const removeApp = async () => {
     try {
@@ -119,6 +122,29 @@ export default function AppDetail() {
               <LaunchButton installations={mine} className="secondary" label="Open app" />
             </div>
           </Card>
+
+          {app.forwardPort > 0 && (
+            <>
+              <SectionTitle>Port forwarding</SectionTitle>
+              <Card>
+                <div className="row between">
+                  <div className="grow">
+                    <a className="title" href={forwardURL(app.forwardPort)} target="_blank" rel="noreferrer">
+                      {forwardURL(app.forwardPort)}
+                    </a>
+                    <div className="sub">
+                      {myForward ? forwardSummary(myForward).text : `Relays HostMan port ${app.forwardPort} to port ${app.forwardTargetPort}`}
+                    </div>
+                  </div>
+                  {myForward && (
+                    <Badge tone={forwardSummary(myForward).tone}>
+                      {myForward.state === 'listening' ? 'On' : myForward.state === 'waiting' ? 'Waiting' : 'Error'}
+                    </Badge>
+                  )}
+                </div>
+              </Card>
+            </>
+          )}
 
           <SectionTitle>Deployed on</SectionTitle>
           {mine.length === 0 ? (

@@ -737,6 +737,23 @@ export interface App {
   createdAt: string
   /** True for the app that installs HostMan itself. */
   selfUpdate: boolean
+  /** Port forwarding: HostMan listens on forwardPort on its own machine and
+   *  relays to forwardTargetPort on the app's host. Both 0 when off. */
+  forwardPort: number
+  forwardTargetPort: number
+}
+
+/** How an app's port forward is doing; see GET /api/forwards. */
+export interface Forward {
+  appId: number
+  listenPort: number
+  targetPort: number
+  hostId?: number
+  hostName?: string
+  state: 'listening' | 'waiting' | 'error'
+  detail?: string
+  /** Connections being relayed right now. */
+  active: number
 }
 
 export type DeploymentStatus = 'running' | 'succeeded' | 'failed' | 'canceled' | 'interrupted'
