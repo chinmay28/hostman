@@ -1,11 +1,13 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
 
 	"github.com/chinmay28/hostman/server/internal/deploy"
+	"github.com/chinmay28/hostman/server/internal/forward"
 	"github.com/chinmay28/hostman/server/internal/store"
 )
 
@@ -20,6 +22,10 @@ type appInput struct {
 	Params           []store.Param `json:"params"`
 	HealthType       string        `json:"healthType"`
 	HealthTarget     string        `json:"healthTarget"`
+	// ForwardPort and ForwardTargetPort set up port forwarding; zero for both
+	// turns it off. See package forward.
+	ForwardPort       int `json:"forwardPort"`
+	ForwardTargetPort int `json:"forwardTargetPort"`
 }
 
 func (in *appInput) normalize() string {
@@ -78,6 +84,14 @@ func (in *appInput) normalize() string {
 		return "health check type must be none, http or systemd"
 	}
 
+	switch {
+	case in.ForwardPort == 0 && in.ForwardTargetPort == 0:
+	case in.ForwardPort < 1 || in.ForwardPort > 65535:
+		return "the HostMan port for forwarding must be between 1 and 65535"
+	case in.ForwardTargetPort < 1 || in.ForwardTargetPort > 65535:
+		return "the app port for forwarding must be between 1 and 65535, the port the app serves on"
+	}
+
 	// Catch placeholder mistakes now rather than at deploy time. An uninstall
 	// command is optional, but one that is there gets the same treatment: a
 	// command nobody discovers is wrong until they are trying to remove
@@ -125,6 +139,47 @@ func (in *appInput) apply(a *store.App) {
 	a.Params = in.Params
 	a.HealthType = in.HealthType
 	a.HealthTarget = in.HealthTarget
+	a.ForwardPort = in.ForwardPort
+	a.ForwardTargetPort = in.ForwardTargetPort
+}
+
+// checkForwardPort refuses a forward port HostMan can't have: its own web
+// port, or one another app already forwards. Plan would report the clash too,
+// but saying so on save is kinder than an error found later on the app's page.
+func (s *Server) checkForwardPort(r *http.Request, appID int64, port int) (string, error) {
+	if port == 0 {
+		return "", nil
+	}
+	if s.Port != 0 && port == s.Port {
+		return fmt.Sprintf("port %d is HostMan's own web port; pick another for forwarding", port), nil
+	}
+	apps, err := s.DB.ListApps(r.Context())
+	if err != nil {
+		return "", err
+	}
+	for _, a := range apps {
+		if a.ID != appID && a.ForwardPort == port {
+			return fmt.Sprintf("port %d is already forwarded for %s", port, a.Name), nil
+		}
+	}
+	return "", nil
+}
+
+// kickForwards applies forward changes now instead of on the next reconcile.
+func (s *Server) kickForwards() {
+	if s.Forwards != nil {
+		s.Forwards.Kick()
+	}
+}
+
+// handleListForwards reports every app's forward: where it listens, where it
+// relays to, and whether it is working.
+func (s *Server) handleListForwards(w http.ResponseWriter, r *http.Request) {
+	if s.Forwards == nil {
+		writeJSON(w, http.StatusOK, []forward.Status{})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.Forwards.Statuses())
 }
 
 func (s *Server) handleListApps(w http.ResponseWriter, r *http.Request) {
@@ -160,6 +215,13 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
+	if msg, err := s.checkForwardPort(r, 0, in.ForwardPort); err != nil {
+		s.writeStoreError(w, err, "create app")
+		return
+	} else if msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
+		return
+	}
 	app := &store.App{}
 	in.apply(app)
 	created, err := s.DB.CreateApp(r.Context(), app)
@@ -167,6 +229,7 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, err, "create app")
 		return
 	}
+	s.kickForwards()
 	writeJSON(w, http.StatusCreated, created)
 }
 
@@ -185,6 +248,7 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 		Name: app.Name, Description: app.Description, InstallCommand: app.InstallCommand,
 		UninstallCommand: app.UninstallCommand, Params: app.Params,
 		HealthType: app.HealthType, HealthTarget: app.HealthTarget,
+		ForwardPort: app.ForwardPort, ForwardTargetPort: app.ForwardTargetPort,
 	}
 	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -194,11 +258,19 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
+	if msg, err := s.checkForwardPort(r, app.ID, in.ForwardPort); err != nil {
+		s.writeStoreError(w, err, "update app")
+		return
+	} else if msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
+		return
+	}
 	in.apply(app)
 	if err := s.DB.UpdateApp(r.Context(), app); err != nil {
 		s.writeStoreError(w, err, "update app")
 		return
 	}
+	s.kickForwards()
 	writeJSON(w, http.StatusOK, app)
 }
 
@@ -216,5 +288,6 @@ func (s *Server) handleDeleteApp(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, err, "delete app")
 		return
 	}
+	s.kickForwards()
 	w.WriteHeader(http.StatusNoContent)
 }

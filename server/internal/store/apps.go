@@ -50,16 +50,23 @@ type App struct {
 	// the home host restarts the process running the deployment, so it runs
 	// detached and is picked back up afterwards.
 	SelfUpdate bool `json:"selfUpdate"`
+	// ForwardPort, when non-zero, is a port HostMan listens on on its own
+	// machine and relays to ForwardTargetPort on the host the app is installed
+	// on, for networks where that host can't be reached directly but HostMan
+	// can. See package forward.
+	ForwardPort       int `json:"forwardPort"`
+	ForwardTargetPort int `json:"forwardTargetPort"`
 }
 
 const appColumns = `id, name, description, install_command, uninstall_command, params,
-	health_type, health_target, created_at, self_update`
+	health_type, health_target, created_at, self_update, forward_port, forward_target_port`
 
 func scanApp(row interface{ Scan(...any) error }) (*App, error) {
 	var a App
 	var params, created string
 	err := row.Scan(&a.ID, &a.Name, &a.Description, &a.InstallCommand, &a.UninstallCommand,
-		&params, &a.HealthType, &a.HealthTarget, &created, &a.SelfUpdate)
+		&params, &a.HealthType, &a.HealthTarget, &created, &a.SelfUpdate,
+		&a.ForwardPort, &a.ForwardTargetPort)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -105,10 +112,10 @@ func (d *DB) CreateApp(ctx context.Context, a *App) (*App, error) {
 	}
 	res, err := d.sql.ExecContext(ctx, `
 		INSERT INTO apps (name, description, install_command, uninstall_command, params,
-			health_type, health_target, self_update)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			health_type, health_target, self_update, forward_port, forward_target_port)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		a.Name, a.Description, a.InstallCommand, a.UninstallCommand, string(params),
-		a.HealthType, a.HealthTarget, a.SelfUpdate)
+		a.HealthType, a.HealthTarget, a.SelfUpdate, a.ForwardPort, a.ForwardTargetPort)
 	if err != nil {
 		return nil, err
 	}
@@ -127,10 +134,11 @@ func (d *DB) UpdateApp(ctx context.Context, a *App) error {
 	}
 	res, err := d.sql.ExecContext(ctx, `
 		UPDATE apps SET name = ?, description = ?, install_command = ?, uninstall_command = ?,
-			params = ?, health_type = ?, health_target = ?
+			params = ?, health_type = ?, health_target = ?,
+			forward_port = ?, forward_target_port = ?
 		WHERE id = ?`,
 		a.Name, a.Description, a.InstallCommand, a.UninstallCommand, string(params),
-		a.HealthType, a.HealthTarget, a.ID)
+		a.HealthType, a.HealthTarget, a.ForwardPort, a.ForwardTargetPort, a.ID)
 	if err != nil {
 		return err
 	}

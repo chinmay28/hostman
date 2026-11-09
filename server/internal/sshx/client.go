@@ -134,6 +134,17 @@ func dial(ctx context.Context, t Target, auth []ssh.AuthMethod) (*Client, error)
 	return &Client{HostKey: presented, conn: ssh.NewClient(sshConn, chans, reqs)}, nil
 }
 
+// DialTCP opens a TCP connection from the host to addr, carried over this SSH
+// connection: what `ssh -L` does. addr is resolved on the host, so
+// "127.0.0.1:80" is the host's own port 80.
+func (c *Client) DialTCP(ctx context.Context, addr string) (net.Conn, error) {
+	conn, err := c.conn.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("tunnel to %s: %w", addr, err)
+	}
+	return conn, nil
+}
+
 // Close releases the connection. Safe to call more than once.
 func (c *Client) Close() error {
 	var err error

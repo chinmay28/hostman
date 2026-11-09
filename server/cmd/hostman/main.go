@@ -12,12 +12,14 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/chinmay28/hostman/server/internal/api"
 	"github.com/chinmay28/hostman/server/internal/claude"
 	"github.com/chinmay28/hostman/server/internal/deploy"
+	"github.com/chinmay28/hostman/server/internal/forward"
 	"github.com/chinmay28/hostman/server/internal/hostops"
 	"github.com/chinmay28/hostman/server/internal/hosts"
 	"github.com/chinmay28/hostman/server/internal/selfhost"
@@ -101,6 +103,14 @@ func run() error {
 
 	health := deploy.NewChecker(db, hostSvc, log)
 	go health.Run(ctx)
+
+	// Apps that set a forward are relayed from a port on this machine to the
+	// host they are installed on, over SSH, for networks where a phone can
+	// reach HostMan but not the app's host.
+	forwards := forward.NewManager(forward.DBSource(db), func(ctx context.Context, h *store.Host) (forward.Tunnel, error) {
+		return hostSvc.Connect(ctx, h)
+	}, log)
+	go forwards.Run(ctx)
 	runner := deploy.NewRunner(db, hostSvc, health, log)
 
 	auth := api.NewPinAuth(*pin)
@@ -113,6 +123,7 @@ func run() error {
 		Runner: runner, Health: health, Ops: hostops.NewService(hostSvc), Transfers: hostops.NewTransfers(hostSvc, log), Shells: shells, Claude: claudeSessions,
 		Log: log, Auth: auth,
 		Self: self, Version: appVersion(), SelfRef: *ref,
+		Forwards: forwards, Port: portNumber(*addr),
 	}
 
 	mux := http.NewServeMux()
@@ -148,6 +159,12 @@ func run() error {
 	// of being left as "running" in the database.
 	runner.Shutdown(shutdownCtx)
 	return srv.Shutdown(shutdownCtx)
+}
+
+// portNumber is the listen address's port as a number, or 0 if it has none.
+func portNumber(addr string) int {
+	n, _ := strconv.Atoi(portOf(addr))
+	return n
 }
 
 func authMode(a *api.PinAuth) string {

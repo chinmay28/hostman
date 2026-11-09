@@ -11,6 +11,7 @@ import (
 
 	"github.com/chinmay28/hostman/server/internal/claude"
 	"github.com/chinmay28/hostman/server/internal/deploy"
+	"github.com/chinmay28/hostman/server/internal/forward"
 	"github.com/chinmay28/hostman/server/internal/hostops"
 	"github.com/chinmay28/hostman/server/internal/hosts"
 	"github.com/chinmay28/hostman/server/internal/shell"
@@ -49,6 +50,11 @@ type Server struct {
 	SelfRef string
 	// Auth is nil when HostMan runs without a PIN.
 	Auth *PinAuth
+	// Forwards runs apps' port forwards; nil disables them.
+	Forwards *forward.Manager
+	// Port is the port HostMan's own web server listens on, which no app may
+	// claim for a forward. Zero skips the check.
+	Port int
 }
 
 // Routes returns the API mux, to be mounted under /api/.
@@ -173,6 +179,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("PATCH /api/apps/{id}", s.handleUpdateApp)
 	mux.HandleFunc("DELETE /api/apps/{id}", s.handleDeleteApp)
 	mux.HandleFunc("POST /api/apps/{id}/deploy", s.handleDeployApp)
+	mux.HandleFunc("GET /api/forwards", s.handleListForwards)
 
 	mux.HandleFunc("GET /api/installations", s.handleListInstallations)
 	mux.HandleFunc("GET /api/installations/{id}", s.handleGetInstallation)

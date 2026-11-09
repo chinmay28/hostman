@@ -371,3 +371,31 @@ func TestForgetInstallationByPair(t *testing.T) {
 		t.Errorf("deployment gone after forgetting the installation: %v", err)
 	}
 }
+
+func TestAppForwardPortsRoundTrip(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	app, err := db.CreateApp(ctx, &App{
+		Name: "photoframe", InstallCommand: "install",
+		ForwardPort: 18080, ForwardTargetPort: 80,
+	})
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	if app.ForwardPort != 18080 || app.ForwardTargetPort != 80 {
+		t.Fatalf("created forward = %d -> %d, want 18080 -> 80", app.ForwardPort, app.ForwardTargetPort)
+	}
+
+	app.ForwardPort, app.ForwardTargetPort = 0, 0
+	if err := db.UpdateApp(ctx, app); err != nil {
+		t.Fatalf("UpdateApp: %v", err)
+	}
+	reread, err := db.GetApp(ctx, app.ID)
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	if reread.ForwardPort != 0 || reread.ForwardTargetPort != 0 {
+		t.Errorf("forward after clearing = %d -> %d, want off", reread.ForwardPort, reread.ForwardTargetPort)
+	}
+}

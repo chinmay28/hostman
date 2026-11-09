@@ -9,6 +9,7 @@ import type {
   DirListing,
   DirUsage,
   FileJob,
+  Forward,
   Host,
   HostFile,
   HostProcesses,
@@ -127,6 +128,8 @@ export interface AppInput {
   params: App['params']
   healthType: App['healthType']
   healthTarget: string
+  forwardPort: number
+  forwardTargetPort: number
 }
 
 export const api = {
@@ -428,6 +431,7 @@ export const api = {
   updateApp: (id: number, input: Partial<AppInput>) =>
     request<App>(`/api/apps/${id}`, { method: 'PATCH', ...json(input) }),
   deleteApp: (id: number) => request<void>(`/api/apps/${id}`, { method: 'DELETE' }),
+  forwards: () => request<Forward[]>('/api/forwards'),
   deploy: (appId: number, hostId: number, params: Record<string, string>) =>
     request<Deployment>(`/api/apps/${appId}/deploy`, { method: 'POST', ...json({ hostId, params }) }),
 

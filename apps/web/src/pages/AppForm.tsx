@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { Page } from '../components/Layout'
 import { Banner, Card, Field, SectionTitle } from '../components/ui'
+import { forwardFields, forwardInput, type ForwardFields } from '../lib/forward'
 import type { HealthType, Param } from '../types'
 
 const blankParam: Param = { name: '', label: '', default: '', help: '', required: false }
@@ -19,6 +20,7 @@ export default function AppForm() {
   const [params, setParams] = useState<Param[]>([])
   const [healthType, setHealthType] = useState<HealthType>('none')
   const [healthTarget, setHealthTarget] = useState('')
+  const [forward, setForward] = useState<ForwardFields>({ enabled: false, listen: '', target: '' })
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [loaded, setLoaded] = useState(appId === null)
@@ -35,6 +37,7 @@ export default function AppForm() {
         setParams(app.params)
         setHealthType(app.healthType)
         setHealthTarget(app.healthTarget)
+        setForward(forwardFields(app))
         setLoaded(true)
       })
       .catch((e) => setError(e.message))
@@ -56,6 +59,7 @@ export default function AppForm() {
       params: params.filter((p) => p.name.trim() !== ''),
       healthType,
       healthTarget,
+      ...forwardInput(forward),
     }
     try {
       const app = appId === null ? await api.createApp(input) : await api.updateApp(appId, input)
@@ -203,6 +207,44 @@ export default function AppForm() {
                   autoCorrect="off"
                 />
               </Field>
+            )}
+          </Card>
+
+          <SectionTitle>Port forwarding</SectionTitle>
+          <Card>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={forward.enabled}
+                onChange={(e) => setForward({ ...forward, enabled: e.target.checked })}
+              />
+              Reach this app through HostMan
+            </label>
+            <p className="sub" style={{ margin: '4px 0 12px' }}>
+              For when a phone can reach HostMan but not the app&apos;s host directly. HostMan listens on a port of
+              its own and relays every connection over SSH to the app, on whichever host it is installed on.
+            </p>
+            {forward.enabled && (
+              <>
+                <Field label="HostMan port" help="Opened on HostMan's machine. Use a free port above 1024, such as 18080.">
+                  <input
+                    value={forward.listen}
+                    onChange={(e) => setForward({ ...forward, listen: e.target.value })}
+                    placeholder="18080"
+                    inputMode="numeric"
+                    required
+                  />
+                </Field>
+                <Field label="App port" help="The port the app serves on, on its host. Reached there as 127.0.0.1, so an app that only listens locally works too.">
+                  <input
+                    value={forward.target}
+                    onChange={(e) => setForward({ ...forward, target: e.target.value })}
+                    placeholder="80"
+                    inputMode="numeric"
+                    required
+                  />
+                </Field>
+              </>
             )}
           </Card>
 

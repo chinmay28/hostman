@@ -209,6 +209,33 @@ phone means the phone, so the link uses the address you reached HostMan at
 instead. An app that has declared neither a URL nor a port gets no button, on
 the same grounds as the missing port: a dead link is worse than none.
 
+## Port forwarding
+
+Sometimes HostMan can reach an app's host but your phone can't: a VPN on the
+phone, client isolation on the Wi-Fi, a mesh node or a separate subnet. HostMan
+already talks to every host over SSH, so it can relay for you.
+
+In the app's settings, tick **Reach this app through HostMan** and give two
+ports:
+
+- **HostMan port**: opened on HostMan's own machine, on every interface. Use a
+  free port above 1024; the service can't open lower ones.
+- **App port**: the port the app serves on, on its host.
+
+The app's page then shows a link, `http://<the address you reached HostMan
+at>:<HostMan port>/`, which opens the app from anywhere HostMan itself is
+reachable. Every connection is carried over HostMan's SSH connection to the host
+and opened there against `127.0.0.1:<app port>`, the way `ssh -L` does. So an
+app that only listens on localhost works too, and the host needs nothing beyond
+the SSH access HostMan already has.
+
+The forward follows the app. It starts once the app is installed on a host,
+moves if the host's address changes, and stops when the app is uninstalled or
+forwarding is turned off. A forward needs exactly one installation: an app on
+two hosts would make one port mean two places, so the page says so instead of
+picking. The page also shows whether the forward is relaying, how many
+connections are open, and why the last one failed if it did.
+
 ## Deploying
 
 Deploy picks a host, shows the parameters, and shows the exact command that will
@@ -924,6 +951,10 @@ it accordingly:
   `ProtectSystem=strict`, an empty capability set and a system-call filter.
 - Rotating the key in Settings invalidates every host until you install the new
   public key on each one.
+- A **port forward puts the app on HostMan's machine** for anyone who can reach
+  that machine. It is plain TCP, so the PIN doesn't cover it: the app is exactly
+  as protected as it is on its own host, and no more. It is off unless you turn
+  it on for an app.
 
 ## Development
 
@@ -1107,6 +1138,7 @@ Quoting is tested the same way — every path a person could type is handed to
 | `PATCH`  | `/api/apps/{id}`                    | edit an app                          |
 | `DELETE` | `/api/apps/{id}`                    | delete an app and its history        |
 | `POST`   | `/api/apps/{id}/deploy`             | deploy to a host                     |
+| `GET`    | `/api/forwards`                     | each app's port forward: where it listens, where it relays, whether it works |
 | `GET`    | `/api/installations`                | what is deployed where, with health  |
 | `POST`   | `/api/installations/{id}/redeploy`  | run again with the saved parameters  |
 | `POST`   | `/api/installations/{id}/check`     | run the health check now             |
@@ -1138,6 +1170,7 @@ server/
                      the event log, permission questions, model and mode changes
   internal/selfhost/ recognising this machine, and the app that updates it
   internal/deploy/   command rendering, the deployment runner, health checks
+  internal/forward/  apps' port forwards: a port here relayed over SSH to the app
   internal/api/      REST handlers, SSE log stream, optional PIN gate
   internal/version/  the version number, and where YEAR.MONTH is declared
   internal/web/      serves the embedded PWA
