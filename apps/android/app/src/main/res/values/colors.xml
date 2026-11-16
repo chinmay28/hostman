@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- apps/web/src/styles.css, :root (light) -->
+    <color name="hm_bg">#FFF2F2F7</color>
+    <color name="hm_surface">#FFFFFFFF</color>
+    <color name="hm_text">#FF16161A</color>
+    <color name="hm_muted">#FF6B6B76</color>
+    <color name="hm_accent">#FF5B5BD6</color>
+    <color name="hm_on_accent">#FFFFFFFF</color>
+    <!-- The flash veil: the background at 55%, as the web UI mixes it. -->
+    <color name="hm_veil">#8CF2F2F7</color>
+    <!-- The developer badge's own backing, as the web UI gives it. -->
+    <color name="hm_dev_backing">#FF101010</color>
+</resources>

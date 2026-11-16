@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The DNS servers of the network the phone is on, for HostMan on the
+         phone (Android has no /etc/resolv.conf for it to read). -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Finding HostMan servers on the Wi-Fi: a broadcast whose answers some
+         drivers drop unless the app holds a multicast lock. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- HostMan on the phone runs as a foreground service, so it keeps
+         working while the app is in the background and says so; and a
+         deployment being followed keeps a notification up until it ends. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- allowBackup off: HostMan's database holds an SSH private key that runs
+         commands as root on every host, and has no business in somebody
+         else's backup. -->
+    <application
+        android:name=".HostManApp"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.HostMan">
+
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+        </activity>
+
+        <activity
+            android:name=".SetupActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="true"
+            android:label="@string/settings_title"
+            android:theme="@style/Theme.HostMan.Settings">
+            <intent-filter>
+                <action android:name="io.github.chinmay28.hostman.SETTINGS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- "Save to Downloads" at the front of the share sheet. Exported
+             because the share sheet launches it, but it copies only from the
+             app's own FileProvider (see SaveToDownloadsActivity). -->
+        <activity
+            android:name=".SaveToDownloadsActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="@string/save_to_downloads"
+            android:noHistory="true"
+            android:theme="@style/Theme.HostMan.Invisible" />
+
+        <service
+            android:name=".ServerService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Runs the user's own self-hosted host manager server on the device, which the app's interface and other devices on the user's network connect to." />
+        </service>
+
+        <!-- Follows a deployment the person started, so it can be watched
+             from the notification shade after leaving the app. -->
+        <service
+            android:name=".DeploymentService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Shows the progress of a software deployment the user started on one of their own servers, until it finishes, and how it ended." />
+        </service>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>

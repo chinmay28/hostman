@@ -40,6 +40,15 @@ curl -fsSL .../quickstart.sh | sudo HOSTMAN_PIN=1234 HOSTMAN_PORT=9000 HOSTMAN_R
 curl -fsSL https://raw.githubusercontent.com/chinmay28/hostman/main/scripts/quickstart.sh | sudo bash -s -- --uninstall
 ```
 
+## On a phone
+
+**HostMan for Android** opens your HostMan on a phone, or runs the whole of it
+on the phone with no other machine at all, and keeps a deployment reporting in
+a notification after you leave the app. Install
+[`hostman.apk`](https://github.com/chinmay28/hostman/releases/latest/download/hostman.apk)
+from the latest release; [docs/android.md](docs/android.md) has the rest, and
+[apps/android/README.md](apps/android/README.md) how it is built.
+
 ## The home host
 
 HostMan recognises the machine it runs on and registers it as a host, tagged
@@ -1193,7 +1202,11 @@ server/
   internal/version/  the version number, stamped at link time from the commit
   internal/web/      serves the embedded PWA
 apps/web/            the PWA: React, Vite, no UI framework
+apps/android/        the Android app: the PWA in a web view, and the server
+                     itself for full-stack mode (see docs/android.md)
 scripts/             the installer, its test harness, and version.mjs
 art/                 the logo; tools/icongen cuts the app icons from it
-tools/icongen/       the icon cutter (its own Go module)
+tools/icongen/       the icon cutter (its own Go module), web and Android
+docs/                the Android app's guide
+.github/workflows/   release (binaries and hostman.apk) and the Android build
 ```

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Light or dark with the phone, as the web UI is. -->
+    <style name="Theme.HostMan" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/hm_accent</item>
+        <item name="colorOnPrimary">@color/hm_on_accent</item>
+        <item name="colorSecondary">@color/hm_accent</item>
+        <item name="android:colorBackground">@color/hm_bg</item>
+        <item name="colorSurface">@color/hm_surface</item>
+        <item name="android:windowBackground">@color/hm_bg</item>
+    </style>
+
+    <!-- No window action bar: the screen has its own toolbar, which it can
+         keep out from under the status bar on an edge-to-edge Android. -->
+    <style name="Theme.HostMan.Settings" parent="Theme.HostMan">
+        <item name="colorSurface">@color/hm_bg</item>
+    </style>
+
+    <style name="Theme.HostMan.Invisible" parent="Theme.HostMan">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+
+    <!-- The developer badge thrown over the screen: no bars of its own, the
+         veil drawn by the dialog's view. -->
+    <style name="Theme.HostMan.DevFlash" parent="Theme.HostMan">
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+
+    <!-- A circle, for the developer badge. -->
+    <style name="HostMan.Circle" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
+</resources>

@@ -37,9 +37,15 @@ web:
 		echo "apps/web not present yet — keeping the placeholder in $(WEB_DIST)"; \
 	fi
 
-## icons: cut the PNG app icons from art/hostman-logo.png (run after the logo changes)
+## icons: cut the PWA's and the Android app's icons from art/hostman-logo.png
+## (run after the logo changes); icons-check fails if a committed one drifted
+ICONGEN := cd tools/icongen && $(GO) run . -in ../../art/hostman-logo.png \
+	-out ../../apps/web/public -android ../../apps/android/app/src/main/res
 icons:
-	cd tools/icongen && $(GO) run . -in ../../art/hostman-logo.png -out ../../apps/web/public
+	$(ICONGEN)
+
+icons-check:
+	$(ICONGEN) -check
 
 test:
 	cd server && $(GO) test ./...
@@ -65,6 +71,22 @@ test-provision:
 ## daemon on 58946 that talks to the network for as long as the test runs)
 test-torrent:
 	cd server && HOSTMAN_DELUGE=1 $(GO) test ./internal/hostops/ -run RealDeluge -v
+
+## android: the Android app (apps/android) with the server built in for its
+## full-stack mode, stamped with this tree's version; needs a JDK 17+ and the
+## Android SDK (ANDROID_HOME). The APK lands in apps/android/app/build/outputs.
+GRADLE := cd apps/android && ./gradlew --no-daemon --max-workers=2
+APP_VERSION := -PappVersionName=$(shell node scripts/version.mjs 2>/dev/null) \
+	-PappVersionCode=$(shell node scripts/version.mjs --patch 2>/dev/null) \
+	-PappVersionDate=$(shell node scripts/version.mjs --date 2>/dev/null)
+android:
+	$(GRADLE) :app:assembleRelease $(APP_VERSION)
+
+## test-android: the app's decisions as plain JVM tests (no Android SDK needed),
+## and the Go packages the phone's server depends on
+test-android:
+	cd server && $(GO) test ./internal/hostenv/ ./internal/discovery/
+	$(GRADLE) -PcoreOnly :core:test
 
 vet:
 	cd server && $(GO) vet ./...

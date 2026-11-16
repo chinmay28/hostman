@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- apps/web/src/styles.css, prefers-color-scheme: dark -->
+    <color name="hm_bg">#FF0B0B0F</color>
+    <color name="hm_surface">#FF17171D</color>
+    <color name="hm_text">#FFF2F2F5</color>
+    <color name="hm_muted">#FF9A9AA8</color>
+    <color name="hm_accent">#FF8B8BF5</color>
+    <color name="hm_on_accent">#FF0B0B0F</color>
+    <color name="hm_veil">#8C0B0B0F</color>
+</resources>
