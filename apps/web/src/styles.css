@@ -176,7 +176,13 @@ body {
    without competing with the action beside it. */
 .header .dev {
   flex: none;
-  min-height: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* The badge stops reading below 36px, so the target grows around it to the
+     44px a thumb needs rather than the artwork growing with it. */
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -186,8 +192,8 @@ body {
 
 .header .dev-logo {
   display: block;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   /* The artwork is opaque black; the backing colour only shows while it loads. */
   background: #101010;
@@ -282,9 +288,11 @@ body {
   }
 }
 
+/* Lands with a small overshoot, then drifts out as the veil clears — the same
+   curve as SAND Harbor's, and as the Android app's own (core/DevFlashCurve). */
 @keyframes dev-flash-badge {
   0% {
-    transform: scale(0.7);
+    transform: scale(0.82);
   }
   14% {
     transform: scale(1.02);

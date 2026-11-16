@@ -4,6 +4,7 @@ import { api } from '../api'
 import { TabPage } from '../components/Layout'
 import { HomeBadge, HostBadge } from '../components/status'
 import { Banner, Card, Copyable, Field, Loading, SectionTitle, Sheet, useLoader } from '../components/ui'
+import { nativeApp } from '../lib/nativeApp'
 import type { SelfInfo } from '../types'
 
 export default function Settings() {
@@ -13,6 +14,8 @@ export default function Settings() {
   const [confirmRotate, setConfirmRotate] = useState(false)
   const [rotating, setRotating] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  // The Android app around this page, if there is one.
+  const app = nativeApp()
 
   const rotate = async () => {
     setRotating(true)
@@ -81,6 +84,22 @@ export default function Settings() {
             </p>
             <button className="danger block" onClick={() => setConfirmRotate(true)}>
               Rotate key
+            </button>
+          </Card>
+        </>
+      )}
+
+      {app && (
+        <>
+          <SectionTitle>This app</SectionTitle>
+          <Card>
+            <p className="sub" style={{ marginTop: 0 }}>
+              {app.mode === 'on_phone'
+                ? 'HostMan is running on this phone. Its port, PIN and whether other devices can reach it are the app’s own settings.'
+                : 'Which HostMan this phone opens, and whether deployments keep a notification, are the app’s own settings.'}
+            </p>
+            <button className="secondary block" onClick={() => void app.openSettings()}>
+              ⚙ App settings
             </button>
           </Card>
         </>
