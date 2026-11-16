@@ -341,3 +341,29 @@ func TestRunKickAndShutdown(t *testing.T) {
 		t.Fatal("forward still running after shutdown")
 	}
 }
+
+// BindTo keeps forwards to one address — the Android app's loopback-only
+// HostMan must not open ports to the network behind the person's back — while
+// the default stays every interface.
+func TestBindToChoosesTheListenAddress(t *testing.T) {
+	m := NewManager(nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	m.BindTo("127.0.0.1")
+	ln, err := m.listen(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	if ip := ln.Addr().(*net.TCPAddr).IP; !ip.IsLoopback() {
+		t.Errorf("listening on %s, want loopback", ln.Addr())
+	}
+
+	m = NewManager(nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ln, err = m.listen(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	if ip := ln.Addr().(*net.TCPAddr).IP; !ip.IsUnspecified() {
+		t.Errorf("listening on %s by default, want every interface", ln.Addr())
+	}
+}

@@ -42,6 +42,7 @@ type Manager struct {
 	source  Source
 	connect Connector
 	listen  func(port int) (net.Listener, error)
+	bind    string // the address forwards listen on; "" is every interface
 	log     *slog.Logger
 
 	mu      sync.Mutex
@@ -52,19 +53,26 @@ type Manager struct {
 
 // NewManager builds a manager. It does nothing until Run or Reconcile.
 func NewManager(source Source, connect Connector, log *slog.Logger) *Manager {
-	return &Manager{
+	m := &Manager{
 		source:  source,
 		connect: connect,
-		listen: func(port int) (net.Listener, error) {
-			// Every interface: being reachable from the network is the point.
-			return net.Listen("tcp", ":"+strconv.Itoa(port))
-		},
 		log:     log,
 		running: map[int64]*forwarder{},
 		other:   map[int64]Status{},
 		kick:    make(chan struct{}, 1),
 	}
+	m.listen = func(port int) (net.Listener, error) {
+		// Every interface unless told otherwise: being reachable from the
+		// network is the point.
+		return net.Listen("tcp", net.JoinHostPort(m.bind, strconv.Itoa(port)))
+	}
+	return m
 }
+
+// BindTo makes forwards listen on one address rather than on every interface:
+// "127.0.0.1" keeps them to this machine, as the Android app does while its
+// HostMan serves the phone alone. Call it before Run.
+func (m *Manager) BindTo(host string) { m.bind = host }
 
 // DBSource reads apps, installations and hosts from the database.
 func DBSource(db *store.DB) Source {

@@ -249,10 +249,12 @@ else
     die "Could not clone $REPO at $REF"
 fi
 REVISION="$(git -C "$BUILD_DIR" rev-parse --short HEAD)"
-# vYEAR.MONTH.<commit count>, the one place it's assembled — the same number
-# the binary is stamped with below and the PWA build inlines.
+# vYEAR.MONTH.<commit count> — the commit's month and the commit count, from the
+# one place it's assembled: the same values the binary is stamped with below and
+# the PWA build inlines.
 VERSION="$(node "$BUILD_DIR/scripts/version.mjs")"
 PATCH="$(node "$BUILD_DIR/scripts/version.mjs" --patch)"
+DATE="$(node "$BUILD_DIR/scripts/version.mjs" --date)"
 
 # ---------------------------------------------------------------------- build
 # Everything is built before the running service is touched, so a compile
@@ -265,7 +267,7 @@ log "Building the web app"
 log "Building the server $VERSION"
 VERSION_PKG=github.com/chinmay28/hostman/server/internal/version
 ( cd "$BUILD_DIR/server" &&
-  go build -trimpath -ldflags "-s -w -X $VERSION_PKG.Patch=$PATCH" \
+  go build -trimpath -ldflags "-s -w -X $VERSION_PKG.Patch=$PATCH -X $VERSION_PKG.Date=$DATE" \
     -o "$INSTALL_DIR/hostman.new" ./cmd/hostman ) ||
   die "Server build failed."
 

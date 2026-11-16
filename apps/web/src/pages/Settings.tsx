@@ -4,6 +4,7 @@ import { api } from '../api'
 import { TabPage } from '../components/Layout'
 import { HomeBadge, HostBadge } from '../components/status'
 import { Banner, Card, Copyable, Field, Loading, SectionTitle, Sheet, useLoader } from '../components/ui'
+import { nativeApp } from '../lib/nativeApp'
 import type { SelfInfo } from '../types'
 
 export default function Settings() {
@@ -13,6 +14,8 @@ export default function Settings() {
   const [confirmRotate, setConfirmRotate] = useState(false)
   const [rotating, setRotating] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  // The Android app around this page, if there is one.
+  const app = nativeApp()
 
   const rotate = async () => {
     setRotating(true)
@@ -86,6 +89,22 @@ export default function Settings() {
         </>
       )}
 
+      {app && (
+        <>
+          <SectionTitle>This app</SectionTitle>
+          <Card>
+            <p className="sub" style={{ marginTop: 0 }}>
+              {app.mode === 'on_phone'
+                ? 'HostMan is running on this phone. Its port, PIN and whether other devices can reach it are the app’s own settings.'
+                : 'Which HostMan this phone opens, and whether deployments keep a notification, are the app’s own settings.'}
+            </p>
+            <button className="secondary block" onClick={() => void app.openSettings()}>
+              ⚙ App settings
+            </button>
+          </Card>
+        </>
+      )}
+
       <SectionTitle>About</SectionTitle>
       <Card>
         <p className="sub" style={{ marginTop: 0 }}>
@@ -125,7 +144,7 @@ export default function Settings() {
  * SelfCard is where HostMan updates itself: it shows the machine it runs on,
  * whether an update can start, and the version to build.
  */
-function SelfCard({ info, onStarted }: { info: SelfInfo; onStarted: () => void }) {
+export function SelfCard({ info, onStarted }: { info: SelfInfo; onStarted: () => void }) {
   const navigate = useNavigate()
   const [confirming, setConfirming] = useState(false)
   const [ref, setRef] = useState(info.ref)
@@ -146,6 +165,22 @@ function SelfCard({ info, onStarted }: { info: SelfInfo; onStarted: () => void }
       setError(e instanceof Error ? e.message : String(e))
       setBusy(false)
     }
+  }
+
+  // On a phone, HostMan runs inside the Android app: there is no machine of
+  // its own to add, and a newer app is how it gets updated.
+  if (info.managedBy) {
+    return (
+      <Card>
+        <p className="sub" style={{ marginTop: 0 }}>
+          {info.blocked}
+        </p>
+        <div className="row between sub" style={{ marginTop: 10 }}>
+          <span>Version</span>
+          <span className="mono">{info.version}</span>
+        </div>
+      </Card>
+    )
   }
 
   if (!info.host) {

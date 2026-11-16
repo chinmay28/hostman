@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The logo's badge colour. Generated from art/hostman-logo.png by `make icons`. -->
+<resources>
+    <color name="ic_launcher_background">#011225</color>
+</resources>

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The full developer badge over the screen, with the handle under it:
+     DevFlash animates the veil (this view's alpha) and the lockup (its
+     scale) the way the web UI's dev-flash keyframes do. Two views because
+     the two animate apart; the dialog's window itself is transparent
+     (Theme.HostMan.DevFlash), so the veil is the only thing painted. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/veil"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:alpha="0"
+    android:background="@color/hm_veil"
+    android:clickable="true"
+    android:focusable="true"
+    android:padding="32dp"
+    tools:ignore="Overdraw,UselessParent">
+
+    <LinearLayout
+        android:id="@+id/lockup"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/badge"
+            android:layout_width="260dp"
+            android:layout_height="260dp"
+            android:contentDescription="@string/dev_handle"
+            android:elevation="12dp"
+            android:scaleType="centerCrop"
+            android:src="@drawable/dev_badge_full"
+            app:shapeAppearanceOverlay="@style/HostMan.Circle" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.08"
+            android:text="@string/dev_handle"
+            android:textColor="@color/hm_muted"
+            android:textSize="15sp" />
+    </LinearLayout>
+</FrameLayout>

@@ -245,3 +245,28 @@ func TestHostListMarksTheHomeHost(t *testing.T) {
 		t.Error("isSelf should be serialized for the UI")
 	}
 }
+
+// A HostMan something else installs — the Android app's, on a phone — says so
+// and will not try to update itself, even with a home host and the updater app
+// in place (a database carried over from an ordinary install, say).
+func TestAManagedHostManDoesNotUpdateItself(t *testing.T) {
+	s, h := testServer(t, "")
+	registerSelf(t, s, true)
+	s.ManagedBy = "the HostMan Android app"
+
+	view := decode[selfView](t, do(t, h, "GET", "/api/self", ""))
+	if view.Ready || view.ManagedBy != "the HostMan Android app" {
+		t.Errorf("view = %+v, want a managed, unready view", view)
+	}
+	if !strings.Contains(view.Blocked, "the HostMan Android app") {
+		t.Errorf("blocked = %q, want it to name what updates HostMan", view.Blocked)
+	}
+
+	w := do(t, h, "POST", "/api/self/update", `{"ref":"main"}`)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", w.Code)
+	}
+	if got := decode[apiError](t, w).Error; !strings.Contains(got, "the HostMan Android app") {
+		t.Errorf("error = %q", got)
+	}
+}

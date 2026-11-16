@@ -44,6 +44,10 @@ type Server struct {
 	Log    *slog.Logger
 	// Self identifies the machine HostMan runs on; nil disables self-update.
 	Self SelfManager
+	// ManagedBy names what installs and updates HostMan here instead of
+	// HostMan itself (the Android app, on a phone); empty for an ordinary
+	// install. When set, Settings says so and self-update is refused.
+	ManagedBy string
 	// Version is the build this binary was made from.
 	Version string
 	// SelfRef is the git ref a self-update builds from by default.

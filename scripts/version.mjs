@@ -3,79 +3,65 @@
  * The one place HostMan's version number is assembled.
  *
  * Scheme: vYEAR.MONTH.PATCH — a calendar version, where PATCH is the
- * repository's commit count, so `v2026.8.42` is the 42nd commit on the 2026.8
- * line. The month is not zero-padded; that keeps the string valid semver.
+ * repository's commit count, so `v2026.11.42` is the 42nd commit, made in
+ * November 2026. The month is not zero-padded; that keeps the string valid
+ * semver.
  *
- *   - YEAR/MONTH are source constants, read out of
- *     server/internal/version/version.go so there is exactly one declaration
- *     of them in the tree. `--bump` moves them to the month a branch opens in
- *     (see CLAUDE.md); they are not taken from the build clock, which would
- *     move the version without a commit.
+ *   - YEAR/MONTH are the month of the commit being built — its committer date,
+ *     in the committer's own timezone. Nobody bumps them: the line moves the
+ *     moment a commit lands in a new month, and a rebuild of an old commit is
+ *     still named what it shipped as, because a commit's date does not change.
+ *     Not the build clock, which would move the version without a commit.
  *   - PATCH comes from `git rev-list --count HEAD`, which only exists at build
- *     time: the Go binary gets it stamped in by -ldflags, the web bundle gets
- *     it inlined by Vite. Both call this file, so they can never disagree.
+ *     time: the Go binary gets both stamped in by -ldflags (version.Patch and
+ *     version.Date), the web bundle gets the string inlined by Vite, and the
+ *     Android app gets it as its versionName/versionCode. All of them call
+ *     this file, so they can never disagree.
  *
  * Usage:
- *   node scripts/version.mjs            # print e.g. v2026.8.42
+ *   node scripts/version.mjs            # print e.g. v2026.11.42
  *   node scripts/version.mjs --patch    # print just the commit count (42)
- *   node scripts/version.mjs --bump     # set YEAR.MONTH to this month, UTC
- *   node scripts/version.mjs --bump 2026.9   # or to a month named outright
+ *   node scripts/version.mjs --date     # print the commit's month (2026-11), for version.Date
+ *   node scripts/version.mjs --ldflags  # print the -X flags that stamp both into a Go build
  *   import { appVersion } from './scripts/version.mjs'
  */
 import { execFileSync } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const GO_VERSION_FILE = resolve(repoRoot, 'server/internal/version/version.go')
 
-/** Read `Year`/`Month` out of the Go source that declares them. */
-function yearMonth() {
-  const src = readFileSync(GO_VERSION_FILE, 'utf8')
-  const read = (name) => {
-    const m = new RegExp(`^\\s*${name}\\s*=\\s*(\\d+)\\s*$`, 'm').exec(src)
-    if (!m) {
-      throw new Error(`could not find ${name} in ${GO_VERSION_FILE}`)
-    }
-    return Number(m[1])
-  }
-  const year = read('Year')
-  const month = read('Month')
-  if (!(month >= 1 && month <= 12)) {
-    throw new Error(`Month = ${month} in ${GO_VERSION_FILE}; want a calendar month (1-12)`)
-  }
-  return { year, month }
-}
+/** The Go package the link-time values live in. */
+export const VERSION_PKG = 'github.com/chinmay28/hostman/server/internal/version'
 
 /**
- * Rewrite Year/Month in the Go source to `line` — "YYYY.M", or this month in
- * UTC when not given. Returns what the line was and what it is now, so the
- * caller can say whether anything moved. The same regex that reads the
- * constants writes them, so the file keeps the shape the Go test checks.
+ * The month of HEAD's commit as "YYYY-MM" — the value version.Date is stamped
+ * with — or, with no commit to ask (a tarball, no git), the month of the build
+ * clock in UTC, which is what the Go package falls back to as well, so an
+ * unstamped build and a stamped one of the same tree agree.
+ *
+ * The committer date rather than the author's: a change authored in October
+ * and landed in November is a November release. In the committer's own
+ * timezone rather than UTC, so the month is the one on the commit as git shows
+ * it.
  */
-export function bumpYearMonth(line) {
-  const target = line ? parseLine(line) : thisMonth()
-  const before = yearMonth()
-  let src = readFileSync(GO_VERSION_FILE, 'utf8')
-  for (const [name, value] of [['Year', target.year], ['Month', target.month]]) {
-    src = src.replace(new RegExp(`^(\\s*${name}\\s*=\\s*)\\d+(\\s*)$`, 'm'), `$1${value}$2`)
+export function commitMonth() {
+  const iso = git(['log', '-1', '--format=%cI'])
+  const m = iso && /^(\d{4})-(\d{2})/.exec(iso)
+  if (m) {
+    return `${m[1]}-${m[2]}`
   }
-  writeFileSync(GO_VERSION_FILE, src)
-  return { before, after: yearMonth() }
+  const t = new Date()
+  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
-function thisMonth() {
-  const now = new Date()
-  return { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 }
-}
-
-function parseLine(line) {
-  const m = /^(\d{4})\.(\d{1,2})$/.exec(line)
-  if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) {
-    throw new Error(`--bump wants a line like 2026.9, got ${JSON.stringify(line)}`)
+/** Year and month as numbers, the way the version string wants them. */
+function yearMonth() {
+  const [year, month] = commitMonth().split('-').map(Number)
+  if (!(month >= 1 && month <= 12)) {
+    throw new Error(`commit month ${commitMonth()} is not a calendar month`)
   }
-  return { year: Number(m[1]), month: Number(m[2]) }
+  return { year, month }
 }
 
 /** Run git in the repo root; null if it fails (no repo, no git, old git). */
@@ -104,7 +90,8 @@ function git(args) {
  *
  * Anything building a release therefore needs the full commit graph:
  * `--filter=blob:none` rather than `--depth 1` for a cheap clone that still
- * carries all of it, which is what scripts/quickstart.sh does.
+ * carries all of it, which is what scripts/quickstart.sh does, and `fetch-depth: 0` on GitHub
+ * Actions, which is what the release workflow does.
  */
 export function commitCount() {
   if (git(['rev-parse', '--is-shallow-repository']) === 'true') {
@@ -123,28 +110,30 @@ export function commitCount() {
  * The full version string, `v`-prefixed to match how the project tags releases.
  * Must stay byte-identical to version.String() in the Go package.
  *
- * Note `--patch` / commitCount() stays bare: that one feeds `-ldflags -X` as
- * the value of `version.Patch`, which is the number alone.
+ * Note `--patch` / commitCount() and `--date` / commitMonth() stay bare: those
+ * feed `-ldflags -X` as the values of `version.Patch` and `version.Date`.
  */
 export function appVersion() {
   const { year, month } = yearMonth()
   return `v${year}.${month}.${commitCount()}`
 }
 
+/** The -X flags that stamp this tree's version into a Go build. */
+export function ldflags() {
+  return `-X ${VERSION_PKG}.Patch=${commitCount()} -X ${VERSION_PKG}.Date=${commitMonth()}`
+}
+
 // Invoked directly (by the build scripts), print rather than export.
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2)
-  const bump = args.indexOf('--bump')
-  if (bump >= 0) {
-    const { before, after } = bumpYearMonth(args[bump + 1])
-    const moved = before.year !== after.year || before.month !== after.month
-    process.stdout.write(
-      moved
-        ? `version line ${before.year}.${before.month} -> ${after.year}.${after.month}\n`
-        : `version line already ${after.year}.${after.month}\n`,
-    )
-  } else {
-    process.stdout.write(args.includes('--patch') ? commitCount() : appVersion())
-    process.stdout.write('\n')
-  }
+  process.stdout.write(
+    args.includes('--patch')
+      ? commitCount()
+      : args.includes('--date')
+        ? commitMonth()
+        : args.includes('--ldflags')
+          ? ldflags()
+          : appVersion(),
+  )
+  process.stdout.write('\n')
 }

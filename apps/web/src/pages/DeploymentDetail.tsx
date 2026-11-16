@@ -5,6 +5,7 @@ import { Page } from '../components/Layout'
 import { DeploymentBadge } from '../components/status'
 import { Banner, Card, useLoader } from '../components/ui'
 import { duration, time } from '../lib/format'
+import { followInApp } from '../lib/nativeApp'
 import type { Deployment, DeploymentStatus } from '../types'
 
 export default function DeploymentDetail() {
@@ -97,6 +98,12 @@ export default function DeploymentDetail() {
       }
     : null
   const running = deployment?.status === 'running'
+
+  // Inside the Android app, a running deployment keeps reporting in a
+  // notification after the person leaves this page. Nothing in a browser.
+  useEffect(() => {
+    if (initial) followInApp(initial)
+  }, [initial])
 
   return (
     <Page

@@ -2,44 +2,67 @@
 //
 // The scheme is calendar-based: vYEAR.MONTH.PATCH, where the patch number is
 // the repository's commit count — every commit is a patch release, so
-// `v2026.8.42` is the 42nd commit on the 2026.8 line. The month is written as
-// a plain number, not zero-padded: that keeps the string valid semver, which
-// forbids a leading zero, and nothing here orders versions by sorting text.
+// `v2026.11.42` is the 42nd commit, made in November 2026. The month is
+// written as a plain number, not zero-padded: that keeps the string valid
+// semver, which forbids a leading zero, and nothing here orders versions by
+// sorting text.
 //
-// Year and Month are declared here in source and moved to the current month
-// when a branch opens (`make bump-version`, which CLAUDE.md asks for as the
-// first thing on a branch) — deliberately not read from the build clock, which
-// would move the version without a commit and make a rebuild of an old tree
-// disagree with what it originally shipped. The patch number can only come
-// from git, which a compiled binary has no access to, so it is stamped at link
-// time instead:
+// All three parts come from git, and none of them from a person. The year and
+// month are the month of the commit being built — its committer date, in the
+// committer's own timezone — so the line moves the moment a commit lands in a
+// new month, with nobody remembering to bump anything, and a rebuild of an old
+// tree still calls itself what it originally shipped as, because a commit's
+// date does not change. The patch number is the commit count. A compiled
+// binary has no access to git, so both are stamped at link time:
 //
-//	go build -ldflags "-X github.com/chinmay28/hostman/server/internal/version.Patch=$(git rev-list --count HEAD)"
+//	go build -ldflags "-X github.com/chinmay28/hostman/server/internal/version.Patch=$(git rev-list --count HEAD) \
+//	                   -X github.com/chinmay28/hostman/server/internal/version.Date=$(git log -1 --format=%cI | cut -c1-7)"
 //
-// `make build` does this for you via scripts/version.mjs, which is also where
-// the PWA's build reads Year/Month from — keep the two constants below in a
-// form that file's regex can still find.
+// `make build`, the installer, the release workflow and the Android app's
+// build all do this through scripts/version.mjs, which is also what the PWA's
+// build reads, so the binary and the page it serves can never disagree.
+//
+// A bare `go build` stamps nothing. Such a build is a development build and
+// says so: patch 0, which is never a release, under the month of the build
+// clock — the one place the clock is consulted, and only because an unstamped
+// build has no commit to ask.
 package version
 
-import "strconv"
-
-// Year and Month of the release line: the month the current branch opened in,
-// UTC. `make bump-version` rewrites them; keep each on its own line in this
-// shape, which is what that script and the PWA build look for. Month is a
-// calendar month, 1–12.
-//
-// There is no semantic major/minor: the leading numbers say *when* a release
-// line opened, not what it promises about compatibility. What breaks on an
-// upgrade is called out in the changelog, which is the thing to read.
-const (
-	Year  = 2026
-	Month = 11
+import (
+	"strconv"
+	"time"
 )
 
 // Patch is the repository's commit count, stamped at link time (see the
 // package comment). A bare `go build` leaves it at "0": patch 0 means an
 // unstamped development build, never a release.
 var Patch = "0"
+
+// Date is the month of the commit being built, as "YYYY-MM", stamped at link
+// time beside Patch. Empty on an unstamped build, which then reports the
+// month it was compiled in.
+var Date = ""
+
+// now is the clock an unstamped build falls back to; a variable so a test can
+// hold it still.
+var now = time.Now
+
+// Year and Month are the release line: the commit's month when stamped, the
+// build's when not. Month is a calendar month, 1–12.
+//
+// There is no semantic major/minor: the leading numbers say *when* a commit
+// was made, not what it promises about compatibility. What breaks on an
+// upgrade is called out in the changelog, which is the thing to read.
+func Year() int  { y, _ := yearMonth(); return y }
+func Month() int { _, m := yearMonth(); return m }
+
+func yearMonth() (int, int) {
+	if t, err := time.Parse("2006-01", Date); err == nil {
+		return t.Year(), int(t.Month())
+	}
+	t := now().UTC()
+	return t.Year(), int(t.Month())
+}
 
 // Stamped reports whether the patch number came from git. It is false for a
 // bare `go build`, and for a build made where git could not be asked — from a
@@ -50,5 +73,6 @@ func Stamped() bool { return Patch != "0" }
 // releases. This is the one rendering: it's what /api/health reports, what
 // /api/self hands Settings, and what the PWA shows under its name.
 func String() string {
-	return "v" + strconv.Itoa(Year) + "." + strconv.Itoa(Month) + "." + Patch
+	y, m := yearMonth()
+	return "v" + strconv.Itoa(y) + "." + strconv.Itoa(m) + "." + Patch
 }

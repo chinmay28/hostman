@@ -51,6 +51,12 @@ type Config struct {
 	// Repo and Ref are where a self-update builds from.
 	Repo string
 	Ref  string
+	// ManagedBy names whatever installs and updates HostMan on this machine
+	// instead of HostMan itself — "the HostMan Android app" on a phone, which
+	// has no sshd to reach, no sudo, and an APK rather than an installer. When
+	// set, the machine is not registered as a host and no self-update app is
+	// made. Empty, the default, is an ordinary install.
+	ManagedBy string
 }
 
 // Manager owns the home host and the app that updates HostMan.
@@ -72,6 +78,10 @@ func New(db *store.DB, cfg Config, log *slog.Logger) *Manager {
 	return &Manager{db: db, machineID: MachineID(), cfg: cfg, log: log}
 }
 
+// ManagedBy reports what manages HostMan here instead of HostMan itself, or ""
+// for an ordinary install (see Config.ManagedBy).
+func (m *Manager) ManagedBy() string { return m.cfg.ManagedBy }
+
 // MachineID returns the id this HostMan instance identifies itself by.
 func (m *Manager) MachineID() string { return m.machineID }
 
@@ -86,6 +96,10 @@ func (m *Manager) IsSelf(machineID string) bool {
 // Ensure registers the home host and the self-update app on first run. Both are
 // one-time: if you delete them, they stay deleted.
 func (m *Manager) Ensure(ctx context.Context) {
+	if m.cfg.ManagedBy != "" {
+		m.log.Info("selfhost: not registering this machine; HostMan here is managed by " + m.cfg.ManagedBy)
+		return
+	}
 	if err := m.ensureHomeHost(ctx); err != nil {
 		m.log.Error("selfhost: register home host", "err", err)
 	}

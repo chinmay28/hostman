@@ -40,6 +40,15 @@ curl -fsSL .../quickstart.sh | sudo HOSTMAN_PIN=1234 HOSTMAN_PORT=9000 HOSTMAN_R
 curl -fsSL https://raw.githubusercontent.com/chinmay28/hostman/main/scripts/quickstart.sh | sudo bash -s -- --uninstall
 ```
 
+## On a phone
+
+**HostMan for Android** opens your HostMan on a phone, or runs the whole of it
+on the phone with no other machine at all, and keeps a deployment reporting in
+a notification after you leave the app. Install
+[`hostman.apk`](https://github.com/chinmay28/hostman/releases/latest/download/hostman.apk)
+from the latest release; [docs/android.md](docs/android.md) has the rest, and
+[apps/android/README.md](apps/android/README.md) how it is built.
+
 ## The home host
 
 HostMan recognises the machine it runs on and registers it as a host, tagged
@@ -970,29 +979,32 @@ make test-torrent   # drive a real deluge: add, pause and remove a torrent
 cd apps/web && npm run dev   # Vite dev server, proxying /api to :8899
 
 make version        # print the version this tree would build as
-make bump-version   # move the version line to this month, UTC
+make icons          # cut the web and Android icons from art/hostman-logo.png
+make android        # the Android app (see docs/android.md)
 ```
 
 ### Versioning
 
 The version is `vYEAR.MONTH.PATCH` — a calendar version, where the patch number
-is the repository's commit count, so `v2026.8.42` is the 42nd commit on the
-2026.8 line. There is no semantic major/minor: the leading numbers say *when* a
-release line opened, not what it promises about compatibility.
+is the repository's commit count, so `v2026.11.42` is the 42nd commit, made in
+November 2026. There is no semantic major/minor: the leading numbers say *when*
+a commit was made, not what it promises about compatibility.
 
-`Year` and `Month` are constants in `server/internal/version/version.go`. A
-line opens with a branch: the first commit on a branch runs `make bump-version`,
-which sets them to the current month in UTC (CLAUDE.md asks Claude to do this
-without being told). They are deliberately not read from the build clock, so
-rebuilding an old tree still reports what it originally shipped. The month is
-not zero-padded (`v2026.8.42`, not `v2026.08.42`), because semver forbids a
-leading zero and every version has to stay something a semver parser accepts.
+All of it comes from git. YEAR.MONTH is the month of the commit being built —
+its committer date, in the committer's own timezone — so the line moves by
+itself with the first commit of a new month and nobody bumps anything. It is
+deliberately not read from the build clock, so rebuilding an old tree still
+reports what it originally shipped. The month is not zero-padded
+(`v2026.8.42`, not `v2026.08.42`), because semver forbids a leading zero and
+every version has to stay something a semver parser accepts.
 
-The patch number only exists at build time, so `scripts/version.mjs` works it
-out once and both halves of the build take it from there: the linker stamps it
-into the binary, Vite inlines it into the bundle. The app header shows what the
-PWA was built as, Settings and `/api/health` show what the binary was, and they
-agree because a build makes both together.
+None of it exists inside a compiled binary, so `scripts/version.mjs` works it
+out once and every half of the build takes it from there: the linker stamps the
+month and the count into the binary (`version.Date`, `version.Patch`), Vite
+inlines the string into the bundle, and the Android app's Gradle build takes it
+as its version name and code. The app header shows what the PWA was built as,
+Settings and `/api/health` show what the binary was, and they agree because a
+build makes both together.
 
 A version ending in `.0` is an unstamped build rather than a release — a bare
 `go build`, or a build where git couldn't be asked. That includes a **shallow**
@@ -1010,6 +1022,18 @@ Server flags:
 | `-self-user` | `HOSTMAN_SELF_USER` | _(the account HostMan runs as)_ | SSH user for the home host |
 | `-self-repo` | `HOSTMAN_REPO` | `chinmay28/hostman` | repository a self-update builds from |
 | `-self-ref`  | `HOSTMAN_REF`  | `main`             | default ref for a self-update |
+| `-discovery-port` | `HOSTMAN_DISCOVERY_PORT` | `8900` | UDP port that answers the Android app's **Find on this network**; `0` turns it off |
+| `-name`      | `HOSTMAN_NAME` | _(the hostname)_   | what that search lists this server as |
+| `-managed-by` | `HOSTMAN_MANAGED_BY` | _(empty)_  | what installs and updates HostMan instead of itself; set, there is no home host and no self-update (the Android app's full stack) |
+| `-forward-bind` | `HOSTMAN_FORWARD_BIND` | _(every interface)_ | address apps' port forwards listen on |
+
+Three more variables exist for a host that lacks what Linux normally provides,
+and do nothing when unset ([`internal/hostenv`](server/internal/hostenv)):
+`HOSTMAN_DNS_FILE` (a file of DNS servers, re-read when it changes),
+`HOSTMAN_DNS` (servers named outright) and `HOSTMAN_TZ` (an IANA zone for
+`time.Local`). With either DNS variable set, names under `.local` are asked of
+multicast DNS. The Android app sets all three; see
+[docs/android.md](docs/android.md).
 
 The installer sets `HOSTMAN_SELF_USER` to whoever ran it, since the service
 account is a `nologin` user and cannot be SSHed to.
@@ -1169,13 +1193,20 @@ server/
   internal/claude/   conversations with Claude Code held open between visits:
                      the event log, permission questions, model and mode changes
   internal/selfhost/ recognising this machine, and the app that updates it
+  internal/hostenv/  DNS (and .local over mDNS) and the zone on a host without
+                     them — the Android app's phone
+  internal/discovery/ the UDP answer to the Android app's network search
   internal/deploy/   command rendering, the deployment runner, health checks
   internal/forward/  apps' port forwards: a port here relayed over SSH to the app
   internal/api/      REST handlers, SSE log stream, optional PIN gate
-  internal/version/  the version number, and where YEAR.MONTH is declared
+  internal/version/  the version number, stamped at link time from the commit
   internal/web/      serves the embedded PWA
 apps/web/            the PWA: React, Vite, no UI framework
+apps/android/        the Android app: the PWA in a web view, and the server
+                     itself for full-stack mode (see docs/android.md)
 scripts/             the installer, its test harness, and version.mjs
 art/                 the logo; tools/icongen cuts the app icons from it
-tools/icongen/       the icon cutter (its own Go module)
+tools/icongen/       the icon cutter (its own Go module), web and Android
+docs/                the Android app's guide
+.github/workflows/   release (binaries and hostman.apk) and the Android build
 ```

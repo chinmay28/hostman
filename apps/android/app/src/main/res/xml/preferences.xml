@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Every row: titles wrap rather than being cut off beside a switch, and no
+     gutter is kept for icons that none of them has. -->
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        app:iconSpaceReserved="false"
+        app:title="@string/pref_cat_mode">
+        <!-- One tap between thin client and full stack. Not persisted itself:
+             SettingsActivity writes the "mode" key that ConfigStore reads, so
+             there is still one place the mode is kept. -->
+        <SwitchPreferenceCompat
+            app:iconSpaceReserved="false"
+            app:key="run_on_phone"
+            app:persistent="false"
+            app:singleLineTitle="false"
+            app:summaryOff="@string/pref_mode_summary_remote"
+            app:summaryOn="@string/pref_mode_summary_phone"
+            app:title="@string/pref_mode_switch" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:iconSpaceReserved="false"
+        app:key="cat_remote"
+        app:title="@string/pref_cat_remote">
+        <EditTextPreference
+            app:iconSpaceReserved="false"
+            app:key="server_address"
+            app:singleLineTitle="false"
+            app:title="@string/pref_address"
+            app:useSimpleSummaryProvider="true" />
+        <Preference
+            app:iconSpaceReserved="false"
+            app:key="find_servers"
+            app:singleLineTitle="false"
+            app:summary="@string/pref_find_summary"
+            app:title="@string/pref_find" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:iconSpaceReserved="false"
+        app:key="cat_phone"
+        app:title="@string/pref_cat_phone">
+        <Preference
+            app:iconSpaceReserved="false"
+            app:key="server_status"
+            app:singleLineTitle="false"
+            app:title="@string/pref_status" />
+        <EditTextPreference
+            app:iconSpaceReserved="false"
+            app:key="pin"
+            app:singleLineTitle="false"
+            app:title="@string/pref_pin" />
+        <SwitchPreferenceCompat
+            app:iconSpaceReserved="false"
+            app:key="share_on_network"
+            app:singleLineTitle="false"
+            app:summaryOff="@string/pref_share_summary_off"
+            app:summaryOn="@string/pref_share_summary_on"
+            app:title="@string/pref_share" />
+        <SwitchPreferenceCompat
+            app:iconSpaceReserved="false"
+            app:key="keep_running"
+            app:singleLineTitle="false"
+            app:summary="@string/pref_keep_summary"
+            app:title="@string/pref_keep" />
+        <EditTextPreference
+            app:iconSpaceReserved="false"
+            app:key="machine_name"
+            app:singleLineTitle="false"
+            app:title="@string/pref_machine" />
+        <EditTextPreference
+            app:iconSpaceReserved="false"
+            app:key="local_port"
+            app:singleLineTitle="false"
+            app:title="@string/pref_port"
+            app:useSimpleSummaryProvider="true" />
+        <Preference
+            app:iconSpaceReserved="false"
+            app:key="server_log"
+            app:singleLineTitle="false"
+            app:summary="@string/pref_log_summary"
+            app:title="@string/pref_log" />
+        <Preference
+            app:iconSpaceReserved="false"
+            app:key="restart_server"
+            app:singleLineTitle="false"
+            app:title="@string/pref_restart" />
+        <Preference
+            app:iconSpaceReserved="false"
+            app:key="stop_server"
+            app:singleLineTitle="false"
+            app:title="@string/pref_stop" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:iconSpaceReserved="false"
+        app:title="@string/pref_cat_about">
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:iconSpaceReserved="false"
+            app:key="follow_deployments"
+            app:singleLineTitle="false"
+            app:summary="@string/pref_notify_summary"
+            app:title="@string/pref_notify" />
+        <Preference
+            app:iconSpaceReserved="false"
+            app:key="version"
+            app:singleLineTitle="false"
+            app:title="@string/pref_version" />
+        <Preference
+            app:iconSpaceReserved="false"
+            app:key="data"
+            app:singleLineTitle="false"
+            app:summary="@string/pref_data_summary"
+            app:title="@string/pref_data" />
+    </PreferenceCategory>
+</PreferenceScreen>

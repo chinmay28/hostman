@@ -194,3 +194,28 @@ func TestEnsureSkipsWhenSelfHostExists(t *testing.T) {
 		t.Errorf("got %d hosts, want no new entry", len(hosts))
 	}
 }
+
+// On a phone the machine HostMan runs on has no sshd and no sudo, and HostMan
+// is updated by installing a newer app: there is no home host to register and
+// no updater app to make, and Ensure must leave the database alone.
+func TestEnsureDoesNothingWhenSomethingElseManagesHostMan(t *testing.T) {
+	db := testDB(t)
+	m := New(db, Config{SSHUser: "u0_a123", Port: "8899", ManagedBy: "the HostMan Android app"},
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx := context.Background()
+
+	m.Ensure(ctx)
+
+	if h, err := db.SelfHost(ctx); err == nil {
+		t.Errorf("registered a home host on a managed install: %+v", h)
+	}
+	if a, err := db.SelfUpdateApp(ctx); err == nil {
+		t.Errorf("made an updater app on a managed install: %+v", a)
+	}
+	if hosts, _ := db.ListHosts(ctx); len(hosts) != 0 {
+		t.Errorf("hosts = %+v, want none", hosts)
+	}
+	if m.ManagedBy() != "the HostMan Android app" {
+		t.Errorf("ManagedBy() = %q", m.ManagedBy())
+	}
+}
