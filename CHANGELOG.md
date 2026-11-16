@@ -12,7 +12,7 @@ has a `## <version>` heading naming that commit's own version exactly. A push to
 yet released sits under `## Unreleased`, which never matches a version — rename
 it to the version when cutting the release.
 
-## Unreleased
+## v2026.11.79
 
 **Downloads:** `hostman-<version>-linux-arm64` and `-linux-amd64` (the server,
 static, with the web UI built in) and **`hostman.apk`** (new: HostMan for
