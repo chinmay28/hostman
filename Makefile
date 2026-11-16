@@ -3,15 +3,15 @@ GO ?= go
 BIN := bin/hostman
 WEB_DIST := server/internal/web/dist
 
-## The version's patch number is the repository's commit count, which a compiled
-## binary can't ask git for — scripts/version.mjs works it out and the linker
-## stamps it in. Empty (no node, no git, a shallow clone) leaves the Go package's
-## default of 0, which reads as "unstamped build" rather than as a release.
-VERSION_PKG := github.com/chinmay28/hostman/server/internal/version
-PATCH := $(shell node scripts/version.mjs --patch 2>/dev/null)
-LDFLAGS := -s -w $(if $(PATCH),-X $(VERSION_PKG).Patch=$(PATCH))
+## The version is the commit's month plus the repository's commit count, which
+## a compiled binary can't ask git for — scripts/version.mjs works both out and
+## the linker stamps them in. Empty (no node) leaves the Go package's defaults:
+## patch 0 under the build's month, which reads as "unstamped build" rather
+## than as a release. A shallow clone gets patch 0 from the script itself.
+VERSION_LDFLAGS := $(shell node scripts/version.mjs --ldflags 2>/dev/null)
+LDFLAGS := -s -w $(VERSION_LDFLAGS)
 
-.PHONY: build server web icons test test-web test-icongen test-installer test-provision test-torrent vet run clean version bump-version
+.PHONY: build server web icons test test-web test-icongen test-installer test-provision test-torrent vet run clean version icons-check test-android android
 
 ## build: PWA into the embed directory, then the single binary
 build: web server
@@ -22,11 +22,6 @@ server: | $(WEB_DIST)/index.html
 ## version: print the version this tree would build as
 version:
 	@node scripts/version.mjs
-
-## bump-version: move the version line to this month (UTC) — the first commit
-## on a branch does this, so a release says when its work began
-bump-version:
-	@node scripts/version.mjs --bump
 
 ## The Go binary embeds $(WEB_DIST), so it needs to exist even when only the
 ## server is being built. This placeholder is replaced by the real PWA.

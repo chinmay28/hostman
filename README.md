@@ -970,29 +970,32 @@ make test-torrent   # drive a real deluge: add, pause and remove a torrent
 cd apps/web && npm run dev   # Vite dev server, proxying /api to :8899
 
 make version        # print the version this tree would build as
-make bump-version   # move the version line to this month, UTC
+make icons          # cut the web and Android icons from art/hostman-logo.png
+make android        # the Android app (see docs/android.md)
 ```
 
 ### Versioning
 
 The version is `vYEAR.MONTH.PATCH` — a calendar version, where the patch number
-is the repository's commit count, so `v2026.8.42` is the 42nd commit on the
-2026.8 line. There is no semantic major/minor: the leading numbers say *when* a
-release line opened, not what it promises about compatibility.
+is the repository's commit count, so `v2026.11.42` is the 42nd commit, made in
+November 2026. There is no semantic major/minor: the leading numbers say *when*
+a commit was made, not what it promises about compatibility.
 
-`Year` and `Month` are constants in `server/internal/version/version.go`. A
-line opens with a branch: the first commit on a branch runs `make bump-version`,
-which sets them to the current month in UTC (CLAUDE.md asks Claude to do this
-without being told). They are deliberately not read from the build clock, so
-rebuilding an old tree still reports what it originally shipped. The month is
-not zero-padded (`v2026.8.42`, not `v2026.08.42`), because semver forbids a
-leading zero and every version has to stay something a semver parser accepts.
+All of it comes from git. YEAR.MONTH is the month of the commit being built —
+its committer date, in the committer's own timezone — so the line moves by
+itself with the first commit of a new month and nobody bumps anything. It is
+deliberately not read from the build clock, so rebuilding an old tree still
+reports what it originally shipped. The month is not zero-padded
+(`v2026.8.42`, not `v2026.08.42`), because semver forbids a leading zero and
+every version has to stay something a semver parser accepts.
 
-The patch number only exists at build time, so `scripts/version.mjs` works it
-out once and both halves of the build take it from there: the linker stamps it
-into the binary, Vite inlines it into the bundle. The app header shows what the
-PWA was built as, Settings and `/api/health` show what the binary was, and they
-agree because a build makes both together.
+None of it exists inside a compiled binary, so `scripts/version.mjs` works it
+out once and every half of the build takes it from there: the linker stamps the
+month and the count into the binary (`version.Date`, `version.Patch`), Vite
+inlines the string into the bundle, and the Android app's Gradle build takes it
+as its version name and code. The app header shows what the PWA was built as,
+Settings and `/api/health` show what the binary was, and they agree because a
+build makes both together.
 
 A version ending in `.0` is an unstamped build rather than a release — a bare
 `go build`, or a build where git couldn't be asked. That includes a **shallow**
@@ -1172,7 +1175,7 @@ server/
   internal/deploy/   command rendering, the deployment runner, health checks
   internal/forward/  apps' port forwards: a port here relayed over SSH to the app
   internal/api/      REST handlers, SSE log stream, optional PIN gate
-  internal/version/  the version number, and where YEAR.MONTH is declared
+  internal/version/  the version number, stamped at link time from the commit
   internal/web/      serves the embedded PWA
 apps/web/            the PWA: React, Vite, no UI framework
 scripts/             the installer, its test harness, and version.mjs
