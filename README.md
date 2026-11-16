@@ -1013,6 +1013,18 @@ Server flags:
 | `-self-user` | `HOSTMAN_SELF_USER` | _(the account HostMan runs as)_ | SSH user for the home host |
 | `-self-repo` | `HOSTMAN_REPO` | `chinmay28/hostman` | repository a self-update builds from |
 | `-self-ref`  | `HOSTMAN_REF`  | `main`             | default ref for a self-update |
+| `-discovery-port` | `HOSTMAN_DISCOVERY_PORT` | `8900` | UDP port that answers the Android app's **Find on this network**; `0` turns it off |
+| `-name`      | `HOSTMAN_NAME` | _(the hostname)_   | what that search lists this server as |
+| `-managed-by` | `HOSTMAN_MANAGED_BY` | _(empty)_  | what installs and updates HostMan instead of itself; set, there is no home host and no self-update (the Android app's full stack) |
+| `-forward-bind` | `HOSTMAN_FORWARD_BIND` | _(every interface)_ | address apps' port forwards listen on |
+
+Three more variables exist for a host that lacks what Linux normally provides,
+and do nothing when unset ([`internal/hostenv`](server/internal/hostenv)):
+`HOSTMAN_DNS_FILE` (a file of DNS servers, re-read when it changes),
+`HOSTMAN_DNS` (servers named outright) and `HOSTMAN_TZ` (an IANA zone for
+`time.Local`). With either DNS variable set, names under `.local` are asked of
+multicast DNS. The Android app sets all three; see
+[docs/android.md](docs/android.md).
 
 The installer sets `HOSTMAN_SELF_USER` to whoever ran it, since the service
 account is a `nologin` user and cannot be SSHed to.
@@ -1172,6 +1184,9 @@ server/
   internal/claude/   conversations with Claude Code held open between visits:
                      the event log, permission questions, model and mode changes
   internal/selfhost/ recognising this machine, and the app that updates it
+  internal/hostenv/  DNS (and .local over mDNS) and the zone on a host without
+                     them — the Android app's phone
+  internal/discovery/ the UDP answer to the Android app's network search
   internal/deploy/   command rendering, the deployment runner, health checks
   internal/forward/  apps' port forwards: a port here relayed over SSH to the app
   internal/api/      REST handlers, SSE log stream, optional PIN gate

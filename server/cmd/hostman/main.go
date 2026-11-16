@@ -13,13 +13,16 @@ import (
 	"os/signal"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/chinmay28/hostman/server/internal/api"
 	"github.com/chinmay28/hostman/server/internal/claude"
 	"github.com/chinmay28/hostman/server/internal/deploy"
+	"github.com/chinmay28/hostman/server/internal/discovery"
 	"github.com/chinmay28/hostman/server/internal/forward"
+	"github.com/chinmay28/hostman/server/internal/hostenv"
 	"github.com/chinmay28/hostman/server/internal/hostops"
 	"github.com/chinmay28/hostman/server/internal/hosts"
 	"github.com/chinmay28/hostman/server/internal/selfhost"
@@ -46,6 +49,13 @@ func run() error {
 		repo    = flag.String("self-repo", envOr("HOSTMAN_REPO", "chinmay28/hostman"), "repository a self-update builds from")
 		ref     = flag.String("self-ref", envOr("HOSTMAN_REF", "main"), "git ref a self-update builds from by default")
 		verbose = flag.Bool("v", false, "verbose logging")
+
+		// For a HostMan that something else installs and runs — the Android
+		// app's, on a phone. Each is inert at its default.
+		managedBy   = flag.String("managed-by", os.Getenv("HOSTMAN_MANAGED_BY"), "what installs and updates HostMan here instead of HostMan itself; when set, this machine is not registered as a host and self-update is off")
+		forwardBind = flag.String("forward-bind", os.Getenv("HOSTMAN_FORWARD_BIND"), "address apps' port forwards listen on; empty is every interface")
+		discoveryAt = flag.Int("discovery-port", envInt("HOSTMAN_DISCOVERY_PORT", discovery.DefaultPort), "UDP port that answers the Android app's search of the network; 0 turns it off")
+		name        = flag.String("name", os.Getenv("HOSTMAN_NAME"), "what the Android app lists this server as when it searches the network; empty is the hostname")
 	)
 	flag.Parse()
 
@@ -55,6 +65,14 @@ func run() error {
 	}
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(log)
+
+	// DNS and the local zone on a host without /etc/resolv.conf or a zone of
+	// its own (Android); a no-op wherever their variables are unset.
+	if applied, err := hostenv.Apply(os.Getenv); err != nil {
+		log.Warn("host environment", "err", err, "applied", applied)
+	} else if len(applied) > 0 {
+		log.Info("host environment", "applied", applied)
+	}
 
 	db, err := store.Open(*dbPath)
 	if err != nil {
@@ -72,10 +90,11 @@ func run() error {
 	log.Info("ssh identity ready", "fingerprint", identity.Fingerprint())
 
 	self := selfhost.New(db, selfhost.Config{
-		SSHUser: *sshUser,
-		Port:    portOf(*addr),
-		Repo:    *repo,
-		Ref:     *ref,
+		SSHUser:   *sshUser,
+		Port:      portOf(*addr),
+		Repo:      *repo,
+		Ref:       *ref,
+		ManagedBy: *managedBy,
 	}, log)
 	self.Ensure(ctx)
 
@@ -110,6 +129,7 @@ func run() error {
 	forwards := forward.NewManager(forward.DBSource(db), func(ctx context.Context, h *store.Host) (forward.Tunnel, error) {
 		return hostSvc.Connect(ctx, h)
 	}, log)
+	forwards.BindTo(*forwardBind)
 	go forwards.Run(ctx)
 	runner := deploy.NewRunner(db, hostSvc, health, log)
 
@@ -122,7 +142,7 @@ func run() error {
 		DB: db, Hosts: hostSvc, Poller: poller,
 		Runner: runner, Health: health, Ops: hostops.NewService(hostSvc), Transfers: hostops.NewTransfers(hostSvc, log), Shells: shells, Claude: claudeSessions,
 		Log: log, Auth: auth,
-		Self: self, Version: appVersion(), SelfRef: *ref,
+		Self: self, Version: appVersion(), SelfRef: *ref, ManagedBy: *managedBy,
 		Forwards: forwards, Port: portNumber(*addr),
 	}
 
@@ -136,6 +156,18 @@ func run() error {
 		ReadHeaderTimeout: 10 * time.Second,
 		// No WriteTimeout: deployment log streaming holds responses open.
 		IdleTimeout: 2 * time.Minute,
+	}
+
+	// Answers the Android app's "Find on this network". Losing it costs only
+	// that, so a port that is taken is a warning, not a reason to stop.
+	if *discoveryAt > 0 {
+		announce := discovery.Announcement{Name: serverName(*name), Port: portNumber(*addr), Version: apiSrv.Version}
+		go func() {
+			err := discovery.Listen(ctx, ":"+strconv.Itoa(*discoveryAt), func() discovery.Announcement { return announce })
+			if err != nil {
+				log.Warn("network discovery is off", "port", *discoveryAt, "err", err)
+			}
+		}()
 	}
 
 	errCh := make(chan error, 1)
@@ -216,6 +248,28 @@ func revision() string {
 		}
 	}
 	return ""
+}
+
+// serverName is what the network search lists this server as: the name it was
+// given, else the machine's short hostname.
+func serverName(given string) string {
+	if given = strings.TrimSpace(given); given != "" {
+		return given
+	}
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		return "HostMan"
+	}
+	short, _, _ := strings.Cut(host, ".")
+	return short
+}
+
+// envInt is envOr for a number; a value that is not one is the fallback.
+func envInt(key string, fallback int) int {
+	if n, err := strconv.Atoi(os.Getenv(key)); err == nil {
+		return n
+	}
+	return fallback
 }
 
 func envOr(key, fallback string) string {

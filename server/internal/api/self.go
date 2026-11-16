@@ -25,6 +25,15 @@ type selfView struct {
 	Ready bool `json:"ready"`
 	// Blocked explains why not, when Ready is false.
 	Blocked string `json:"blocked,omitempty"`
+	// ManagedBy names what updates HostMan here instead of HostMan itself,
+	// when something does (the Android app); there is then no home host and
+	// nothing to update from Settings.
+	ManagedBy string `json:"managedBy,omitempty"`
+}
+
+// managedMessage is why a managed HostMan does not update itself.
+func managedMessage(by string) string {
+	return "HostMan here is installed and updated by " + by + ", not by itself: update that instead."
 }
 
 func (s *Server) handleGetSelf(w http.ResponseWriter, r *http.Request) {
@@ -69,6 +78,9 @@ func (s *Server) handleGetSelf(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch {
+	case s.ManagedBy != "":
+		view.ManagedBy = s.ManagedBy
+		view.Blocked = managedMessage(s.ManagedBy)
 	case host == nil:
 		view.Blocked = "This machine isn't registered as a host yet."
 	case app == nil:
@@ -95,6 +107,11 @@ func (s *Server) handleSelfUpdate(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+	}
+
+	if s.ManagedBy != "" {
+		writeError(w, http.StatusConflict, managedMessage(s.ManagedBy))
+		return
 	}
 
 	host, err := s.DB.SelfHost(r.Context())

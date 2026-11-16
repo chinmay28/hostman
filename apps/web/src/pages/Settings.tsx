@@ -125,7 +125,7 @@ export default function Settings() {
  * SelfCard is where HostMan updates itself: it shows the machine it runs on,
  * whether an update can start, and the version to build.
  */
-function SelfCard({ info, onStarted }: { info: SelfInfo; onStarted: () => void }) {
+export function SelfCard({ info, onStarted }: { info: SelfInfo; onStarted: () => void }) {
   const navigate = useNavigate()
   const [confirming, setConfirming] = useState(false)
   const [ref, setRef] = useState(info.ref)
@@ -146,6 +146,22 @@ function SelfCard({ info, onStarted }: { info: SelfInfo; onStarted: () => void }
       setError(e instanceof Error ? e.message : String(e))
       setBusy(false)
     }
+  }
+
+  // On a phone, HostMan runs inside the Android app: there is no machine of
+  // its own to add, and a newer app is how it gets updated.
+  if (info.managedBy) {
+    return (
+      <Card>
+        <p className="sub" style={{ marginTop: 0 }}>
+          {info.blocked}
+        </p>
+        <div className="row between sub" style={{ marginTop: 10 }}>
+          <span>Version</span>
+          <span className="mono">{info.version}</span>
+        </div>
+      </Card>
+    )
   }
 
   if (!info.host) {

@@ -842,6 +842,10 @@ export interface SelfInfo {
   runningDeploymentId: number | null
   ready: boolean
   blocked?: string
+  /** What installs and updates HostMan here instead of HostMan itself — the
+   *  Android app, when HostMan runs on the phone. Absent on an ordinary
+   *  install. */
+  managedBy?: string
 }
 
 export interface SSHKeyInfo {
