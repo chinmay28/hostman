@@ -20,6 +20,31 @@ export interface PickedTorrent {
   size: number
 }
 
+/** What tells two picks of the same file apart from two files: its name, its
+ *  size, and when it was last changed where the browser says. */
+export interface Pick extends PickedTorrent {
+  lastModified?: number
+}
+
+/**
+ * mergePicks adds a later pick to an earlier one. A phone's picker cannot be
+ * relied on to hand over several files at once — some hand over one, and some
+ * hand over nothing when several were ticked — so the list on the screen grows
+ * with every pick rather than being replaced by it, and what is finally sent
+ * is whatever it holds. The same file picked twice stays once.
+ */
+export function mergePicks<F extends Pick>(existing: F[], added: F[]): F[] {
+  const key = (file: Pick) => `${file.name}\0${file.size}\0${file.lastModified ?? ''}`
+  const seen = new Set(existing.map(key))
+  const files = existing.slice()
+  for (const file of added) {
+    if (seen.has(key(file))) continue
+    seen.add(key(file))
+    files.push(file)
+  }
+  return files
+}
+
 /** How one picked file ended. */
 export type TorrentOutcome =
   | { name: string; state: 'added' }

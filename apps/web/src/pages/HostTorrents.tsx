@@ -16,7 +16,7 @@ import {
   useLoader,
 } from '../components/ui'
 import { bytes, uptime } from '../lib/format'
-import { addPicked, troubles, type TorrentProgress } from '../lib/torrentPick'
+import { addPicked, mergePicks, troubles, type TorrentProgress } from '../lib/torrentPick'
 import type { Torrent, TorrentDaemon, TorrentSeeding } from '../types'
 
 /** What a host without deluge needs run on it once. HostMan will not do it: a
@@ -236,7 +236,8 @@ export default function HostTorrents() {
                 busy={busy}
                 adding={adding}
                 onAdd={add}
-                onFiles={(files) => void addFiles(files)}
+                onFiles={addFiles}
+                onFail={setFailure}
               />
 
               {daemon.trouble && !stale && (
@@ -573,8 +574,12 @@ function SetUp({
  * .torrent file is something you were given — mailed, or downloaded by the
  * browser on the host itself — and picking it hands its bytes over as they are,
  * rather than asking the host to go and fetch a link that may need a login.
- * Files come in handfuls — a season, a discography — so the picker takes as
- * many as are chosen and each becomes a torrent of its own.
+ * Files come in handfuls — a season, a discography — so what is picked goes
+ * onto a list and the list is what is added, each file a torrent of its own.
+ * The list is there because a phone's picker cannot be relied on for several
+ * files at once: some hand over one, and some hand over nothing when several
+ * were ticked. Picking again adds to it, so every phone has a way to add
+ * several in one go.
  */
 function AddTorrent({
   daemon,
@@ -582,29 +587,36 @@ function AddTorrent({
   adding,
   onAdd,
   onFiles,
+  onFail,
 }: {
   daemon: TorrentDaemon
   busy: string | null
   /** Which picked file is going, while more than a link is being added. */
   adding: TorrentProgress | null
   onAdd: (source: string) => void
-  onFiles: (files: File[]) => void
+  /** Adds what was picked, and settles when every file has been tried. */
+  onFiles: (files: File[]) => Promise<void>
+  onFail: (message: string) => void
 }) {
   const [source, setSource] = useState('')
   const picker = useRef<HTMLInputElement>(null)
+  const [picks, setPicks] = useState<File[]>([])
+  // The picker is remade rather than emptied, and only once nothing is left
+  // that could still need it: on a phone the files are the picker's own, and
+  // one emptied while they are waiting to be read takes them away.
+  const [generation, setGeneration] = useState(0)
+  const clear = () => {
+    setPicks([])
+    setGeneration((g) => g + 1)
+  }
+  const addPicks = async () => {
+    await onFiles(picks)
+    clear()
+  }
 
   const addLink = () => {
     onAdd(source.trim())
     setSource('')
-  }
-
-  // A picker that still holds last time's files will not fire for the same
-  // ones again, and picking the same torrent twice is a reasonable thing to
-  // do. So it is emptied here, on the way in, when nothing is reading them.
-  const pick = () => {
-    if (!picker.current) return
-    picker.current.value = ''
-    picker.current.click()
   }
 
   return (
@@ -629,14 +641,42 @@ function AddTorrent({
         <button className="primary" onClick={addLink} disabled={!!busy || source.trim() === ''}>
           {busy === 'add' && !adding ? 'Adding…' : 'Add'}
         </button>
-        <button className="secondary" onClick={pick} disabled={!!busy}>
-          {!adding
-            ? 'Pick files'
-            : adding.total === 1
-              ? 'Adding…'
-              : `Adding ${adding.current} of ${adding.total}…`}
+        <button className="secondary" onClick={() => picker.current?.click()} disabled={!!busy}>
+          {picks.length === 0 ? 'Pick files' : 'Pick more'}
         </button>
       </div>
+      {picks.length > 0 && (
+        <>
+          <div className="upload-list">
+            {picks.map((file, index) => (
+              <div key={`${file.name}-${file.size}-${file.lastModified}`}>
+                <span className="name">{file.name}</span>
+                <span className="size">{bytes(file.size)}</span>
+                <button
+                  className="remove"
+                  onClick={() => setPicks((current) => current.filter((_, i) => i !== index))}
+                  disabled={!!busy}
+                  aria-label={`Remove ${file.name}`}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="actions">
+            <button className="primary" onClick={() => void addPicks()} disabled={!!busy}>
+              {adding
+                ? adding.total === 1
+                  ? 'Adding…'
+                  : `Adding ${adding.current} of ${adding.total}…`
+                : `Add ${picks.length} file${picks.length === 1 ? '' : 's'}`}
+            </button>
+            <button className="ghost" onClick={clear} disabled={!!busy}>
+              Clear
+            </button>
+          </div>
+        </>
+      )}
       {/* No accept list on purpose. It is the obvious thing to write and it
           makes the picker useless: iOS Files and Android's picker both filter
           by the type the system knows a file as, ".torrent" maps to nothing
@@ -644,16 +684,20 @@ function AddTorrent({
           file is greyed out and the one you want cannot be chosen. So anything
           can be picked, and what it is is decided by reading it. */}
       <input
+        key={generation}
         ref={picker}
         type="file"
         multiple
         hidden
         onChange={(e) => {
-          // The picker is left holding these until the next pick: on a phone
-          // the files are the picker's own, and one emptied while they are
-          // still being read takes them away from under the read.
           const files = Array.from(e.target.files ?? [])
-          if (files.length > 0) onFiles(files)
+          // A picker that answers with nothing has still answered, and saying
+          // so beats a screen that looks as though it was never asked.
+          if (files.length === 0) {
+            onFail('The picker handed back no files. Pick them again — one at a time works on every phone.')
+            return
+          }
+          setPicks((current) => mergePicks(current, files))
         }}
       />
     </Card>

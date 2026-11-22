@@ -16,11 +16,15 @@ it to the version when cutting the release.
 
 ### Torrents
 
-- **Pick several `.torrent` files at once.** The picker on the Torrents screen
-  now takes as many files as you choose and hands each to deluge as a torrent
-  of its own, saying which one is going (`Adding 2 of 5…`). One that is not a
-  torrent, or that deluge will not take, no longer costs the rest: the others
-  are added, and the screen names the ones that were not and why.
+- **Add several `.torrent` files in one go.** Picking files on the Torrents
+  screen now puts them on a list, and each further pick adds to it; **Add N
+  files** hands every one to deluge as a torrent of its own, saying which is
+  going (`Adding 2 of 5…`). The list is there because a phone's picker cannot
+  be relied on for several files at once — some hand over one, some hand over
+  nothing when several were ticked — so picking one at a time builds the same
+  list. One that is not a torrent, or that deluge will not take, does not cost
+  the rest: the others are added, and the screen names the ones that were not
+  and why.
 
 ## v2026.11.79
 
