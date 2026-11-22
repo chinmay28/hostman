@@ -70,16 +70,20 @@ func waitForDeluge(t *testing.T, conf string) {
 	t.Fatal("deluged never answered on its port")
 }
 
-func TestRealDelugeTakesWhatHostManSends(t *testing.T) {
+// realDeluge sets the downloader up under a temporary root and runs the daemon
+// the way its unit would, returning the root, a scratch folder and the stubbed
+// bin directory the scripts are to run with.
+func realDeluge(t *testing.T) (root, work, bin string) {
+	t.Helper()
 	requireDeluge(t)
-	root := t.TempDir()
-	work := t.TempDir()
+	root = t.TempDir()
+	work = t.TempDir()
 	conf := stateDir(root)
 
 	// systemd is the one thing still stubbed: this test is about deluge, and a
 	// unit file under a temporary root is not something to hand the machine's
 	// own init. is-active answers yes, because the daemon below really is.
-	bin := stubBin(t, map[string]string{
+	bin = stubBin(t, map[string]string{
 		"systemctl": `case "$1" in is-active) exit 0;; esac; exit 0`,
 	})
 
@@ -117,6 +121,44 @@ func TestRealDelugeTakesWhatHostManSends(t *testing.T) {
 		}
 	})
 	waitForDeluge(t, conf)
+	return root, work, bin
+}
+
+// Several files picked at once arrive as one add after another, with nothing
+// between them but the status HostMan reads back. Every one of them has to be
+// there afterwards.
+func TestRealDelugeTakesSeveralFilesInARow(t *testing.T) {
+	root, work, bin := realDeluge(t)
+	folder := filepath.Join(work, "downloads")
+
+	names := []string{"hostman-first", "hostman-second", "hostman-third", "hostman-fourth"}
+	for _, name := range names {
+		body := base64.StdEncoding.EncodeToString(aTorrentFile(name))
+		out, code := runScript(t, torrentAddFor(root, name+".torrent", "", folder), body, bin)
+		if code != 0 {
+			t.Fatalf("adding %s exited %d: %s", name, code, out)
+		}
+		if err := torrentConsoleError(out); err != nil {
+			t.Fatalf("deluge would not take %s: %v\n%s", name, err, out)
+		}
+		if out, code := runScript(t, torrentStatusFor(root, currentUser(t)), "", bin); code != 0 {
+			t.Fatalf("status after %s exited %d: %s", name, code, out)
+		}
+	}
+
+	got := map[string]bool{}
+	for _, torrent := range waitForTorrent(t, root, bin, len(names)).Torrents {
+		got[torrent.Name] = true
+	}
+	for _, name := range names {
+		if !got[name] {
+			t.Errorf("%s was handed over and is not in the list: %v", name, got)
+		}
+	}
+}
+
+func TestRealDelugeTakesWhatHostManSends(t *testing.T) {
+	root, work, bin := realDeluge(t)
 
 	// A daemon with nothing in it is an empty list, not trouble.
 	out, code := runScript(t, torrentStatusFor(root, currentUser(t)), "", bin)

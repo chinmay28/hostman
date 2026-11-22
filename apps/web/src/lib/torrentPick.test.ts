@@ -4,6 +4,7 @@ import {
   addPicked,
   binaryString,
   looksLikeATorrent,
+  mergePicks,
   troubles,
   type PickedTorrent,
   type TorrentOutcome,
@@ -46,6 +47,28 @@ describe('binaryString', () => {
     expect(text.length).toBe(bytes.length)
     expect(text.charCodeAt(255)).toBe(255)
     expect(text.charCodeAt(19999)).toBe(19999 % 256)
+  })
+})
+
+describe('mergePicks', () => {
+  const file = (name: string, size = 10, lastModified = 1) => ({ name, size, lastModified })
+
+  it('adds a later pick after an earlier one', () => {
+    expect(mergePicks([file('a')], [file('b'), file('c')]).map((f) => f.name)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('keeps the same file picked twice once, within a pick and across them', () => {
+    expect(mergePicks([file('a')], [file('a'), file('b'), file('b')]).map((f) => f.name)).toEqual(['a', 'b'])
+  })
+
+  it('keeps two different files that share a name', () => {
+    expect(mergePicks([file('a', 10)], [file('a', 11), file('a', 10, 2)])).toHaveLength(3)
+  })
+
+  it('leaves the list it was given alone', () => {
+    const existing = [file('a')]
+    mergePicks(existing, [file('b')])
+    expect(existing).toHaveLength(1)
   })
 })
 
