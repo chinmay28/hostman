@@ -16,17 +16,13 @@ import {
   useLoader,
 } from '../components/ui'
 import { bytes, uptime } from '../lib/format'
+import { addPicked, troubles, type TorrentProgress } from '../lib/torrentPick'
 import type { Torrent, TorrentDaemon, TorrentSeeding } from '../types'
 
 /** What a host without deluge needs run on it once. HostMan will not do it: a
  *  BitTorrent client is a decision about what a machine does on a network, and
  *  on plenty of machines somebody has already made it. */
 const INSTALL = 'sudo apt install -y deluged deluge-console'
-
-/** The largest file worth carrying to a host, matching what the server will
- *  accept. A torrent file is a list of hashes: a few kilobytes is ordinary and
- *  a megabyte is a very large one. */
-const MAX_TORRENT_BYTES = 4 * 1024 * 1024
 
 /** How often to ask while something is downloading. Every other host screen
  *  answers when you ask it to, because each answer is an SSH session — but a
@@ -82,6 +78,7 @@ export default function HostTorrents() {
 
   const [busy, setBusy] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
+  const [adding, setAdding] = useState<TorrentProgress | null>(null)
   const [removing, setRemoving] = useState<Torrent | null>(null)
   const [dropping, setDropping] = useState(false)
   const [folder, setFolder] = useState('')
@@ -152,8 +149,27 @@ export default function HostTorrents() {
   const start = () => act('start', () => api.torrentAction(hostId, 'start'))
   const update = () => act('update', () => api.torrentAction(hostId, 'update'))
   const stop = () => act('stop', () => api.torrentAction(hostId, 'stop'))
-  const add = (input: { source?: string; file?: string; name?: string }) =>
-    act('add', () => api.addTorrent(hostId, input))
+  const add = (source: string) => act('add', () => api.addTorrent(hostId, { source }))
+  // Picked files go one request each, so one that deluge will not take costs
+  // that file and not the rest. What went is shown by the list; what did not
+  // is said, by name.
+  const addFiles = async (files: File[]) => {
+    setBusy('add')
+    setFailure(null)
+    try {
+      const outcomes = await addPicked(
+        files,
+        async (file) => new Uint8Array(await file.arrayBuffer()),
+        (file, base64) => api.addTorrent(hostId, { file: base64, name: file.name }),
+        setAdding,
+      )
+      setFailure(troubles(outcomes))
+      if (outcomes.some((o) => o.state === 'added')) reload()
+    } finally {
+      setAdding(null)
+      setBusy(null)
+    }
+  }
   const remove = (torrent: Torrent, data: boolean) =>
     act('remove', async () => {
       await api.torrentAction(hostId, 'remove', torrent.id, data)
@@ -215,7 +231,13 @@ export default function HostTorrents() {
                 </Card>
               )}
 
-              <AddTorrent daemon={daemon} busy={busy} onAdd={add} onFail={setFailure} />
+              <AddTorrent
+                daemon={daemon}
+                busy={busy}
+                adding={adding}
+                onAdd={add}
+                onFiles={(files) => void addFiles(files)}
+              />
 
               {daemon.trouble && !stale && (
                 <Banner tone="bad">
@@ -551,54 +573,29 @@ function SetUp({
  * .torrent file is something you were given — mailed, or downloaded by the
  * browser on the host itself — and picking it hands its bytes over as they are,
  * rather than asking the host to go and fetch a link that may need a login.
+ * Files come in handfuls — a season, a discography — so the picker takes as
+ * many as are chosen and each becomes a torrent of its own.
  */
 function AddTorrent({
   daemon,
   busy,
+  adding,
   onAdd,
-  onFail,
+  onFiles,
 }: {
   daemon: TorrentDaemon
   busy: string | null
-  onAdd: (input: { source?: string; file?: string; name?: string }) => void
-  onFail: (message: string) => void
+  /** Which picked file is going, while more than a link is being added. */
+  adding: TorrentProgress | null
+  onAdd: (source: string) => void
+  onFiles: (files: File[]) => void
 }) {
   const [source, setSource] = useState('')
   const picker = useRef<HTMLInputElement>(null)
 
   const addLink = () => {
-    onAdd({ source: source.trim() })
+    onAdd(source.trim())
     setSource('')
-  }
-
-  const addFile = async (file: File) => {
-    // A picker that still holds last time's file will not fire for the same one
-    // again, and picking the same torrent twice is a reasonable thing to do.
-    const done = () => {
-      if (picker.current) picker.current.value = ''
-    }
-    // Nothing that size is a torrent file, and a phone should not spend a
-    // minute uploading a video to be told so by the host.
-    if (file.size > MAX_TORRENT_BYTES) {
-      onFail(`${file.name} is too large to be a .torrent file.`)
-      done()
-      return
-    }
-    let picked: { text: string; base64: string }
-    try {
-      picked = await readFile(file)
-    } catch {
-      onFail(`${file.name} could not be read.`)
-      done()
-      return
-    }
-    if (!looksLikeATorrent(picked.text)) {
-      onFail(`${file.name} is not a .torrent file.`)
-      done()
-      return
-    }
-    onAdd({ file: picked.base64, name: file.name })
-    done()
   }
 
   return (
@@ -621,10 +618,14 @@ function AddTorrent({
       </Field>
       <div className="actions" style={{ marginTop: 0 }}>
         <button className="primary" onClick={addLink} disabled={!!busy || source.trim() === ''}>
-          {busy === 'add' ? 'Adding…' : 'Add'}
+          {busy === 'add' && !adding ? 'Adding…' : 'Add'}
         </button>
         <button className="secondary" onClick={() => picker.current?.click()} disabled={!!busy}>
-          Pick a file
+          {!adding
+            ? 'Pick files'
+            : adding.total === 1
+              ? 'Adding…'
+              : `Adding ${adding.current} of ${adding.total}…`}
         </button>
       </div>
       {/* No accept list on purpose. It is the obvious thing to write and it
@@ -636,10 +637,16 @@ function AddTorrent({
       <input
         ref={picker}
         type="file"
+        multiple
         hidden
         onChange={(e) => {
-          const file = e.target.files?.[0]
-          if (file) void addFile(file)
+          // Copied before the picker is cleared, which empties the list it
+          // handed over. And it is cleared because a picker that still holds
+          // last time's files will not fire for the same ones again, and
+          // picking the same torrent twice is a reasonable thing to do.
+          const files = Array.from(e.target.files ?? [])
+          e.target.value = ''
+          if (files.length > 0) onFiles(files)
         }}
       />
     </Card>
@@ -672,7 +679,7 @@ function Torrents({
       <Card>
         <div className="sub">
           {daemon.running
-            ? 'Nothing is downloading. Paste a magnet link above, or pick a .torrent file.'
+            ? 'Nothing is downloading. Paste a magnet link above, or pick .torrent files.'
             : 'Nothing is downloading, and the daemon is stopped. Adding a torrent starts it.'}
         </div>
       </Card>
@@ -1001,36 +1008,4 @@ function tone(state: string): 'good' | 'warn' | 'bad' | 'neutral' | 'accent' {
   if (state === 'error') return 'bad'
   if (state === 'paused' || state === 'queued') return 'warn'
   return 'neutral'
-}
-
-/**
- * A picked file, read once: its bytes as a string for the check above, and the
- * base64 that goes in the request body.
- *
- * The encoding is done a chunk at a time because String.fromCharCode is given
- * the bytes as arguments, and a megabyte of them in one call is how a browser
- * is made to throw "too many arguments" on a file that is otherwise perfectly
- * ordinary.
- */
-async function readFile(file: File): Promise<{ text: string; base64: string }> {
-  const bytes = new Uint8Array(await file.arrayBuffer())
-  const chunk = 8192
-  let binary = ''
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
-  }
-  return { text: binary, base64: btoa(binary) }
-}
-
-/**
- * The same rule the server applies: a torrent file is a bencoded dictionary
- * with an info dictionary inside it.
- *
- * Asking here as well is not distrust of the server — it still refuses
- * everything this does. It is that the picker now offers every file on the
- * phone, so picking the wrong one is easy, and being told which file it was
- * beats a round trip to the host to be told the same thing about none.
- */
-function looksLikeATorrent(text: string): boolean {
-  return text.startsWith('d') && text.includes('4:info')
 }

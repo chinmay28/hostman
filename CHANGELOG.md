@@ -12,6 +12,16 @@ has a `## <version>` heading naming that commit's own version exactly. A push to
 yet released sits under `## Unreleased`, which never matches a version — rename
 it to the version when cutting the release.
 
+## Unreleased
+
+### Torrents
+
+- **Pick several `.torrent` files at once.** The picker on the Torrents screen
+  now takes as many files as you choose and hands each to deluge as a torrent
+  of its own, saying which one is going (`Adding 2 of 5…`). One that is not a
+  torrent, or that deluge will not take, no longer costs the rest: the others
+  are added, and the screen names the ones that were not and why.
+
 ## v2026.11.79
 
 **Downloads:** `hostman-<version>-linux-arm64` and `-linux-amd64` (the server,

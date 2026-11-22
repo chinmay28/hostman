@@ -537,7 +537,8 @@ server itself only ever listens on the host's loopback interface — the one doo
 in is the noVNC port, which is `6080` unless you change it.
 
 **Torrents** hands a torrent to the host and lets it do the downloading. Paste a
-magnet link, or pick a `.torrent` file on the phone, and the files land on the
+magnet link, or pick `.torrent` files on the phone — as many at once as you
+like, each added as a torrent of its own — and the files land on the
 host's own disk. That is the whole point of it: a torrent opened on a phone
 downloads over the phone's connection, onto the phone's storage, and then has to
 be moved to the machine that was always supposed to have it. The phone is the
