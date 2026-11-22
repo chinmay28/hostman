@@ -598,6 +598,15 @@ function AddTorrent({
     setSource('')
   }
 
+  // A picker that still holds last time's files will not fire for the same
+  // ones again, and picking the same torrent twice is a reasonable thing to
+  // do. So it is emptied here, on the way in, when nothing is reading them.
+  const pick = () => {
+    if (!picker.current) return
+    picker.current.value = ''
+    picker.current.click()
+  }
+
   return (
     <Card>
       <div className="title">Add a torrent</div>
@@ -620,7 +629,7 @@ function AddTorrent({
         <button className="primary" onClick={addLink} disabled={!!busy || source.trim() === ''}>
           {busy === 'add' && !adding ? 'Adding…' : 'Add'}
         </button>
-        <button className="secondary" onClick={() => picker.current?.click()} disabled={!!busy}>
+        <button className="secondary" onClick={pick} disabled={!!busy}>
           {!adding
             ? 'Pick files'
             : adding.total === 1
@@ -640,12 +649,10 @@ function AddTorrent({
         multiple
         hidden
         onChange={(e) => {
-          // Copied before the picker is cleared, which empties the list it
-          // handed over. And it is cleared because a picker that still holds
-          // last time's files will not fire for the same ones again, and
-          // picking the same torrent twice is a reasonable thing to do.
+          // The picker is left holding these until the next pick: on a phone
+          // the files are the picker's own, and one emptied while they are
+          // still being read takes them away from under the read.
           const files = Array.from(e.target.files ?? [])
-          e.target.value = ''
           if (files.length > 0) onFiles(files)
         }}
       />
