@@ -45,6 +45,17 @@ export function mergePicks<F extends Pick>(existing: F[], added: F[]): F[] {
   return files
 }
 
+/**
+ * torrentsIn is what a picked folder is worth: the .torrent files anywhere
+ * under it, and nothing else. A folder is picked for what is in it rather than
+ * file by file, so the films and the text files beside the torrents were never
+ * chosen and are not listed as mistakes — unlike a file picked by hand, which
+ * is read to see what it is whatever it is called.
+ */
+export function torrentsIn<F extends PickedTorrent>(files: F[]): F[] {
+  return files.filter((file) => file.name.toLowerCase().endsWith('.torrent'))
+}
+
 /** How one picked file ended. */
 export type TorrentOutcome =
   | { name: string; state: 'added' }

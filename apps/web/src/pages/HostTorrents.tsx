@@ -16,7 +16,13 @@ import {
   useLoader,
 } from '../components/ui'
 import { bytes, uptime } from '../lib/format'
-import { addPicked, mergePicks, troubles, type TorrentProgress } from '../lib/torrentPick'
+import {
+  addPicked,
+  mergePicks,
+  torrentsIn,
+  troubles,
+  type TorrentProgress,
+} from '../lib/torrentPick'
 import type { Torrent, TorrentDaemon, TorrentSeeding } from '../types'
 
 /** What a host without deluge needs run on it once. HostMan will not do it: a
@@ -600,6 +606,7 @@ function AddTorrent({
 }) {
   const [source, setSource] = useState('')
   const picker = useRef<HTMLInputElement>(null)
+  const folderPicker = useRef<HTMLInputElement>(null)
   const [picks, setPicks] = useState<File[]>([])
   // The picker is remade rather than emptied, and only once nothing is left
   // that could still need it: on a phone the files are the picker's own, and
@@ -645,10 +652,21 @@ function AddTorrent({
           {picks.length === 0 ? 'Pick files' : 'Pick more'}
         </button>
       </div>
+      {/* A folder is the way to hand over many at once on a phone whose
+          picker will only give up one file at a time: everything under it
+          comes back in one answer, and the torrents are taken out of that. */}
+      <button
+        className="secondary block"
+        style={{ marginTop: 8 }}
+        onClick={() => folderPicker.current?.click()}
+        disabled={!!busy}
+      >
+        Pick a folder of .torrent files
+      </button>
       {picks.length > 0 && (
         <>
           <div className="upload-list">
-            {picks.map((file, index) => (
+            {picks.slice(0, PICKS_SHOWN).map((file, index) => (
               <div key={`${file.name}-${file.size}-${file.lastModified}`}>
                 <span className="name">{file.name}</span>
                 <span className="size">{bytes(file.size)}</span>
@@ -662,6 +680,11 @@ function AddTorrent({
                 </button>
               </div>
             ))}
+            {picks.length > PICKS_SHOWN && (
+              <div>
+                <span className="name sub">and {picks.length - PICKS_SHOWN} more</span>
+              </div>
+            )}
           </div>
           <div className="actions">
             <button className="primary" onClick={() => void addPicks()} disabled={!!busy}>
@@ -684,7 +707,22 @@ function AddTorrent({
           file is greyed out and the one you want cannot be chosen. So anything
           can be picked, and what it is is decided by reading it. */}
       <input
-        key={generation}
+        key={`folder-${generation}`}
+        ref={folderPicker}
+        type="file"
+        hidden
+        {...FOLDER_PICKER}
+        onChange={(e) => {
+          const found = torrentsIn(Array.from(e.target.files ?? []))
+          if (found.length === 0) {
+            onFail('There are no .torrent files in that folder, or the browser would not hand it over.')
+            return
+          }
+          setPicks((current) => mergePicks(current, found))
+        }}
+      />
+      <input
+        key={`files-${generation}`}
         ref={picker}
         type="file"
         multiple
@@ -703,6 +741,15 @@ function AddTorrent({
     </Card>
   )
 }
+
+/** How many picked files are listed by name before the rest are a number: a
+ *  folder can hold hundreds, and the button under the list has to stay in
+ *  reach. */
+const PICKS_SHOWN = 8
+
+/** What makes a file input pick a folder and everything under it. React's
+ *  types do not know the attributes, which is why they are spread on. */
+const FOLDER_PICKER = { webkitdirectory: '', directory: '' } as Record<string, string>
 
 /** What the host is working on. The bar is the point of the screen, so it is
  *  the widest thing on the card and everything else is a line under it. */

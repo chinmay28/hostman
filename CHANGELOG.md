@@ -25,6 +25,10 @@ it to the version when cutting the release.
   list. One that is not a torrent, or that deluge will not take, does not cost
   the rest: the others are added, and the screen names the ones that were not
   and why.
+- **Pick a folder of `.torrent` files.** For a phone whose picker gives up one
+  file at a time, **Pick a folder of .torrent files** takes every `.torrent`
+  under the folder, subfolders included, onto the list in one go. Whatever else
+  is in the folder is left out rather than reported.
 
 ## v2026.11.79
 

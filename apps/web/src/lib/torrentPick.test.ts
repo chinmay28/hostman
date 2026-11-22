@@ -5,6 +5,7 @@ import {
   binaryString,
   looksLikeATorrent,
   mergePicks,
+  torrentsIn,
   troubles,
   type PickedTorrent,
   type TorrentOutcome,
@@ -69,6 +70,20 @@ describe('mergePicks', () => {
     const existing = [file('a')]
     mergePicks(existing, [file('b')])
     expect(existing).toHaveLength(1)
+  })
+})
+
+describe('torrentsIn', () => {
+  const file = (name: string) => ({ name, size: 10 })
+
+  it('keeps the torrent files of a folder and leaves the rest', () => {
+    const files = [file('a.torrent'), file('film.mkv'), file('B.TORRENT'), file('notes.txt'), file('torrent')]
+    expect(torrentsIn(files).map((f) => f.name)).toEqual(['a.torrent', 'B.TORRENT'])
+  })
+
+  it('finds nothing in a folder with none', () => {
+    expect(torrentsIn([file('film.mkv')])).toEqual([])
+    expect(torrentsIn([])).toEqual([])
   })
 })
 
