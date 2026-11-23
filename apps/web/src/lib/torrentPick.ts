@@ -1,6 +1,7 @@
 /**
  * Picking .torrent files is a queue too: however many were picked, each one
- * read, checked, and handed to the host on a request of its own. One request
+ * read, checked, and handed to the host on a request of its own, a few at a
+ * time. One request
  * per file keeps the server's contract what it was — one torrent, one answer —
  * and means a file deluge will not take costs that file and not the nine
  * picked with it. This module is the queue and what is said about it
@@ -66,7 +67,8 @@ export type TorrentOutcome =
 
 /** Where the queue has got to, for the button on the screen. */
 export interface TorrentProgress {
-  /** The file going now, counted from one. */
+  /** How far along it is, counted from one: the files finished, and one more
+   *  for those going now. */
   current: number
   total: number
 }
@@ -107,49 +109,82 @@ export function binaryString(bytes: Uint8Array): string {
   return binary
 }
 
+/** How many picked files are on their way to the host at once. Each is an SSH
+ *  session and a deluge-console of its own on the host, which is often a Pi:
+ *  enough of them to stop a season taking minutes, few enough to leave the
+ *  machine able to do something else. */
+export const ADD_AT_ONCE = 4
+
 /**
- * addPicked sends the picked files in order and reports how each one ended,
- * one outcome per file and in the order they were picked.
+ * addPicked sends the picked files, a few at a time, and reports how each one
+ * ended: one outcome per file, in the order they were picked however they
+ * finished.
  *
  * A file that is plainly not a torrent is never sent: nothing that size is a
  * torrent file, and a phone should not spend a minute uploading a video to be
  * told so by the host. A failure does not stop the rest — they are separate
  * torrents, and the one deluge refused says nothing about the others.
+ *
+ * The first file to reach the host goes on its own. Adding to a stopped
+ * daemon starts it, and that is a thing to ask for once rather than four
+ * times at the same moment; whatever follows finds it running.
  */
 export async function addPicked<F extends PickedTorrent>(
   files: F[],
   read: TorrentReader<F>,
   add: TorrentAdder<F>,
   onProgress: (p: TorrentProgress) => void = () => {},
+  atOnce: number = ADD_AT_ONCE,
 ): Promise<TorrentOutcome[]> {
-  const outcomes: TorrentOutcome[] = []
-  for (const [index, file] of files.entries()) {
-    const name = file.name
-    onProgress({ current: index + 1, total: files.length })
+  const outcomes = new Array<TorrentOutcome>(files.length)
+  let finished = 0
+  const report = () => onProgress({ current: Math.min(finished + 1, files.length), total: files.length })
 
-    if (file.size > MAX_TORRENT_BYTES) {
-      outcomes.push({ name, state: 'rejected', reason: 'is too large to be a .torrent file' })
-      continue
-    }
-    let binary: string
-    try {
-      binary = binaryString(await read(file))
-    } catch {
-      outcomes.push({ name, state: 'rejected', reason: 'could not be read' })
-      continue
-    }
-    if (!looksLikeATorrent(binary)) {
-      outcomes.push({ name, state: 'rejected', reason: 'is not a .torrent file' })
-      continue
-    }
-    try {
-      await add(file, btoa(binary))
-      outcomes.push({ name, state: 'added' })
-    } catch (e) {
-      outcomes.push({ name, state: 'failed', reason: e instanceof Error ? e.message : String(e) })
-    }
+  const one = async (index: number) => {
+    outcomes[index] = await addOne(files[index], read, add)
+    finished++
+    if (finished < files.length) report()
   }
+
+  if (files.length > 0) report()
+  let next = 0
+  while (next < files.length) {
+    const index = next++
+    await one(index)
+    if (outcomes[index].state !== 'rejected') break
+  }
+  const worker = async () => {
+    while (next < files.length) await one(next++)
+  }
+  await Promise.all(Array.from({ length: Math.max(1, atOnce) }, worker))
   return outcomes
+}
+
+/** addOne reads, checks and sends a single picked file. */
+async function addOne<F extends PickedTorrent>(
+  file: F,
+  read: TorrentReader<F>,
+  add: TorrentAdder<F>,
+): Promise<TorrentOutcome> {
+  const name = file.name
+  if (file.size > MAX_TORRENT_BYTES) {
+    return { name, state: 'rejected', reason: 'is too large to be a .torrent file' }
+  }
+  let binary: string
+  try {
+    binary = binaryString(await read(file))
+  } catch {
+    return { name, state: 'rejected', reason: 'could not be read' }
+  }
+  if (!looksLikeATorrent(binary)) {
+    return { name, state: 'rejected', reason: 'is not a .torrent file' }
+  }
+  try {
+    await add(file, btoa(binary))
+    return { name, state: 'added' }
+  } catch (e) {
+    return { name, state: 'failed', reason: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 /** How many files that went wrong are named before the rest are a number. */

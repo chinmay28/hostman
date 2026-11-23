@@ -29,6 +29,8 @@ func TestTorrentRequestsAreValidatedBeforeConnecting(t *testing.T) {
 		{"a file that is not a torrent", "POST", "/api/hosts/%d/torrents",
 			`{"file":"` + base64.StdEncoding.EncodeToString([]byte("just a photo")) + `"}`},
 		{"a file that did not arrive intact", "POST", "/api/hosts/%d/torrents", `{"file":"!!!not base64!!!"}`},
+		{"a file that is not a torrent, without the status", "POST", "/api/hosts/%d/torrents?status=none",
+			`{"file":"` + base64.StdEncoding.EncodeToString([]byte("just a photo")) + `"}`},
 		{"a folder that is not a path", "POST", "/api/hosts/%d/torrents",
 			`{"source":"magnet:?xt=urn:btih:` + strings.Repeat("a", 40) + `","path":"srv/media"}`},
 		{"an unknown field", "POST", "/api/hosts/%d/torrents", `{"source":"magnet:?xt=urn:btih:` + strings.Repeat("a", 40) + `","seed":true}`},

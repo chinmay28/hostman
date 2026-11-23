@@ -888,6 +888,16 @@ func TestTorrentFileName(t *testing.T) {
 	}
 }
 
+func TestIncomingName(t *testing.T) {
+	if got := incomingName("ubuntu.torrent", "ab12"); got != "ubuntu-ab12.torrent" {
+		t.Errorf("incomingName = %q", got)
+	}
+	// Two adds of the same name at the same moment must not share a file.
+	if incomingName("a.torrent", "one") == incomingName("a.torrent", "two") {
+		t.Error("two adds of one name were given the same file")
+	}
+}
+
 func TestCleanDownloads(t *testing.T) {
 	if got, err := cleanDownloads(""); err != nil || got != "" {
 		t.Errorf("an empty folder is the host's to fill in, got %q, %v", got, err)
