@@ -50,6 +50,7 @@ func (s *Server) handleTorrents(w http.ResponseWriter, r *http.Request) {
 // It answers with the whole downloader rather than with the torrent that was
 // added, because that is what the screen shows next and a magnet link has no
 // name to report yet anyway — deluge only learns it once the metadata arrives.
+// With ?status=none it answers 204 instead and does not look.
 func (s *Server) handleTorrentAdd(w http.ResponseWriter, r *http.Request) {
 	h, err := s.hostFromPath(r)
 	if err != nil {
@@ -65,6 +66,19 @@ func (s *Server) handleTorrentAdd(w http.ResponseWriter, r *http.Request) {
 	// patience is what that takes.
 	ctx, cancel := context.WithTimeout(r.Context(), unitTimeout)
 	defer cancel()
+
+	// One of a list of picked files: the screen asks what the downloader is
+	// doing once, when the whole list has gone, so this answers only whether
+	// the torrent was taken and skips the second trip to the host.
+	if r.URL.Query().Get("status") == "none" {
+		if err := s.Ops.HandTorrent(ctx, h, in); err != nil {
+			s.writeOpError(w, err, "add a torrent")
+			return
+		}
+		s.Log.Info("api: added a torrent", "host", h.Name)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 
 	daemon, err := s.Ops.AddTorrent(ctx, h, in)
 	if err != nil {

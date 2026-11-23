@@ -156,8 +156,8 @@ export default function HostTorrents() {
   const update = () => act('update', () => api.torrentAction(hostId, 'update'))
   const stop = () => act('stop', () => api.torrentAction(hostId, 'stop'))
   const add = (source: string) => act('add', () => api.addTorrent(hostId, { source }))
-  // Picked files go one request each, so one that deluge will not take costs
-  // that file and not the rest. What went is shown by the list; what did not
+  // Picked files go one request each, a few at a time, so one that deluge
+  // will not take costs that file and not the rest. What went is shown by the list; what did not
   // is said, by name.
   const addFiles = async (files: File[]) => {
     setBusy('add')
@@ -166,7 +166,7 @@ export default function HostTorrents() {
       const outcomes = await addPicked(
         files,
         async (file) => new Uint8Array(await file.arrayBuffer()),
-        (file, base64) => api.addTorrent(hostId, { file: base64, name: file.name }),
+        (file, base64) => api.handTorrent(hostId, { file: base64, name: file.name }),
         setAdding,
       )
       setFailure(troubles(outcomes))

@@ -1440,14 +1440,37 @@ exit 0
 // one thing here that needs root, and it goes through the same systemctl path
 // every other service on this host does.
 func (s *Service) AddTorrent(ctx context.Context, h *store.Host, in TorrentAdd) (*TorrentDaemon, error) {
+	if err := s.HandTorrent(ctx, h, in); err != nil {
+		return nil, err
+	}
+	return s.TorrentStatus(ctx, h)
+}
+
+// HandTorrent is AddTorrent without the look at the downloader afterwards: it
+// answers only whether deluge took the torrent.
+//
+// It exists for a list of picked files. Each one is a request of its own, the
+// status is a second SSH session and a second deluge-console on top of the
+// add, and a screen adding eleven torrents has no use for eleven pictures of
+// the queue — it asks once, at the end. Several of these may run at the same
+// time for the same host, which is why a picked file is written under a name
+// nothing else is using.
+func (s *Service) HandTorrent(ctx context.Context, h *store.Host, in TorrentAdd) error {
 	source, name, body, err := cleanTorrentAdd(in)
 	if err != nil {
-		return nil, err
+		return err
+	}
+	if name != "" {
+		token, err := newJobID()
+		if err != nil {
+			return err
+		}
+		name = incomingName(name, token)
 	}
 	path := ""
 	if strings.TrimSpace(in.Path) != "" {
 		if path, err = cleanDownloads(in.Path); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	script := fmt.Sprintf(torrentAddScript, torrentStateDir, consoleScript(), TorrentUnit)
@@ -1455,31 +1478,28 @@ func (s *Service) AddTorrent(ctx context.Context, h *store.Host, in TorrentAdd) 
 
 	res, err := s.run(ctx, h, cmd, body)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if res.ExitCode == 4 {
 		// The daemon is stopped. Start it, then say the same thing again.
 		if err := s.Act(ctx, h, TorrentUnit, "start"); err != nil {
-			return nil, err
+			return err
 		}
 		if res, err = s.run(ctx, h, cmd, body); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	switch res.ExitCode {
 	case 0:
 	case 3:
-		return nil, invalid("this host has no downloader set up yet")
+		return invalid("this host has no downloader set up yet")
 	case 8:
-		return nil, invalid("deluge is not installed on %s. Install it there first: apt install %s",
+		return invalid("deluge is not installed on %s. Install it there first: apt install %s",
 			h.Name, TorrentPackages)
 	default:
-		return nil, failure(res, "could not add the torrent on "+h.Name)
+		return failure(res, "could not add the torrent on "+h.Name)
 	}
-	if err := torrentConsoleError(res.Stdout); err != nil {
-		return nil, err
-	}
-	return s.TorrentStatus(ctx, h)
+	return torrentConsoleError(res.Stdout)
 }
 
 // torrentActionScript pauses, resumes or removes one torrent.
@@ -1888,6 +1908,15 @@ func torrentFileName(name string) string {
 		name = "picked"
 	}
 	return name + ".torrent"
+}
+
+// incomingName makes a picked file's name on the host its own. Two files added
+// at the same moment can reduce to the same safe name — the same file name in
+// two folders, or two names that differ only in what was stripped — and each
+// add writes its file, hands it to deluge and removes it, so sharing a name
+// would have one add reading or deleting the other's torrent.
+func incomingName(name, token string) string {
+	return strings.TrimSuffix(name, ".torrent") + "-" + token + ".torrent"
 }
 
 // CleanTorrentSource checks a link. It reaches deluge as an argument, so a

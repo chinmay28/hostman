@@ -238,6 +238,11 @@ export const api = {
     id: number,
     input: { source?: string; file?: string; name?: string; path?: string },
   ) => request<TorrentDaemon>(`/api/hosts/${id}/torrents`, { method: 'POST', ...json(input) }),
+  /** The same, for one of a list of picked files: it answers only that the
+   *  torrent was taken, without the look at the downloader that costs the host
+   *  a second session. The screen asks once when the list has gone. */
+  handTorrent: (id: number, input: { file: string; name: string }) =>
+    request<void>(`/api/hosts/${id}/torrents?status=none`, { method: 'POST', ...json(input) }),
   /** Runs the daemon, or acts on one torrent. Removing takes the files with it
    *  only when asked — that is the one thing here that cannot be undone.
    *  "update" starts updating deluge itself, which runs on for minutes after

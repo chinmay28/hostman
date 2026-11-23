@@ -12,6 +12,18 @@ has a `## <version>` heading naming that commit's own version exactly. A push to
 yet released sits under `## Unreleased`, which never matches a version — rename
 it to the version when cutting the release.
 
+## Unreleased
+
+### Torrents
+
+- **A list of picked `.torrent` files is added several at a time.** Files went
+  to the host one after another, and each add was followed by a full read of
+  the downloader — two SSH sessions and two runs of `deluge-console` per file,
+  which on a Pi made a season take minutes. Now four go at once, each add
+  answers only whether deluge took the torrent, and the downloader is read
+  once when the list has gone. The first file still goes alone, so a stopped
+  daemon is started once.
+
 ## v2026.11.84
 
 ### Torrents

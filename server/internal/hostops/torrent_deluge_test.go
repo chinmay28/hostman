@@ -157,6 +157,66 @@ func TestRealDelugeTakesSeveralFilesInARow(t *testing.T) {
 	}
 }
 
+// A list of picked files is sent a few at a time, so several adds reach the
+// daemon at once — each its own deluge-console, sharing one config directory.
+// Every one of them has to be there afterwards, including two whose files were
+// picked under the same name.
+func TestRealDelugeTakesSeveralFilesAtOnce(t *testing.T) {
+	root, work, bin := realDeluge(t)
+	folder := filepath.Join(work, "downloads")
+
+	names := []string{"hostman-a", "hostman-b", "hostman-c", "hostman-d", "hostman-e", "hostman-f"}
+	type result struct {
+		name, out string
+		code      int
+	}
+	results := make(chan result, len(names))
+	for i, name := range names {
+		go func() {
+			// The first two share a picked name, as the same file name in two
+			// folders would; the token is what keeps them apart on the host.
+			picked := name + ".torrent"
+			if i < 2 {
+				picked = "same.torrent"
+			}
+			body := base64.StdEncoding.EncodeToString(aTorrentFile(name))
+			script := torrentAddFor(root, incomingName(picked, fmt.Sprintf("t%d", i)), "", folder)
+			cmd := exec.Command("/bin/sh", "-c", script)
+			cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
+			cmd.Stdin = strings.NewReader(body)
+			out, err := cmd.Output()
+			code := 0
+			if err != nil {
+				code = 1
+			}
+			results <- result{name, string(out), code}
+		}()
+	}
+	for range names {
+		r := <-results
+		if r.code != 0 {
+			t.Errorf("adding %s failed: %s", r.name, r.out)
+			continue
+		}
+		if err := torrentConsoleError(r.out); err != nil {
+			t.Errorf("deluge would not take %s: %v\n%s", r.name, err, r.out)
+		}
+	}
+
+	got := map[string]bool{}
+	for _, torrent := range waitForTorrent(t, root, bin, len(names)).Torrents {
+		got[torrent.Name] = true
+	}
+	for _, name := range names {
+		if !got[name] {
+			t.Errorf("%s was handed over and is not in the list: %v", name, got)
+		}
+	}
+	if left, _ := filepath.Glob(filepath.Join(stateDir(root), "incoming", "*")); len(left) != 0 {
+		t.Errorf("picked files were left behind on the host: %v", left)
+	}
+}
+
 func TestRealDelugeTakesWhatHostManSends(t *testing.T) {
 	root, work, bin := realDeluge(t)
 

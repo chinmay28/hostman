@@ -105,15 +105,57 @@ describe('addPicked', () => {
     ])
   })
 
-  it('sends one at a time', async () => {
+  it('sends the first on its own, then a few at a time and never more', async () => {
     let going = 0
-    let most = 0
-    await addPicked([fake('a'), fake('b'), fake('c')], read, async () => {
-      most = Math.max(most, ++going)
-      await Promise.resolve()
-      going--
-    })
-    expect(most).toBe(1)
+    const seen: number[] = []
+    const names = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+    await addPicked(
+      names.map((n) => fake(n)),
+      read,
+      async () => {
+        seen.push(++going)
+        await new Promise((r) => setTimeout(r, 5))
+        going--
+      },
+      undefined,
+      3,
+    )
+    expect(seen[0]).toBe(1)
+    expect(seen[1]).toBe(1)
+    expect(Math.max(...seen)).toBe(3)
+  })
+
+  it('still waits for the first file that is sent when the ones before it never were', async () => {
+    const seen: [string, number][] = []
+    let going = 0
+    await addPicked(
+      [fake('photo.jpg', 'nope'), fake('a'), fake('b'), fake('c')],
+      read,
+      async (file) => {
+        seen.push([file.name, ++going])
+        await new Promise((r) => setTimeout(r, 5))
+        going--
+      },
+      undefined,
+      3,
+    )
+    expect(seen[0]).toEqual(['a', 1])
+    expect(seen[1][1]).toBe(1)
+  })
+
+  it('reports in the order picked, whatever order they finished in', async () => {
+    const delays: Record<string, number> = { a: 1, b: 30, c: 1, d: 10 }
+    const outcomes = await addPicked(
+      ['a', 'b', 'c', 'd'].map((n) => fake(n)),
+      read,
+      async (file) => {
+        await new Promise((r) => setTimeout(r, delays[file.name]))
+        if (file.name === 'b') throw new Error('refused')
+      },
+      undefined,
+      3,
+    )
+    expect(outcomes.map((o) => `${o.name}:${o.state}`)).toEqual(['a:added', 'b:failed', 'c:added', 'd:added'])
   })
 
   it('never sends a file that is not a torrent, and carries on past it', async () => {
@@ -163,12 +205,13 @@ describe('addPicked', () => {
     ])
   })
 
-  it('says which file is going', async () => {
+  it('says how far along it is, and never past the end', async () => {
     const seen: TorrentProgress[] = []
-    await addPicked([fake('a'), fake('b', 'nope')], read, async () => {}, (p) => seen.push(p))
+    await addPicked([fake('a'), fake('b', 'nope'), fake('c')], read, async () => {}, (p) => seen.push(p), 2)
     expect(seen).toEqual([
-      { current: 1, total: 2 },
-      { current: 2, total: 2 },
+      { current: 1, total: 3 },
+      { current: 2, total: 3 },
+      { current: 3, total: 3 },
     ])
   })
 
