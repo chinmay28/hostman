@@ -47,6 +47,13 @@ func TestTorrentRequestsAreValidatedBeforeConnecting(t *testing.T) {
 		{"an id carrying a command", "POST", "/api/hosts/%d/torrents/action",
 			`{"action":"remove","id":"` + strings.Repeat("a", 40) + ` ; reboot"}`},
 
+		{"a selection with a name in it", "POST", "/api/hosts/%d/torrents/action",
+			`{"action":"remove","ids":["` + strings.Repeat("a", 40) + `","all"]}`},
+		{"a selection carrying a command", "POST", "/api/hosts/%d/torrents/action",
+			`{"action":"remove","ids":["` + strings.Repeat("a", 40) + ` ; reboot"]}`},
+		{"one torrent and a selection at once", "POST", "/api/hosts/%d/torrents/action",
+			`{"action":"remove","id":"` + strings.Repeat("a", 40) + `","ids":["` + strings.Repeat("b", 40) + `"]}`},
+
 		{"a seeding ratio below anything useful", "POST", "/api/hosts/%d/torrents/action", `{"action":"seeding","ratio":0.01}`},
 		{"a seeding ratio nobody meant", "POST", "/api/hosts/%d/torrents/action", `{"action":"seeding","ratio":1000}`},
 		{"a negative seeding ratio", "POST", "/api/hosts/%d/torrents/action", `{"action":"seeding","ratio":-2}`},

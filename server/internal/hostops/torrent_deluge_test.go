@@ -217,6 +217,43 @@ func TestRealDelugeTakesSeveralFilesAtOnce(t *testing.T) {
 	}
 }
 
+// A selection is removed in one deluge-console: its rm is handed every id at
+// once. The ones named have to go, and the one that was not has to stay.
+func TestRealDelugeRemovesASelectionAtOnce(t *testing.T) {
+	root, work, bin := realDeluge(t)
+	folder := filepath.Join(work, "downloads")
+
+	names := []string{"hostman-keep", "hostman-go-1", "hostman-go-2", "hostman-go-3"}
+	for _, name := range names {
+		body := base64.StdEncoding.EncodeToString(aTorrentFile(name))
+		out, code := runScript(t, torrentAddFor(root, name+".torrent", "", folder), body, bin)
+		if code != 0 {
+			t.Fatalf("adding %s exited %d: %s", name, code, out)
+		}
+	}
+	var going []string
+	for _, torrent := range waitForTorrent(t, root, bin, len(names)).Torrents {
+		if torrent.Name != "hostman-keep" {
+			going = append(going, torrent.ID)
+		}
+	}
+	ids, err := cleanTorrentIDs(going)
+	if err != nil || len(ids) != 3 {
+		t.Fatalf("the selection came out as %v (%v)", ids, err)
+	}
+
+	if out, code := runScript(t, torrentActionFor(root, strings.Join(ids, " "), "remove", "1"), "", bin); code != 0 {
+		t.Fatalf("remove exited %d: %s", code, out)
+	}
+	left := waitForTorrent(t, root, bin, 1)
+	if left.Torrents[0].Name != "hostman-keep" {
+		t.Errorf("the torrent that was not selected is the one that went: %+v", left.Torrents)
+	}
+	if still := torrentsLeft(ids, left.Torrents); len(still) != 0 {
+		t.Errorf("selected torrents are still listed: %v", still)
+	}
+}
+
 func TestRealDelugeTakesWhatHostManSends(t *testing.T) {
 	root, work, bin := realDeluge(t)
 

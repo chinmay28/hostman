@@ -268,6 +268,14 @@ export const api = {
       method: 'POST',
       ...json({ action, id: torrentId, data }),
     }),
+  /** Removes a selection of torrents in one go, and their files with them only
+   *  when asked — the same choice a single removal offers, made once for all
+   *  of them. It answers once every one of them has left deluge's list. */
+  removeTorrentList: (id: number, torrentIds: string[], data = false) =>
+    request<TorrentDaemon>(`/api/hosts/${id}/torrents/action`, {
+      method: 'POST',
+      ...json({ action: 'remove', ids: torrentIds, data }),
+    }),
   /** Tells deluge what to do with a torrent once it has finished: how much to
    *  upload before it stops seeding, and whether the entry then goes from the
    *  list. It is deluge's own setting, so it holds when nobody is looking —

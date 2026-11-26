@@ -1162,7 +1162,7 @@ Quoting is tested the same way — every path a person could type is handed to
 | `POST`   | `/api/hosts/{id}/remote/action`     | start it (with the page to open) or stop it |
 | `GET`    | `/api/hosts/{id}/torrents`          | the downloader: whether deluge is installed and new enough, what is set up, and what it is downloading |
 | `POST`   | `/api/hosts/{id}/torrents`          | add one: a magnet link, the address of a `.torrent`, or the file itself, base64; `?status=none` answers `204` without reading the downloader back, for one of many |
-| `POST`   | `/api/hosts/{id}/torrents/action`   | start or stop the daemon; pause, resume or remove a torrent (`"data":true` deletes what it downloaded); `"seeding"` with a `ratio` and `remove` to set what happens after a torrent finishes; `"limit"` to set how many run at once; or `"update"` to give the daemon a deluge of at least 2.2 (detached; followed through `GET`) |
+| `POST`   | `/api/hosts/{id}/torrents/action`   | start or stop the daemon; pause, resume or remove a torrent (`"data":true` deletes what it downloaded), or remove several with `"ids":[…]` in place of `"id"`; `"seeding"` with a `ratio` and `remove` to set what happens after a torrent finishes; `"limit"` to set how many run at once; or `"update"` to give the daemon a deluge of at least 2.2 (detached; followed through `GET`) |
 | `POST`   | `/api/hosts/{id}/torrents/setup`    | write the daemon onto the host, or change where it downloads |
 | `DELETE` | `/api/hosts/{id}/torrents/setup`    | take it off; the host's deluge and the downloaded files stay |
 | `GET`    | `/api/hosts/{id}/vms`               | the SSH user's VirtualBox machines, with their state; `installed` says whether VirtualBox is there at all |
