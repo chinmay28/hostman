@@ -11,7 +11,7 @@ import (
 	"github.com/chinmay28/hostman/server/internal/store"
 )
 
-// Managing a host — its files, its services, its crontab, restarting it — is
+// Managing a host — its files, its services, its crontab, its power — is
 // work HostMan asks the host to do. So the failures worth telling apart are
 // "you asked for something impossible" (400) and "the host refused" (502): a
 // missing file or a read-only filesystem is not a bug in this API, and saying
@@ -55,30 +55,53 @@ func (s *Server) writeOpError(w http.ResponseWriter, err error, action string) {
 	}
 }
 
-// --- reboot ---
+// --- power ---
 
-// handleHostReboot restarts a host. The host is marked offline straight away:
-// it is about to go, and a UI that keeps calling it online until the next poll
-// fails would be lying for half a minute.
+// powerNotice is what a host's status says once it has accepted a power
+// action, until the poller finds out for itself. Only the first of them is a
+// promise: HostMan can watch a machine come back from a reboot, and cannot
+// bring one back from off or wake one that is asleep.
+var powerNotice = map[hostops.PowerAction]string{
+	hostops.PowerReboot:   "rebooting — waiting for it to come back",
+	hostops.PowerShutdown: "shut down from HostMan — it stays off until someone turns it on",
+	hostops.PowerSleep:    "put to sleep from HostMan — it stays offline until something wakes it",
+}
+
+// handleHostPower reboots a host, shuts it down or puts it to sleep. The host
+// is marked offline straight away: it is about to go, and a UI that keeps
+// calling it online until the next poll fails would be lying for half a minute.
 //
-// Restarting is the only power state offered. HostMan can watch a machine come
-// back from a reboot; it cannot bring one back from off.
-func (s *Server) handleHostReboot(w http.ResponseWriter, r *http.Request) {
+// The action is checked here, before the host is looked up or dialled, so
+// nothing but the three ever reaches a machine. Asking whether the user meant
+// it is the UI's job; this is the API a confirmed press arrives at.
+func (s *Server) handleHostPower(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Action string `json:"action"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	action, ok := hostops.ParsePowerAction(req.Action)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "action must be reboot, shutdown or sleep")
+		return
+	}
 	h, err := s.hostFromPath(r)
 	if err != nil {
-		s.writeStoreError(w, err, "reboot")
+		s.writeStoreError(w, err, "power")
 		return
 	}
 	ctx, cancel := opContext(r)
 	defer cancel()
 
-	if err := s.Ops.Reboot(ctx, h); err != nil {
-		s.writeOpError(w, err, "reboot host")
+	if err := s.Ops.Power(ctx, h, action); err != nil {
+		s.writeOpError(w, err, string(action)+" host")
 		return
 	}
-	s.Log.Info("api: rebooting host", "host", h.Name)
+	s.Log.Info("api: host power", "host", h.Name, "action", string(action))
 
-	const reason = "rebooting — waiting for it to come back"
+	reason := powerNotice[action]
 	if err := s.DB.MarkHostFailed(r.Context(), h.ID, store.StatusOffline, reason); err != nil {
 		s.Log.Error("api: mark host going down", "host", h.Name, "err", err)
 	}

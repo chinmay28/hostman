@@ -12,6 +12,19 @@ has a `## <version>` heading naming that commit's own version exactly. A push to
 yet released sits under `## Unreleased`, which never matches a version — rename
 it to the version when cutting the release.
 
+## Unreleased
+
+### Hosts
+
+- **Power: reboot, shut down or sleep.** The host page's Restart card is now
+  **Power**, with a button for each. Every one asks before it does anything —
+  the question says what will and will not bring the machine back, since
+  HostMan can only watch a host return from a reboot — so a stray tap costs a
+  Cancel. Sleep works where the host's kernel offers a suspend state (an x86 PC
+  running Linux); where it does not, as on a Raspberry Pi, the button is
+  disabled and says why. `POST /api/hosts/{id}/reboot` is replaced by
+  `POST /api/hosts/{id}/power` with `{"action": "reboot" | "shutdown" | "sleep"}`.
+
 ## v2026.11.85
 
 ### Torrents

@@ -86,6 +86,9 @@ export interface Host {
   /** Whether the ollama command was on the host at the last probe. The
    *  host's page offers its models only where it was. */
   ollama: boolean
+  /** Whether the host's kernel offered a suspend state at the last probe —
+   *  an x86 PC does, a Raspberry Pi does not. Sleep is disabled without it. */
+  canSleep: boolean
   latest: Sample | null
 }
 

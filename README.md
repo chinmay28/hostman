@@ -825,7 +825,12 @@ what validates it: a crontab it refuses to parse is not installed, the old one
 stays, and its complaint is what you see. A user with no crontab yet is an empty
 editor, not an error.
 
-**Power** reboots or shuts the machine down. The command is scheduled a few
+**Power** reboots the machine, shuts it down or puts it to sleep, and asks
+before each: every one of them takes the host away, and only a reboot brings it
+back by itself — HostMan cannot press a power button or wake a sleeping
+machine. Sleep is offered where the kernel lists a suspend state in
+`/sys/power/state`, which an x86 PC does and a Raspberry Pi does not; elsewhere
+the button is there but disabled, and says why. The command is scheduled a few
 seconds ahead and detached, so HostMan gets a clean answer instead of the
 connection dying mid-command and having to guess what that meant — the same
 reason a self-update runs detached. The host is marked offline as soon as it
@@ -1100,7 +1105,7 @@ Quoting is tested the same way — every path a person could type is handed to
 | `POST`   | `/api/hosts/{id}/test`              | check reachability, key auth, sudo   |
 | `POST`   | `/api/hosts/{id}/provision`         | one-time password setup, not stored  |
 | `GET`    | `/api/hosts/{id}/metrics`           | samples, `?minutes=` up to 1440, the day's ranges, and the top five consumers of CPU and memory |
-| `POST`   | `/api/hosts/{id}/reboot`            | restart the machine (there is no shutdown) |
+| `POST`   | `/api/hosts/{id}/power`             | `{action}`: `reboot`, `shutdown` or `sleep` the machine |
 | `GET`    | `/api/hosts/{id}/boot`              | why it last restarted, and the evidence |
 | `POST`   | `/api/hosts/{id}/boot/journal`      | keep the journal across restarts, so the next one is explainable |
 | `GET`    | `/api/hosts/{id}/cron`              | a crontab, `?user=` (default: the SSH user) |

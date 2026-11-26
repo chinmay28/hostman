@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"github.com/chinmay28/hostman/server/internal/hostops"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -139,8 +140,8 @@ func TestServiceRequestsValidateTheUnitName(t *testing.T) {
 	}
 }
 
-// HostMan asks systemd to start, stop and restart things. Masking a unit,
-// isolating a target or powering the machine off from here are not on offer,
+// HostMan asks systemd to start, stop and restart things. Masking a unit
+// or isolating a target is not on offer, power has an endpoint of its own,
 // and the API is where that stops rather than the UI.
 func TestServiceActionsAreLimitedToWhatTheUIOffers(t *testing.T) {
 	_, h := testServer(t, "")
@@ -155,16 +156,35 @@ func TestServiceActionsAreLimitedToWhatTheUIOffers(t *testing.T) {
 	}
 }
 
-// Restarting is the only power state there is: a host can be brought back from
-// a reboot, and HostMan cannot bring one back from off.
-func TestThereIsNoShutdownRoute(t *testing.T) {
+// Reboot, shutdown and sleep are everything a host's power can be asked to do.
+// Anything else is refused here, before the host is dialled — and the routes
+// that an older HostMan had, or that a guess might try, do not exist.
+func TestPowerActionsAreLimitedToTheThree(t *testing.T) {
 	_, h := testServer(t, "")
 	id := newHost(t, h)
 
-	for _, path := range []string{"/api/hosts/%d/power", "/api/hosts/%d/shutdown"} {
-		w := do(t, h, "POST", fmt.Sprintf(path, id), `{"action":"shutdown"}`)
+	for _, body := range []string{
+		``, `{}`, `{"action":""}`, `{"action":"halt"}`, `{"action":"hibernate"}`,
+		`{"action":"Reboot"}`, `{"action":"sleep;reboot"}`, `{"action":"reboot","force":true}`,
+	} {
+		w := do(t, h, "POST", fmt.Sprintf("/api/hosts/%d/power", id), body)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("POST power %s = %d, want 400 — it should never reach the host", body, w.Code)
+		}
+	}
+	for _, path := range []string{"/api/hosts/%d/reboot", "/api/hosts/%d/shutdown", "/api/hosts/%d/sleep"} {
+		w := do(t, h, "POST", fmt.Sprintf(path, id), "")
 		if w.Code != http.StatusNotFound {
-			t.Errorf("POST %s = %d, want 404 — there is no such endpoint", path, w.Code)
+			t.Errorf("POST %s = %d, want 404 — power has one endpoint", path, w.Code)
+		}
+	}
+}
+
+// Every action has something to say for itself once the host has gone.
+func TestEveryPowerActionHasANotice(t *testing.T) {
+	for _, a := range []hostops.PowerAction{hostops.PowerReboot, hostops.PowerShutdown, hostops.PowerSleep} {
+		if powerNotice[a] == "" {
+			t.Errorf("no notice for %q", a)
 		}
 	}
 }
@@ -174,7 +194,9 @@ func TestThereIsNoShutdownRoute(t *testing.T) {
 func TestHostOperationsOnAMissingHost(t *testing.T) {
 	_, h := testServer(t, "")
 	cases := []struct{ method, path, body string }{
-		{"POST", "/api/hosts/999/reboot", ""},
+		{"POST", "/api/hosts/999/power", `{"action":"reboot"}`},
+		{"POST", "/api/hosts/999/power", `{"action":"shutdown"}`},
+		{"POST", "/api/hosts/999/power", `{"action":"sleep"}`},
 		{"GET", "/api/hosts/999/boot", ""},
 		{"POST", "/api/hosts/999/boot/journal", ""},
 		{"GET", "/api/hosts/999/cron", ""},
@@ -217,8 +239,8 @@ func TestHostOperationsNeedTheSession(t *testing.T) {
 			t.Errorf("GET %s without a session = %d, want 401", path, w.Code)
 		}
 	}
-	if w := do(t, h, "POST", "/api/hosts/1/reboot", ""); w.Code != http.StatusUnauthorized {
-		t.Errorf("reboot without a session = %d, want 401", w.Code)
+	if w := do(t, h, "POST", "/api/hosts/1/power", `{"action":"shutdown"}`); w.Code != http.StatusUnauthorized {
+		t.Errorf("shutting a host down without a session = %d, want 401", w.Code)
 	}
 	if w := do(t, h, "POST", "/api/hosts/1/boot/journal", ""); w.Code != http.StatusUnauthorized {
 		t.Errorf("turning on persistent logging without a session = %d, want 401", w.Code)

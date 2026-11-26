@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { Page } from '../components/Layout'
+import { PowerCard } from '../components/power'
 import { SetupSheet } from '../components/provision'
 import { DeploymentBadge, HomeBadge, HostBadge } from '../components/status'
 import {
@@ -18,6 +19,7 @@ import {
 } from '../components/ui'
 import { realDisks } from '../lib/disk'
 import { ago, bytes, percent, time, uptime } from '../lib/format'
+import type { PowerChoice } from '../lib/power'
 import type { HostProcess, HostTestResult, Stat } from '../types'
 
 export default function HostDetail() {
@@ -36,9 +38,7 @@ export default function HostDetail() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [settingUp, setSettingUp] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
-  const [confirmReboot, setConfirmReboot] = useState(false)
-  const [rebooting, setRebooting] = useState(false)
-  const [rebootNotice, setRebootNotice] = useState<string | null>(null)
+  const [powerNotice, setPowerNotice] = useState<string | null>(null)
 
   const test = async () => {
     setTesting(true)
@@ -62,21 +62,18 @@ export default function HostDetail() {
     }
   }
 
-  // The host goes down a few seconds after it answers, so the confirmation is
-  // the last thing it will say. The poller finding it gone afterwards is what
-  // is meant to happen, not a failure.
-  const reboot = async () => {
-    setRebooting(true)
+  // The host goes a few seconds after it answers, so the confirmation is the
+  // last thing it will say. The poller finding it gone afterwards is what is
+  // meant to happen, not a failure.
+  const power = async (choice: PowerChoice) => {
     setActionError(null)
+    setPowerNotice(null)
     try {
-      await api.reboot(hostId)
-      setRebootNotice(`${host?.name} is restarting. It will show as offline until it answers again.`)
+      await api.power(hostId, choice.action)
+      setPowerNotice(choice.done)
       reload()
     } catch (e) {
       setActionError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setRebooting(false)
-      setConfirmReboot(false)
     }
   }
 
@@ -97,7 +94,7 @@ export default function HostDetail() {
     >
       <Loading error={error} offline={offline} hasData={!!host} />
       {actionError && <Banner tone="bad">{actionError}</Banner>}
-      {rebootNotice && <Banner tone="warn">{rebootNotice}</Banner>}
+      {powerNotice && <Banner tone="warn">{powerNotice}</Banner>}
 
       {host && (
         <>
@@ -448,7 +445,7 @@ export default function HostDetail() {
             </div>
           </Link>
 
-          {/* Sits next to the Restart button on purpose: the question "why did
+          {/* Sits next to the power buttons on purpose: the question "why did
               it restart?" is the one asked immediately after a machine does it
               by itself, and this is where the answer is. */}
           <Link className="card" to={`/hosts/${hostId}/boot`}>
@@ -465,26 +462,7 @@ export default function HostDetail() {
             </div>
           </Link>
 
-          <Card>
-            <div className="title">Restart</div>
-            <p className="sub" style={{ marginTop: 4 }}>
-              {host.isSelf
-                ? 'This is the machine HostMan runs on, so restarting it takes HostMan with it. It comes back when the machine does.'
-                : 'The host goes down a few seconds after you confirm, and HostMan reports it offline until it answers again.'}
-            </p>
-            {!host.sudoOk && (
-              <Banner tone="warn">
-                {host.username} needs passwordless sudo here before HostMan can restart the machine.
-              </Banner>
-            )}
-            <button
-              className="secondary block"
-              onClick={() => setConfirmReboot(true)}
-              disabled={host.status !== 'online'}
-            >
-              Reboot
-            </button>
-          </Card>
+          <PowerCard host={host} username={host.username} sudoOk={host.sudoOk} onConfirm={power} />
 
           <SectionTitle>Danger zone</SectionTitle>
           <Card>
@@ -552,26 +530,6 @@ export default function HostDetail() {
           onClose={() => setSettingUp(false)}
           onFinished={reload}
         />
-      )}
-
-      {confirmReboot && host && (
-        <Sheet
-          title={`Reboot ${host.name}?`}
-          subtitle="Everything running on the machine stops and starts again."
-          onClose={() => setConfirmReboot(false)}
-        >
-          {host.isSelf && (
-            <Banner tone="warn">HostMan runs on this machine. It goes down with it.</Banner>
-          )}
-          <div className="actions">
-            <button className="secondary" onClick={() => setConfirmReboot(false)} disabled={rebooting}>
-              Cancel
-            </button>
-            <button className="danger" onClick={reboot} disabled={rebooting}>
-              {rebooting ? 'Restarting…' : 'Reboot'}
-            </button>
-          </div>
-        </Sheet>
       )}
 
       {confirmDelete && (
