@@ -47,10 +47,14 @@ type Host struct {
 	// CanSleep is whether the host's kernel offered a suspend state at the
 	// last probe. The UI disables Sleep where it did not.
 	CanSleep bool `json:"canSleep"`
+	// WakeMAC is the hardware address of the wired card that carried the
+	// host's default route at the last probe, or empty where there was none.
+	// It outlives the host going offline, which is when it is used.
+	WakeMAC string `json:"wakeMac"`
 }
 
 const hostColumns = `id, name, address, port, username, host_key, status, last_error,
-	last_seen_at, hostname, os, kernel, arch, sudo_ok, created_at, is_self, machine_id, virtualbox, ollama, can_sleep`
+	last_seen_at, hostname, os, kernel, arch, sudo_ok, created_at, is_self, machine_id, virtualbox, ollama, can_sleep, wake_mac`
 
 func scanHost(row interface{ Scan(...any) error }) (*Host, error) {
 	var h Host
@@ -58,7 +62,7 @@ func scanHost(row interface{ Scan(...any) error }) (*Host, error) {
 	var created string
 	err := row.Scan(&h.ID, &h.Name, &h.Address, &h.Port, &h.Username, &h.HostKey,
 		&h.Status, &h.LastError, &lastSeen, &h.Hostname, &h.OS, &h.Kernel, &h.Arch,
-		&h.SudoOK, &created, &h.IsSelf, &h.MachineID, &h.VirtualBox, &h.Ollama, &h.CanSleep)
+		&h.SudoOK, &created, &h.IsSelf, &h.MachineID, &h.VirtualBox, &h.Ollama, &h.CanSleep, &h.WakeMAC)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -169,6 +173,9 @@ type HostFacts struct {
 	// CanSleep is whether the kernel lists a suspend state, which decides
 	// whether the host can be put to sleep.
 	CanSleep bool
+	// WakeMAC is the wired card's hardware address, for wake-on-LAN; empty
+	// where the host is on Wi-Fi or would not say.
+	WakeMAC string
 }
 
 // MarkHostOnline records a successful connection along with the host's facts.
@@ -176,10 +183,10 @@ func (d *DB) MarkHostOnline(ctx context.Context, id int64, f HostFacts) error {
 	_, err := d.sql.ExecContext(ctx, `
 		UPDATE hosts SET status = ?, last_error = '', last_seen_at = datetime('now'),
 			hostname = ?, os = ?, kernel = ?, arch = ?, sudo_ok = ?, machine_id = ?, is_self = ?,
-			virtualbox = ?, ollama = ?, can_sleep = ?
+			virtualbox = ?, ollama = ?, can_sleep = ?, wake_mac = ?
 		WHERE id = ?`,
 		StatusOnline, f.Hostname, f.OS, f.Kernel, f.Arch, f.SudoOK, f.MachineID, f.IsSelf,
-		f.VirtualBox, f.Ollama, f.CanSleep, id)
+		f.VirtualBox, f.Ollama, f.CanSleep, f.WakeMAC, id)
 	return err
 }
 

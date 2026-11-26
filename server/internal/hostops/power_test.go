@@ -112,7 +112,7 @@ func TestPowerScriptRefusesAnUnknownAction(t *testing.T) {
 // dialled: the service here has no way to reach a host, and is never asked to.
 func TestPowerRefusesAnUnknownActionWithoutConnecting(t *testing.T) {
 	var s Service
-	err := s.Power(context.Background(), &store.Host{Name: "pi"}, PowerAction("halt"))
+	_, err := s.Power(context.Background(), &store.Host{Name: "pi"}, PowerAction("halt"))
 	if !errors.Is(err, ErrInvalid) {
 		t.Fatalf("err = %v, want ErrInvalid", err)
 	}
@@ -128,4 +128,124 @@ func TestOnlyThePowerScriptTakesAHostDown(t *testing.T) {
 			}
 		}
 	}
+}
+
+// fakeNet builds a routing table whose default route runs over iface, and an
+// interface directory beside it, the way armWakeScript expects to find them.
+func fakeNet(t *testing.T, iface string) (route, sys string) {
+	t.Helper()
+	dir := t.TempDir()
+	route = filepath.Join(dir, "route")
+	table := "Iface\tDestination\tGateway\tFlags\n" +
+		iface + "\t0001A8C0\t00000000\t0001\n" +
+		iface + "\t00000000\t0101A8C0\t0003\n"
+	if err := os.WriteFile(route, []byte(table), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sys = filepath.Join(dir, "net")
+	if err := os.MkdirAll(filepath.Join(sys, iface), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return route, sys
+}
+
+// fakeEthtool is an ethtool that remembers, per card, what it was told with
+// `-s <card> wol <x>` and reports it back the way the real one does. Cards
+// named in deaf ignore the setting, like one whose driver cannot wake.
+func fakeEthtool(t *testing.T, deaf ...string) (bin, log string) {
+	t.Helper()
+	bin = t.TempDir()
+	log = filepath.Join(bin, "calls")
+	script := `#!/bin/sh
+echo "$*" >> ` + log + `
+state=` + bin + `/state
+if [ "$1" = -s ]; then
+  case " ` + strings.Join(deaf, " ") + ` " in *" $2 "*) exit 1 ;; esac
+  echo "$4" > "$state.$2"; exit 0
+fi
+printf 'Settings for %s:\n\tSupports Wake-on: pumbg\n\tWake-on: %s\n' "$1" "$(cat "$state.$1" 2>/dev/null || echo d)"
+`
+	if err := os.WriteFile(filepath.Join(bin, "ethtool"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return bin, log
+}
+
+func TestArmWakeScriptSwitchesItOnForTheCardWithTheDefaultRoute(t *testing.T) {
+	route, sys := fakeNet(t, "enp3s0")
+	bin, log := fakeEthtool(t)
+	out, code := runScript(t, asUser(armWakeScript, route, sys), "", bin)
+	if code != 0 || !wakeArmed(out) {
+		t.Fatalf("exit %d, %q; want armed", code, out)
+	}
+	calls, _ := os.ReadFile(log)
+	if !strings.Contains(string(calls), "-s enp3s0 wol g") {
+		t.Errorf("ethtool was called with %q, want the card set to wake on a magic packet", calls)
+	}
+}
+
+// "Supports Wake-on: pumbg" has a g in it too. A card that can but was not
+// switched on is not armed.
+func TestArmWakeScriptIsNotFooledByWhatACardSupports(t *testing.T) {
+	route, sys := fakeNet(t, "enp3s0")
+	bin, _ := fakeEthtool(t, "enp3s0")
+	out, code := runScript(t, asUser(armWakeScript, route, sys), "", bin)
+	if code != 0 || wakeArmed(out) {
+		t.Fatalf("exit %d, %q; want unarmed and exit 0", code, out)
+	}
+}
+
+// Over a bridge it is the cards behind it that listen.
+func TestArmWakeScriptArmsTheCardsBehindABridge(t *testing.T) {
+	route, sys := fakeNet(t, "br0")
+	for _, member := range []string{"enp3s0", "vnet0"} {
+		if err := os.MkdirAll(filepath.Join(sys, "br0", "brif", member), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bin, log := fakeEthtool(t, "vnet0")
+	out, _ := runScript(t, asUser(armWakeScript, route, sys), "", bin)
+	if !wakeArmed(out) {
+		t.Fatalf("%q; want armed, one card behind the bridge took it", out)
+	}
+	calls, _ := os.ReadFile(log)
+	if strings.Contains(string(calls), "-s br0") {
+		t.Errorf("the bridge itself was asked: %q", calls)
+	}
+}
+
+// Nothing here is a reason to stop a machine going down: every way of not
+// arming answers "unarmed" and exits 0.
+func TestArmWakeScriptNeverFails(t *testing.T) {
+	t.Run("wi-fi", func(t *testing.T) {
+		route, sys := fakeNet(t, "wlan0")
+		if err := os.MkdirAll(filepath.Join(sys, "wlan0", "wireless"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		bin, log := fakeEthtool(t)
+		out, code := runScript(t, asUser(armWakeScript, route, sys), "", bin)
+		if code != 0 || wakeArmed(out) {
+			t.Errorf("exit %d, %q; want unarmed and exit 0", code, out)
+		}
+		if _, err := os.Stat(log); err == nil {
+			t.Error("ethtool was run against a Wi-Fi card")
+		}
+	})
+	t.Run("no default route", func(t *testing.T) {
+		_, sys := fakeNet(t, "enp3s0")
+		bin, _ := fakeEthtool(t)
+		empty := stateFile(t, "Iface\tDestination\n")
+		out, code := runScript(t, asUser(armWakeScript, empty, sys), "", bin)
+		if code != 0 || wakeArmed(out) {
+			t.Errorf("exit %d, %q; want unarmed and exit 0", code, out)
+		}
+	})
+	t.Run("no routing table", func(t *testing.T) {
+		_, sys := fakeNet(t, "enp3s0")
+		bin, _ := fakeEthtool(t)
+		out, code := runScript(t, asUser(armWakeScript, filepath.Join(sys, "absent"), sys), "", bin)
+		if code != 0 || wakeArmed(out) {
+			t.Errorf("exit %d, %q; want unarmed and exit 0", code, out)
+		}
+	})
 }

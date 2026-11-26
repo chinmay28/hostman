@@ -109,7 +109,7 @@ func TestHostStatusTransitions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	facts := HostFacts{Hostname: "nakedpi", OS: "Debian 12", Kernel: "6.6", Arch: "aarch64", SudoOK: true, VirtualBox: true, Ollama: true, CanSleep: true}
+	facts := HostFacts{Hostname: "nakedpi", OS: "Debian 12", Kernel: "6.6", Arch: "aarch64", SudoOK: true, VirtualBox: true, Ollama: true, CanSleep: true, WakeMAC: "a8:a1:59:0c:1f:2e"}
 	if err := db.MarkHostOnline(ctx, h.ID, facts); err != nil {
 		t.Fatal(err)
 	}
@@ -138,6 +138,10 @@ func TestHostStatusTransitions(t *testing.T) {
 		t.Fatalf("after MarkHostFailed: %+v", got)
 	}
 	// Facts from the last successful connect stay visible while offline.
+	// The wake address most of all: offline is when it is needed.
+	if got.WakeMAC != "a8:a1:59:0c:1f:2e" {
+		t.Errorf("wakeMac = %q once offline, want it kept", got.WakeMAC)
+	}
 	if got.Hostname != "nakedpi" || !got.VirtualBox {
 		t.Errorf("facts cleared on failure: %+v", got)
 	}

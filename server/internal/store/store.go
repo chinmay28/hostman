@@ -114,6 +114,10 @@ var migrations = []string{
 	// Whether the host's kernel can suspend, which decides whether the Sleep
 	// button on its page is one that can be pressed.
 	`ALTER TABLE hosts ADD COLUMN can_sleep INTEGER NOT NULL DEFAULT 0`,
+	// The hardware address of the host's wired network card, which is what a
+	// wake-on-LAN packet names. It has to be learned while the host is up,
+	// because the moment it is wanted is the moment the host cannot be asked.
+	`ALTER TABLE hosts ADD COLUMN wake_mac TEXT NOT NULL DEFAULT ''`,
 	// Port forwarding: HostMan listens on forward_port on its own machine and
 	// relays to forward_target_port on the host the app is installed on. Zero
 	// means the app is not forwarded.

@@ -830,7 +830,21 @@ before each: every one of them takes the host away, and only a reboot brings it
 back by itself — HostMan cannot press a power button or wake a sleeping
 machine. Sleep is offered where the kernel lists a suspend state in
 `/sys/power/state`, which an x86 PC does and a Raspberry Pi does not; elsewhere
-the button is there but disabled, and says why. The command is scheduled a few
+the button is there but disabled, and says why.
+
+Once a host has stopped answering, the same card offers **Wake**, which sends a
+wake-on-LAN packet to the hardware address the probe recorded while the host
+was up — that of the wired card carrying its default route. A host on its way
+to sleep or off has wake-on-LAN switched on for that card first (`ethtool`,
+where it is installed), since most cards forget the setting, and the page says
+whether that took. A packet sent is not a machine woken: it needs a wired card,
+wake-on-LAN enabled in the firmware — which HostMan can neither see nor change
+— and HostMan on the same network, because the packet is a broadcast that
+routers do not pass on. So a HostMan on a Pi at home wakes the PC beside it,
+and one reached over a VPN still does, but nothing wakes the machine HostMan
+itself runs on. The host shows as online again when it answers.
+
+The power command is scheduled a few
 seconds ahead and detached, so HostMan gets a clean answer instead of the
 connection dying mid-command and having to guess what that meant — the same
 reason a self-update runs detached. The host is marked offline as soon as it
@@ -1106,6 +1120,7 @@ Quoting is tested the same way — every path a person could type is handed to
 | `POST`   | `/api/hosts/{id}/provision`         | one-time password setup, not stored  |
 | `GET`    | `/api/hosts/{id}/metrics`           | samples, `?minutes=` up to 1440, the day's ranges, and the top five consumers of CPU and memory |
 | `POST`   | `/api/hosts/{id}/power`             | `{action}`: `reboot`, `shutdown` or `sleep` the machine |
+| `POST`   | `/api/hosts/{id}/wake`              | send a wake-on-LAN packet to a host that is asleep or off |
 | `GET`    | `/api/hosts/{id}/boot`              | why it last restarted, and the evidence |
 | `POST`   | `/api/hosts/{id}/boot/journal`      | keep the journal across restarts, so the next one is explainable |
 | `GET`    | `/api/hosts/{id}/cron`              | a crontab, `?user=` (default: the SSH user) |

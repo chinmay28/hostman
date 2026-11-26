@@ -160,10 +160,18 @@ export const api = {
     }>(`/api/hosts/${id}/metrics?minutes=${minutes}`),
   /** Reboot the machine, shut it down or put it to sleep. It goes a few
    *  seconds after this returns. Only a reboot is something HostMan sees the
-   *  end of: it cannot turn a host back on, or wake one. The page asks the
-   *  user first — this is what a confirmed press calls. */
+   *  end of. `wakeArmed` is whether a host going to sleep or off left its
+   *  network card listening for `wake`. The page asks the user first — this
+   *  is what a confirmed press calls. */
   power: (id: number, action: PowerAction) =>
-    request<{ status: string }>(`/api/hosts/${id}/power`, { method: 'POST', ...json({ action }) }),
+    request<{ status: string; wakeArmed: boolean }>(`/api/hosts/${id}/power`, {
+      method: 'POST',
+      ...json({ action }),
+    }),
+  /** Send a wake-on-LAN packet for a host that is asleep or off, to the
+   *  address the probe recorded while it was up. Success means the packet
+   *  left, not that the machine woke: its coming back online says that. */
+  wake: (id: number) => request<{ status: string; mac: string }>(`/api/hosts/${id}/wake`, { method: 'POST' }),
 
   /** Why the machine restarted last: HostMan's best guess and the evidence
    *  behind it. One SSH session that reads wtmp, the previous boot's log and

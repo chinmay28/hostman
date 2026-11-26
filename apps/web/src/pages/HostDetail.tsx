@@ -19,7 +19,7 @@ import {
 } from '../components/ui'
 import { realDisks } from '../lib/disk'
 import { ago, bytes, percent, time, uptime } from '../lib/format'
-import type { PowerChoice } from '../lib/power'
+import { powerDone, wakeChoice, type PowerChoice } from '../lib/power'
 import type { HostProcess, HostTestResult, Stat } from '../types'
 
 export default function HostDetail() {
@@ -69,9 +69,22 @@ export default function HostDetail() {
     setActionError(null)
     setPowerNotice(null)
     try {
-      await api.power(hostId, choice.action)
-      setPowerNotice(choice.done)
+      const res = await api.power(hostId, choice.action)
+      setPowerNotice(host ? powerDone(choice, host, res.wakeArmed) : choice.done)
       reload()
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  // A packet that left is all that can be said: whether the machine heard it
+  // is for the poller to find out.
+  const wake = async () => {
+    setActionError(null)
+    setPowerNotice(null)
+    try {
+      await api.wake(hostId)
+      if (host) setPowerNotice(wakeChoice(host).done)
     } catch (e) {
       setActionError(e instanceof Error ? e.message : String(e))
     }
@@ -462,7 +475,7 @@ export default function HostDetail() {
             </div>
           </Link>
 
-          <PowerCard host={host} username={host.username} sudoOk={host.sudoOk} onConfirm={power} />
+          <PowerCard host={host} username={host.username} sudoOk={host.sudoOk} onConfirm={power} onWake={wake} />
 
           <SectionTitle>Danger zone</SectionTitle>
           <Card>
