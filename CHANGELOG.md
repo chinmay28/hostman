@@ -24,7 +24,6 @@ it to the version when cutting the release.
   Deluge is handed the whole selection in one go rather than a torrent at a
   time.
 
-
 ### Hosts
 
 - **Power: reboot, shut down or sleep.** The host page's Restart card is now
