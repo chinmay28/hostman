@@ -1,23 +1,29 @@
 import { useState } from 'react'
-import { powerChoices, type PowerAction, type PowerChoice, type PowerHost } from '../lib/power'
+import { powerChoices, wakeChoice, type PowerAction, type PowerChoice, type PowerHost } from '../lib/power'
 import { Banner, Card, Sheet } from './ui'
 
 /** Reboot, shut down and sleep for one host. A press only ever opens the
  *  question; nothing is asked of the host until that is answered, so a thumb
  *  landing on the wrong button costs a tap on Cancel and not a machine.
  *
- *  `onConfirm` does the asking and settles either way; the sheet closes when it
- *  does. Saying how it went is the caller's, which owns the page's banners. */
+ *  Wake is the way back from two of them, and appears beneath them once the
+ *  host has stopped answering. It asks nothing first: a machine woken by
+ *  mistake is an inconvenience, not a loss.
+ *
+ *  `onConfirm` and `onWake` do the asking and settle either way. Saying how it
+ *  went is the caller's, which owns the page's banners. */
 export function PowerCard({
   host,
   username,
   sudoOk,
   onConfirm,
+  onWake,
 }: {
   host: PowerHost
   username: string
   sudoOk: boolean
   onConfirm: (choice: PowerChoice) => Promise<void>
+  onWake: () => Promise<void>
 }) {
   const [asking, setAsking] = useState<PowerAction | null>(null)
   const [working, setWorking] = useState(false)
@@ -25,6 +31,17 @@ export function PowerCard({
   const choices = powerChoices(host)
   const asked = choices.find((c) => c.action === asking) ?? null
   const sleep = choices.find((c) => c.action === 'sleep')
+
+  const wake = wakeChoice(host)
+  const [waking, setWaking] = useState(false)
+  const sendWake = async () => {
+    setWaking(true)
+    try {
+      await onWake()
+    } finally {
+      setWaking(false)
+    }
+  }
 
   const confirm = async (choice: PowerChoice) => {
     setWorking(true)
@@ -69,6 +86,23 @@ export function PowerCard({
           <p className="sub" style={{ marginTop: 10 }}>
             Sleep is off: {sleep.unavailable}
           </p>
+        )}
+        {wake.offered && (
+          <>
+            <button
+              className="primary block"
+              style={{ marginTop: 10 }}
+              onClick={sendWake}
+              disabled={waking || wake.unavailable !== null}
+              data-power="wake"
+            >
+              {waking ? 'Sending…' : 'Wake'}
+            </button>
+            <p className="sub" style={{ marginTop: 10 }}>
+              {wake.unavailable ??
+                'Sends a wake-on-LAN packet. It reaches a machine on the same network as HostMan, with a wired card and wake-on-LAN enabled in its firmware.'}
+            </p>
+          </>
         )}
       </Card>
       {asked && (

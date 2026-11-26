@@ -18,6 +18,8 @@ yes
 virtualbox
 ollama
 sleep
+@@wake
+A8:A1:59:0C:1F:2E
 @@pagesize
 4096
 @@cpu1
@@ -73,6 +75,9 @@ func TestParseProbe(t *testing.T) {
 	}
 	if !p.Facts.Ollama {
 		t.Error("ollama = false, want true: the tools section named it")
+	}
+	if p.Facts.WakeMAC != "a8:a1:59:0c:1f:2e" {
+		t.Errorf("wakeMac = %q, want the wake section's address, lower-cased", p.Facts.WakeMAC)
 	}
 	if !p.Facts.CanSleep {
 		t.Error("canSleep = false, want true: the tools section named it")
@@ -173,6 +178,9 @@ cpu  10 0 5 100 0 0 0 0 0 0
 	if p.Facts.Ollama {
 		t.Error("ollama = true on a host whose probe had no tools section")
 	}
+	if p.Facts.WakeMAC != "" {
+		t.Errorf("wakeMac = %q on a host whose probe gave none", p.Facts.WakeMAC)
+	}
 	if p.Facts.CanSleep {
 		t.Error("canSleep = true on a host whose probe did not say so")
 	}
@@ -246,3 +254,17 @@ func TestParseDFNoRoot(t *testing.T) {
 }
 
 func closeTo(got, want, tol float64) bool { return math.Abs(got-want) <= tol }
+
+// Only an address a magic packet could name is kept: a tunnel's zeros or a
+// line of noise must not become something the Wake button sends to.
+func TestProbeKeepsOnlyAUsableWakeAddress(t *testing.T) {
+	for _, line := range []string{"00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff", "cat: no such file", ""} {
+		p, err := parseProbe("@@facts\nh\nk\na\nos\n@@wake\n" + line + "\n@@pagesize\n4096\n")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.Facts.WakeMAC != "" {
+			t.Errorf("wake line %q was kept as %q", line, p.Facts.WakeMAC)
+		}
+	}
+}

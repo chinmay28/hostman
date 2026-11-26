@@ -24,6 +24,14 @@ it to the version when cutting the release.
   running Linux); where it does not, as on a Raspberry Pi, the button is
   disabled and says why. `POST /api/hosts/{id}/reboot` is replaced by
   `POST /api/hosts/{id}/power` with `{"action": "reboot" | "shutdown" | "sleep"}`.
+- **Wake a host that is asleep or off.** Once a host stops answering, its
+  Power card offers **Wake**, which sends a wake-on-LAN packet
+  (`POST /api/hosts/{id}/wake`) to the address of its wired network card,
+  recorded while it was up. Sleep and Shut down switch wake-on-LAN on for that
+  card before the machine goes, where `ethtool` is installed, and say whether
+  it took. It works for a host on the same network as HostMan, on a wired card,
+  with wake-on-LAN enabled in its firmware; the button is disabled, with the
+  reason, for a host on Wi-Fi or one HostMan has not probed since this release.
 
 ## v2026.11.85
 

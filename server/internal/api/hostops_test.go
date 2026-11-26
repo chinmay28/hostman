@@ -1,8 +1,12 @@
 package api
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"github.com/chinmay28/hostman/server/internal/hostops"
+	"github.com/chinmay28/hostman/server/internal/store"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -197,6 +201,7 @@ func TestHostOperationsOnAMissingHost(t *testing.T) {
 		{"POST", "/api/hosts/999/power", `{"action":"reboot"}`},
 		{"POST", "/api/hosts/999/power", `{"action":"shutdown"}`},
 		{"POST", "/api/hosts/999/power", `{"action":"sleep"}`},
+		{"POST", "/api/hosts/999/wake", ""},
 		{"GET", "/api/hosts/999/boot", ""},
 		{"POST", "/api/hosts/999/boot/journal", ""},
 		{"GET", "/api/hosts/999/cron", ""},
@@ -242,6 +247,9 @@ func TestHostOperationsNeedTheSession(t *testing.T) {
 	if w := do(t, h, "POST", "/api/hosts/1/power", `{"action":"shutdown"}`); w.Code != http.StatusUnauthorized {
 		t.Errorf("shutting a host down without a session = %d, want 401", w.Code)
 	}
+	if w := do(t, h, "POST", "/api/hosts/1/wake", ""); w.Code != http.StatusUnauthorized {
+		t.Errorf("waking a host without a session = %d, want 401", w.Code)
+	}
 	if w := do(t, h, "POST", "/api/hosts/1/boot/journal", ""); w.Code != http.StatusUnauthorized {
 		t.Errorf("turning on persistent logging without a session = %d, want 401", w.Code)
 	}
@@ -255,5 +263,95 @@ func TestHostOperationsNeedTheSession(t *testing.T) {
 	}
 	if w := do(t, h, "DELETE", "/api/hosts/1/services?name=photos.service", ""); w.Code != http.StatusUnauthorized {
 		t.Errorf("deleting a service without a session = %d, want 401", w.Code)
+	}
+}
+
+// recordingWaker stands in for the network: it remembers who it was asked to
+// wake, and fails where told to.
+type recordingWaker struct {
+	woke []string
+	err  error
+}
+
+func (r *recordingWaker) Wake(_ context.Context, mac net.HardwareAddr) error {
+	r.woke = append(r.woke, mac.String())
+	return r.err
+}
+
+// A wake packet goes to the address the probe recorded, and the host is left
+// as it was: sending a packet is not the same as the machine coming back.
+func TestWakeSendsToTheAddressTheProbeRecorded(t *testing.T) {
+	s, h := testServer(t, "")
+	waker := &recordingWaker{}
+	s.Wake = waker
+	id := newHost(t, h)
+	ctx := context.Background()
+	if err := s.DB.MarkHostOnline(ctx, id, store.HostFacts{Hostname: "tower", WakeMAC: "a8:a1:59:0c:1f:2e"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DB.MarkHostFailed(ctx, id, store.StatusOffline, "put to sleep from HostMan"); err != nil {
+		t.Fatal(err)
+	}
+
+	w := do(t, h, "POST", fmt.Sprintf("/api/hosts/%d/wake", id), "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("wake = %d %s, want 200", w.Code, w.Body)
+	}
+	if len(waker.woke) != 1 || waker.woke[0] != "a8:a1:59:0c:1f:2e" {
+		t.Errorf("woke %v, want the host's recorded address once", waker.woke)
+	}
+	got, _ := s.DB.GetHost(ctx, id)
+	if got.Status != store.StatusOffline {
+		t.Errorf("status = %q after a wake packet, want it left offline until the host answers", got.Status)
+	}
+}
+
+// With no address there is nothing to send, and saying so is the caller's
+// answer — not a packet to nowhere.
+func TestWakeNeedsARecordedAddress(t *testing.T) {
+	s, h := testServer(t, "")
+	waker := &recordingWaker{}
+	s.Wake = waker
+	id := newHost(t, h)
+
+	w := do(t, h, "POST", fmt.Sprintf("/api/hosts/%d/wake", id), "")
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("wake with no address = %d, want 400", w.Code)
+	}
+	if len(waker.woke) != 0 {
+		t.Errorf("a packet was sent anyway: %v", waker.woke)
+	}
+}
+
+// The machine HostMan runs on cannot be woken by HostMan.
+func TestWakeRefusesTheMachineHostManRunsOn(t *testing.T) {
+	s, h := testServer(t, "")
+	waker := &recordingWaker{}
+	s.Wake = waker
+	id := newHost(t, h)
+	facts := store.HostFacts{Hostname: "tower", WakeMAC: "a8:a1:59:0c:1f:2e", IsSelf: true}
+	if err := s.DB.MarkHostOnline(context.Background(), id, facts); err != nil {
+		t.Fatal(err)
+	}
+	if w := do(t, h, "POST", fmt.Sprintf("/api/hosts/%d/wake", id), ""); w.Code != http.StatusBadRequest {
+		t.Fatalf("waking the home host = %d, want 400", w.Code)
+	}
+	if len(waker.woke) != 0 {
+		t.Errorf("a packet was sent anyway: %v", waker.woke)
+	}
+}
+
+// A packet that could not leave is this machine's network failing, and is
+// reported as such.
+func TestWakeReportsAPacketThatCouldNotBeSent(t *testing.T) {
+	s, h := testServer(t, "")
+	s.Wake = &recordingWaker{err: errors.New("network is unreachable")}
+	id := newHost(t, h)
+	if err := s.DB.MarkHostOnline(context.Background(), id, store.HostFacts{WakeMAC: "a8:a1:59:0c:1f:2e"}); err != nil {
+		t.Fatal(err)
+	}
+	w := do(t, h, "POST", fmt.Sprintf("/api/hosts/%d/wake", id), "")
+	if w.Code != http.StatusBadGateway || !strings.Contains(w.Body.String(), "unreachable") {
+		t.Fatalf("wake = %d %s, want 502 with the reason", w.Code, w.Body)
 	}
 }

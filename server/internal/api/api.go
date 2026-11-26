@@ -32,6 +32,8 @@ type Server struct {
 	Health *deploy.Checker
 	// Ops runs administrative work on a host: files, crontabs, power.
 	Ops *hostops.Service
+	// Wake sends wake-on-LAN packets; nil means wol.Sender, the real thing.
+	Wake Waker
 	// Transfers holds the copies, moves and sends under way. They outlive
 	// the requests that started them, which is why they live on the server.
 	Transfers *hostops.Transfers
@@ -81,6 +83,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/hosts/{id}/provision", s.handleProvisionHost)
 	mux.HandleFunc("GET /api/hosts/{id}/metrics", s.handleHostMetrics)
 	mux.HandleFunc("POST /api/hosts/{id}/power", s.handleHostPower)
+	mux.HandleFunc("POST /api/hosts/{id}/wake", s.handleHostWake)
 	mux.HandleFunc("GET /api/hosts/{id}/boot", s.handleHostBoot)
 	mux.HandleFunc("POST /api/hosts/{id}/boot/journal", s.handleKeepJournal)
 

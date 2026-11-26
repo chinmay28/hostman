@@ -5,7 +5,7 @@ import type { Host } from '../types'
 export type PowerAction = 'reboot' | 'shutdown' | 'sleep'
 
 /** What the power card needs to know about a host. */
-export type PowerHost = Pick<Host, 'name' | 'status' | 'isSelf' | 'canSleep'>
+export type PowerHost = Pick<Host, 'name' | 'status' | 'isSelf' | 'canSleep' | 'wakeMac'>
 
 /** One button on the power card, and the question asked before it does
  *  anything. Every action is confirmed: each takes the machine away, and two
@@ -38,8 +38,7 @@ const wording: Record<PowerAction, Omit<PowerChoice, 'action' | 'unavailable'>> 
     label: 'Shut down',
     busy: 'Shutting down…',
     confirmTitle: 'Shut down {name}?',
-    confirmBody:
-      'Everything running on the machine stops, and it stays off. HostMan cannot turn it back on: someone has to press its power button.',
+    confirmBody: 'Everything running on the machine stops, and it stays off. {back}',
     selfWarning:
       'HostMan runs on this machine. It goes down with it, and stays down until the machine is turned on again.',
     done: '{name} is shutting down. It stays offline until someone turns it on.',
@@ -48,12 +47,22 @@ const wording: Record<PowerAction, Omit<PowerChoice, 'action' | 'unavailable'>> 
     label: 'Sleep',
     busy: 'Putting to sleep…',
     confirmTitle: 'Put {name} to sleep?',
-    confirmBody:
-      'What is running is kept in memory but stops answering. HostMan cannot wake it: that takes a key press, its power button or a wake-on-LAN packet.',
+    confirmBody: 'What is running is kept in memory but stops answering. {back}',
     selfWarning: 'HostMan runs on this machine. It stops answering until the machine is woken.',
     done: '{name} is going to sleep. It stays offline until something wakes it.',
   },
 }
+
+/** What brings a machine back from off or asleep, which is the thing to know
+ *  before sending it there. */
+function wayBack(host: PowerHost): string {
+  return canWake(host)
+    ? 'HostMan can try to wake it over the network afterwards, which works where wake-on-LAN is enabled in its firmware. Failing that, it takes its power button.'
+    : 'HostMan cannot bring it back: that takes its power button.'
+}
+
+/** Whether there is anything to send a wake packet to. */
+const canWake = (host: PowerHost) => !host.isSelf && host.wakeMac !== ''
 
 const ORDER: PowerAction[] = ['reboot', 'shutdown', 'sleep']
 
@@ -73,7 +82,41 @@ export function powerChoices(host: PowerHost): PowerChoice[] {
       action,
       unavailable,
       confirmTitle: named(w.confirmTitle),
+      confirmBody: w.confirmBody.replace('{back}', wayBack(host)),
       done: named(w.done),
     }
   })
+}
+
+/** What the screen says once a host has accepted a power action. After a
+ *  shutdown or a sleep that includes whether its network card was left
+ *  listening, since that decides whether Wake is worth pressing. */
+export function powerDone(choice: PowerChoice, host: PowerHost, wakeArmed: boolean): string {
+  if (choice.action === 'reboot' || !canWake(host)) return choice.done
+  return wakeArmed
+    ? `${choice.done} Wake-on-LAN is switched on, so Wake can bring it back.`
+    : `${choice.done} Wake-on-LAN could not be switched on there, so Wake may not work.`
+}
+
+/** The Wake button: shown for a host that is not answering, since waking one
+ *  that is awake means nothing. */
+export interface WakeChoice {
+  /** Whether the button belongs on the screen at all right now. */
+  offered: boolean
+  /** Why it cannot be pressed, or null where it can. */
+  unavailable: string | null
+  /** What the screen says once the packet has gone. */
+  done: string
+}
+
+export function wakeChoice(host: PowerHost): WakeChoice {
+  let unavailable: string | null = null
+  if (host.isSelf) unavailable = `HostMan runs on ${host.name}, so it cannot wake it.`
+  else if (host.wakeMac === '')
+    unavailable = `HostMan has not seen a wired network card on ${host.name}, so it has nothing to send a wake packet to.`
+  return {
+    offered: host.status !== 'online',
+    unavailable,
+    done: `Wake packet sent to ${host.name}. If it is listening it will show as online within a minute.`,
+  }
 }

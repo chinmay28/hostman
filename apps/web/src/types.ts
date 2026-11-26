@@ -89,6 +89,10 @@ export interface Host {
   /** Whether the host's kernel offered a suspend state at the last probe —
    *  an x86 PC does, a Raspberry Pi does not. Sleep is disabled without it. */
   canSleep: boolean
+  /** The hardware address of the host's wired network card, as last probed —
+   *  what a wake-on-LAN packet names. Empty where it is on Wi-Fi or has not
+   *  been seen yet, and then it cannot be woken. */
+  wakeMac: string
   latest: Sample | null
 }
 

@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"errors"
+	"github.com/chinmay28/hostman/server/internal/wol"
+	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -63,7 +65,7 @@ func (s *Server) writeOpError(w http.ResponseWriter, err error, action string) {
 // bring one back from off or wake one that is asleep.
 var powerNotice = map[hostops.PowerAction]string{
 	hostops.PowerReboot:   "rebooting — waiting for it to come back",
-	hostops.PowerShutdown: "shut down from HostMan — it stays off until someone turns it on",
+	hostops.PowerShutdown: "shut down from HostMan — it stays off until it is turned on or woken",
 	hostops.PowerSleep:    "put to sleep from HostMan — it stays offline until something wakes it",
 }
 
@@ -95,7 +97,8 @@ func (s *Server) handleHostPower(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := opContext(r)
 	defer cancel()
 
-	if err := s.Ops.Power(ctx, h, action); err != nil {
+	wakeArmed, err := s.Ops.Power(ctx, h, action)
+	if err != nil {
 		s.writeOpError(w, err, string(action)+" host")
 		return
 	}
@@ -105,7 +108,62 @@ func (s *Server) handleHostPower(w http.ResponseWriter, r *http.Request) {
 	if err := s.DB.MarkHostFailed(r.Context(), h.ID, store.StatusOffline, reason); err != nil {
 		s.Log.Error("api: mark host going down", "host", h.Name, "err", err)
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": reason})
+	writeJSON(w, http.StatusOK, powerResult{Status: reason, WakeArmed: wakeArmed})
+}
+
+// powerResult is what a host said on its way down.
+type powerResult struct {
+	Status string `json:"status"`
+	// WakeArmed is whether the host's network card was left listening for a
+	// wake-on-LAN packet. Never true after a reboot, which needs none.
+	WakeArmed bool `json:"wakeArmed"`
+}
+
+// --- wake ---
+
+// Waker sends a wake-on-LAN packet for one hardware address. wol.Sender is the
+// real one.
+type Waker interface {
+	Wake(ctx context.Context, mac net.HardwareAddr) error
+}
+
+// handleHostWake sends a wake-on-LAN packet for a host that is asleep or off.
+// Nothing is dialled: the host is the one thing that cannot be asked, which is
+// why the address used is the one the probe recorded while it was up.
+//
+// A 200 means the packet left this machine. Whether the host woke is for the
+// poller to find out — it needs a wired card with wake-on-LAN enabled in its
+// firmware, on the same network as HostMan — so the host's status is left
+// exactly as it was.
+func (s *Server) handleHostWake(w http.ResponseWriter, r *http.Request) {
+	h, err := s.hostFromPath(r)
+	if err != nil {
+		s.writeStoreError(w, err, "wake")
+		return
+	}
+	if h.IsSelf {
+		writeError(w, http.StatusBadRequest, "HostMan runs on "+h.Name+": if it were asleep, this would be too")
+		return
+	}
+	mac, err := wol.ParseMAC(h.WakeMAC)
+	if err != nil {
+		writeError(w, http.StatusBadRequest,
+			"HostMan has not seen a wired network card on "+h.Name+", so it has no address to send a wake packet to")
+		return
+	}
+	waker := s.Wake
+	if waker == nil {
+		waker = wol.Sender{}
+	}
+	ctx, cancel := opContext(r)
+	defer cancel()
+	if err := waker.Wake(ctx, mac); err != nil {
+		s.Log.Debug("api: wake host", "host", h.Name, "err", err)
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	s.Log.Info("api: sent wake packet", "host", h.Name, "mac", mac.String())
+	writeJSON(w, http.StatusOK, map[string]string{"status": "sent", "mac": mac.String()})
 }
 
 // --- why it restarted ---
