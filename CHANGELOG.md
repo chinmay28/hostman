@@ -14,6 +14,17 @@ it to the version when cutting the release.
 
 ## Unreleased
 
+### Torrents
+
+- **Remove several torrents at once.** With more than one torrent in the list,
+  **Select torrents to remove** puts a tick on every card and a bar under the
+  header with the count, **Select all** and **Remove N**. The sheet asks the
+  same question a single removal does — keep the files or delete them too,
+  saying how much is downloaded across the selection — once for all of them.
+  Deluge is handed the whole selection in one go rather than a torrent at a
+  time.
+
+
 ### Hosts
 
 - **Power: reboot, shut down or sleep.** The host page's Restart card is now

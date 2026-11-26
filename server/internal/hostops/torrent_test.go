@@ -888,6 +888,53 @@ func TestTorrentFileName(t *testing.T) {
 	}
 }
 
+func TestCleanTorrentIDs(t *testing.T) {
+	a, b := strings.Repeat("a", 40), strings.Repeat("b", 40)
+
+	got, err := cleanTorrentIDs([]string{" " + strings.ToUpper(a), b, a})
+	if err != nil {
+		t.Fatalf("a selection was refused: %v", err)
+	}
+	if len(got) != 2 || got[0] != a || got[1] != b {
+		t.Errorf("got %v, want the two ids once each, lower-cased, in order", got)
+	}
+
+	many := make([]string, MaxTorrentRemoval+1)
+	for i := range many {
+		many[i] = fmt.Sprintf("%040x", i)
+	}
+	refusals := map[string][]string{
+		"nothing":               nil,
+		"an empty id":           {""},
+		"a name":                {"ubuntu"},
+		"a short hash":          {strings.Repeat("a", 39)},
+		"an id with a command":  {a + " ; reboot"},
+		"two ids in one string": {a + " " + b},
+		"an option":             {"--remove_data"},
+		"one bad among good":    {a, "all", b},
+		"too many":              many,
+	}
+	for what, ids := range refusals {
+		if _, err := cleanTorrentIDs(ids); err == nil {
+			t.Errorf("%s was accepted", what)
+		}
+	}
+	if _, err := cleanTorrentIDs(many[:MaxTorrentRemoval]); err != nil {
+		t.Errorf("a selection at the limit was refused: %v", err)
+	}
+}
+
+func TestTorrentsLeft(t *testing.T) {
+	a, b, c := strings.Repeat("a", 40), strings.Repeat("b", 40), strings.Repeat("c", 40)
+	listed := []Torrent{{ID: b}, {ID: c}}
+	if got := torrentsLeft([]string{a, b}, listed); len(got) != 1 || got[0] != b {
+		t.Errorf("left = %v, want only the one still listed", got)
+	}
+	if got := torrentsLeft([]string{a}, listed); len(got) != 0 {
+		t.Errorf("left = %v, want nothing", got)
+	}
+}
+
 func TestIncomingName(t *testing.T) {
 	if got := incomingName("ubuntu.torrent", "ab12"); got != "ubuntu-ab12.torrent" {
 		t.Errorf("incomingName = %q", got)

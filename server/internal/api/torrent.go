@@ -96,6 +96,8 @@ type torrentActionInput struct {
 	Action string `json:"action"`
 	// ID names the torrent, for the actions that act on one.
 	ID string `json:"id"`
+	// IDs names several, for a remove of a whole selection at once.
+	IDs []string `json:"ids"`
 	// Data asks for the downloaded files to go too, on a remove. It is the one
 	// thing on this screen that cannot be undone, so it is never assumed.
 	Data bool `json:"data"`
@@ -132,7 +134,19 @@ func (s *Server) handleTorrentAction(w http.ResponseWriter, r *http.Request) {
 		daemon, err = s.Ops.StartTorrent(ctx, h)
 	case "stop":
 		daemon, err = s.Ops.StopTorrent(ctx, h)
-	case "pause", "resume", "remove":
+	case "remove":
+		// One torrent or a selection: the same removal, and the same question
+		// about the files asked once for all of them.
+		if len(in.IDs) > 0 && in.ID != "" {
+			writeError(w, http.StatusBadRequest, "name one torrent or several, not both")
+			return
+		}
+		if len(in.IDs) > 0 {
+			daemon, err = s.Ops.RemoveTorrents(ctx, h, in.IDs, in.Data)
+		} else {
+			daemon, err = s.Ops.TorrentAction(ctx, h, in.ID, in.Action, in.Data)
+		}
+	case "pause", "resume":
 		daemon, err = s.Ops.TorrentAction(ctx, h, in.ID, in.Action, in.Data)
 	case "seeding":
 		daemon, err = s.Ops.SetTorrentSeeding(ctx, h,
@@ -152,7 +166,7 @@ func (s *Server) handleTorrentAction(w http.ResponseWriter, r *http.Request) {
 		s.writeOpError(w, err, "the downloader: "+in.Action)
 		return
 	}
-	s.Log.Info("api: downloader", "host", h.Name, "action", in.Action, "withData", in.Data)
+	s.Log.Info("api: downloader", "host", h.Name, "action", in.Action, "withData", in.Data, "torrents", len(in.IDs))
 	writeJSON(w, http.StatusOK, daemon)
 }
 

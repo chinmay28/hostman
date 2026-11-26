@@ -23,6 +23,15 @@ import {
   troubles,
   type TorrentProgress,
 } from '../lib/torrentPick'
+import {
+  NOTHING,
+  chosen,
+  downloaded,
+  everything,
+  prune,
+  toggle,
+  type Selection,
+} from '../lib/torrentSelect'
 import type { Torrent, TorrentDaemon, TorrentSeeding } from '../types'
 
 /** What a host without deluge needs run on it once. HostMan will not do it: a
@@ -85,7 +94,11 @@ export default function HostTorrents() {
   const [busy, setBusy] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [adding, setAdding] = useState<TorrentProgress | null>(null)
-  const [removing, setRemoving] = useState<Torrent | null>(null)
+  /** What the sheet is asking about: one torrent from its own button, or a
+   *  selection of several. */
+  const [removing, setRemoving] = useState<Torrent[] | null>(null)
+  /** Null until Select is tapped; then the torrents ticked so far. */
+  const [selection, setSelection] = useState<Selection | null>(null)
   const [dropping, setDropping] = useState(false)
   const [folder, setFolder] = useState('')
 
@@ -176,10 +189,19 @@ export default function HostTorrents() {
       setBusy(null)
     }
   }
-  const remove = (torrent: Torrent, data: boolean) =>
+  // One torrent or a selection, it is one request: deluge is handed every id
+  // at once, and answers when the last of them has left its list.
+  const remove = (gone: Torrent[], data: boolean) =>
     act('remove', async () => {
-      await api.torrentAction(hostId, 'remove', torrent.id, data)
-      setRemoving(null)
+      try {
+        if (gone.length === 1) await api.torrentAction(hostId, 'remove', gone[0].id, data)
+        else await api.removeTorrentList(hostId, gone.map((t) => t.id), data)
+        setSelection(null)
+      } finally {
+        // Some may have gone even where not all did, and the list says which.
+        setRemoving(null)
+        reload()
+      }
     })
   const drop = () =>
     act('drop', async () => {
@@ -263,7 +285,10 @@ export default function HostTorrents() {
                 busy={busy}
                 onPause={(t) => act('pause', () => api.torrentAction(hostId, 'pause', t.id))}
                 onResume={(t) => act('resume', () => api.torrentAction(hostId, 'resume', t.id))}
-                onRemove={setRemoving}
+                onRemove={(t) => setRemoving([t])}
+                selection={selection}
+                onSelection={setSelection}
+                onRemoveSelected={() => selection && setRemoving(chosen(selection, torrents))}
               />
 
               <Where daemon={daemon} hostId={hostId} />
@@ -351,15 +376,20 @@ export default function HostTorrents() {
         </>
       )}
 
-      {removing && (
+      {removing && removing.length > 0 && (
         <Sheet
-          title="Remove this torrent?"
-          subtitle={removing.name}
+          title={removing.length === 1 ? 'Remove this torrent?' : `Remove ${removing.length} torrents?`}
+          subtitle={
+            removing.length === 1
+              ? removing[0].name
+              : `${removing[0].name} and ${removing.length - 1} more`
+          }
           onClose={() => setRemoving(null)}
         >
           <p className="sub">
-            Deluge stops working on it either way. What is being asked is whether the part already
-            downloaded goes too — {bytes(removing.done)} of it — which cannot be undone.
+            Deluge stops working on {removing.length === 1 ? 'it' : 'them'} either way. What is being
+            asked is whether the part already downloaded goes too — {bytes(downloaded(removing))} of
+            it — which cannot be undone.
           </p>
           <p className="sub">
             It takes a few seconds: deluge's own client does the work and then refuses to exit, so
@@ -761,6 +791,9 @@ function Torrents({
   onPause,
   onResume,
   onRemove,
+  selection,
+  onSelection,
+  onRemoveSelected,
 }: {
   daemon: TorrentDaemon
   /** What deluge last said, which is not always what it said this time. */
@@ -771,7 +804,19 @@ function Torrents({
   onPause: (torrent: Torrent) => void
   onResume: (torrent: Torrent) => void
   onRemove: (torrent: Torrent) => void
+  /** The torrents ticked to remove together, or null when nobody is choosing. */
+  selection: Selection | null
+  onSelection: (selection: Selection | null) => void
+  onRemoveSelected: () => void
 }) {
+  // The list is asked for again every few seconds, and a torrent deluge has
+  // dropped in the meantime is not one that can still be removed.
+  useEffect(() => {
+    if (!selection) return
+    const kept = prune(selection, torrents)
+    if (kept !== selection) onSelection(kept)
+  }, [selection, torrents, onSelection])
+
   if (torrents.length === 0) {
     return (
       <Card>
@@ -788,6 +833,46 @@ function Torrents({
       <SectionTitle>
         {torrents.length} {torrents.length === 1 ? 'torrent' : 'torrents'}
       </SectionTitle>
+      {/* Clearing out a list one sheet at a time is the chore this is for, so
+          it is offered as soon as there is more than one to clear. */}
+      {torrents.length > 1 &&
+        (selection === null ? (
+          <button
+            className="secondary block"
+            style={{ marginBottom: 12 }}
+            onClick={() => onSelection(NOTHING)}
+            disabled={!!busy}
+          >
+            Select torrents to remove
+          </button>
+        ) : (
+          <Card className="select-bar">
+            <div className="row between">
+              <div className="title">{selection.size} selected</div>
+              <button
+                className="ghost"
+                onClick={() =>
+                  onSelection(selection.size === torrents.length ? NOTHING : everything(torrents))
+                }
+                disabled={!!busy}
+              >
+                {selection.size === torrents.length ? 'Select none' : 'Select all'}
+              </button>
+            </div>
+            <div className="actions">
+              <button className="secondary" onClick={() => onSelection(null)} disabled={!!busy}>
+                Cancel
+              </button>
+              <button
+                className="danger"
+                onClick={onRemoveSelected}
+                disabled={!!busy || selection.size === 0}
+              >
+                {selection.size === 0 ? 'Remove' : `Remove ${selection.size}`}
+              </button>
+            </div>
+          </Card>
+        ))}
       {stale && (
         <Banner tone="warn">
           {daemon.running
@@ -804,6 +889,8 @@ function Torrents({
           onPause={() => onPause(torrent)}
           onResume={() => onResume(torrent)}
           onRemove={() => onRemove(torrent)}
+          selected={selection === null ? null : selection.has(torrent.id)}
+          onSelect={() => selection && onSelection(toggle(selection, torrent.id))}
         />
       ))}
     </>
@@ -817,6 +904,8 @@ function TorrentCard({
   onPause,
   onResume,
   onRemove,
+  selected,
+  onSelect,
 }: {
   torrent: Torrent
   /** The folder the downloader is using now, so a torrent that was added when
@@ -826,6 +915,9 @@ function TorrentCard({
   onPause: () => void
   onResume: () => void
   onRemove: () => void
+  /** Whether it is ticked, while torrents are being chosen; null otherwise. */
+  selected: boolean | null
+  onSelect: () => void
 }) {
   const state = torrent.state.toLowerCase()
   const paused = state === 'paused'
@@ -868,14 +960,23 @@ function TorrentCard({
         <Stat label="Peers" value={`${torrent.peers} of ${torrent.peersTotal}`} />
       </div>
 
-      <div className="actions">
-        <button className="secondary" onClick={paused ? onResume : onPause} disabled={!!busy}>
-          {paused ? 'Resume' : 'Pause'}
-        </button>
-        <button className="danger" onClick={onRemove} disabled={!!busy}>
-          Remove
-        </button>
-      </div>
+      {/* While torrents are being chosen the card's own buttons give way to
+          the tick: two ways to remove on one card is how the wrong one goes. */}
+      {selected === null ? (
+        <div className="actions">
+          <button className="secondary" onClick={paused ? onResume : onPause} disabled={!!busy}>
+            {paused ? 'Resume' : 'Pause'}
+          </button>
+          <button className="danger" onClick={onRemove} disabled={!!busy}>
+            Remove
+          </button>
+        </div>
+      ) : (
+        <label className="checkbox">
+          <input type="checkbox" checked={selected} onChange={onSelect} disabled={!!busy} />
+          Remove this one
+        </label>
+      )}
     </Card>
   )
 }
