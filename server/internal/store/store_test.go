@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -408,5 +409,82 @@ func TestAppForwardPortsRoundTrip(t *testing.T) {
 	}
 	if reread.ForwardPort != 0 || reread.ForwardTargetPort != 0 {
 		t.Errorf("forward after clearing = %d -> %d, want off", reread.ForwardPort, reread.ForwardTargetPort)
+	}
+}
+
+// Migrations are counted, not named, so the order they have ever shipped in is
+// part of the contract. Twice a migration was added above the port-forwarding
+// pair instead of after it, and an install that had already run that pair was
+// handed forward_port again and would not start.
+//
+// Each case is an order that was really released. A database built by it has
+// to open under the present list, and end up with every column there is.
+func TestUpgradesFromEveryShippedOrder(t *testing.T) {
+	index := func(fragment string) int {
+		t.Helper()
+		for i, m := range migrations {
+			if strings.Contains(m, fragment) {
+				return i
+			}
+		}
+		t.Fatalf("no migration mentions %q", fragment)
+		return -1
+	}
+	ollama := index("ADD COLUMN ollama")
+	base := migrations[:ollama+1]
+	forward := []string{migrations[index("ADD COLUMN forward_port")], migrations[index("ADD COLUMN forward_target_port")]}
+	canSleep := migrations[index("ADD COLUMN can_sleep")]
+	wakeMAC := migrations[index("ADD COLUMN wake_mac")]
+
+	join := func(parts ...[]string) []string {
+		var all []string
+		for _, part := range parts {
+			all = append(all, part...)
+		}
+		return all
+	}
+	shipped := map[string][]string{
+		"port forwarding, before sleep":         join(base, forward),
+		"sleep slipped in above the forwarding": join(base, []string{canSleep}, forward),
+		"wake slipped in above it too":          join(base, []string{canSleep, wakeMAC}, forward),
+	}
+
+	current := migrations
+	t.Cleanup(func() { migrations = current })
+
+	for name, old := range shipped {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "hostman.db")
+
+			migrations = old
+			db, err := Open(path)
+			if err != nil {
+				t.Fatalf("the old order would not build a database: %v", err)
+			}
+			db.Close()
+
+			migrations = current
+			db, err = Open(path)
+			if err != nil {
+				t.Fatalf("an install from then cannot be upgraded: %v", err)
+			}
+			defer db.Close()
+
+			for table, columns := range map[string][]string{
+				"hosts": {"ollama", "can_sleep", "wake_mac"},
+				"apps":  {"forward_port", "forward_target_port"},
+			} {
+				for _, column := range columns {
+					var n int
+					query := `SELECT COUNT(*) FROM pragma_table_info('` + table + `') WHERE name = ?`
+					if err := db.sql.QueryRow(query, column).Scan(&n); err != nil {
+						t.Fatal(err)
+					}
+					if n != 1 {
+						t.Errorf("%s.%s is missing after the upgrade", table, column)
+					}
+				}
+			}
+		})
 	}
 }
