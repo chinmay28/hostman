@@ -57,6 +57,19 @@ die()  { printf '\033[1;31m!!\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || die "Run this with sudo."
 
+# retry runs a command up to three times, a little further apart each time. It
+# is for the steps that talk to the network: a home resolver that drops one
+# lookup in the middle of an upgrade is ordinary, and should cost a few seconds
+# rather than the upgrade.
+retry() {
+  local attempt=1
+  until "$@"; do
+    [ "$attempt" -ge 3 ] && return 1
+    sleep $((attempt * 5))
+    attempt=$((attempt + 1))
+  done
+}
+
 case "${1:-}" in
   --uninstall) UNINSTALL=1 ;;
   "")          UNINSTALL=0 ;;
@@ -238,9 +251,14 @@ if [ -d "$BUILD_DIR/.git" ]; then
   fi
   # shellcheck disable=SC2086  # $unshallow is one flag or nothing.
   git -C "$BUILD_DIR" fetch $unshallow --filter=blob:none origin "$REF" --quiet 2>/dev/null ||
-    git -C "$BUILD_DIR" fetch $unshallow origin "$REF" --quiet ||
+    retry git -C "$BUILD_DIR" fetch $unshallow origin "$REF" --quiet ||
     die "Could not fetch $REF from $REPO"
-  git -C "$BUILD_DIR" checkout --quiet --force FETCH_HEAD
+  # A partial clone fetches the files of the new commit here, not above, so
+  # this is a second trip to the remote and can fail on its own — which, left
+  # to set -e, ended the upgrade on git's "promisor remote" line and nothing
+  # else.
+  retry git -C "$BUILD_DIR" checkout --quiet --force FETCH_HEAD ||
+    die "Fetched $REF but could not download its files from $REPO. Nothing was changed; check this machine can reach the remote (DNS?) and run it again."
 else
   rm -rf "$BUILD_DIR"
   git clone --filter=blob:none --branch "$REF" "$REPO" "$BUILD_DIR" --quiet 2>/dev/null ||
