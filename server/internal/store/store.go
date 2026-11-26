@@ -12,7 +12,11 @@ import (
 )
 
 // migrations are append-only. Never edit a migration that has shipped; add a
-// new one instead.
+// new one instead — and add it at the end. A database records how many it has
+// run, not which, so one slipped in above the last shifts every later
+// migration down a place: an install that had already run them is handed one
+// of them a second time and refuses to start. TestUpgradesFromEveryShippedOrder
+// holds the orders that have been out.
 var migrations = []string{
 	`CREATE TABLE settings (
 		key        TEXT PRIMARY KEY,
@@ -111,6 +115,11 @@ var migrations = []string{
 	// Whether ollama is on the host, for the same reason: the host's page
 	// offers a screen for its models only where there is something to show.
 	`ALTER TABLE hosts ADD COLUMN ollama INTEGER NOT NULL DEFAULT 0`,
+	// Port forwarding: HostMan listens on forward_port on its own machine and
+	// relays to forward_target_port on the host the app is installed on. Zero
+	// means the app is not forwarded.
+	`ALTER TABLE apps ADD COLUMN forward_port INTEGER NOT NULL DEFAULT 0`,
+	`ALTER TABLE apps ADD COLUMN forward_target_port INTEGER NOT NULL DEFAULT 0`,
 	// Whether the host's kernel can suspend, which decides whether the Sleep
 	// button on its page is one that can be pressed.
 	`ALTER TABLE hosts ADD COLUMN can_sleep INTEGER NOT NULL DEFAULT 0`,
@@ -118,11 +127,6 @@ var migrations = []string{
 	// wake-on-LAN packet names. It has to be learned while the host is up,
 	// because the moment it is wanted is the moment the host cannot be asked.
 	`ALTER TABLE hosts ADD COLUMN wake_mac TEXT NOT NULL DEFAULT ''`,
-	// Port forwarding: HostMan listens on forward_port on its own machine and
-	// relays to forward_target_port on the host the app is installed on. Zero
-	// means the app is not forwarded.
-	`ALTER TABLE apps ADD COLUMN forward_port INTEGER NOT NULL DEFAULT 0`,
-	`ALTER TABLE apps ADD COLUMN forward_target_port INTEGER NOT NULL DEFAULT 0`,
 }
 
 // DB wraps the SQLite handle.

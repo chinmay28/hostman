@@ -16,6 +16,13 @@ it to the version when cutting the release.
 
 ### Installing and updating
 
+- **Updating an older install no longer fails on its database.** The sleep and
+  wake-on-LAN changes each added a database migration above the
+  port-forwarding ones instead of after them. An install that already had port
+  forwarding was handed that migration a second time, stopped with
+  `duplicate column name: forward_port`, and was rolled back. The migrations
+  are back in the order they first shipped, with the two new ones last, so
+  every install from before, between and after those changes upgrades.
 - **An update no longer dies on one failed lookup.** The installer makes two
   trips to GitHub for the source — the commits, then the new commit's files —
   and a resolver that dropped the second ended the update on git's
