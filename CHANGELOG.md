@@ -14,6 +14,15 @@ it to the version when cutting the release.
 
 ## Unreleased
 
+### Installing and updating
+
+- **An update no longer dies on one failed lookup.** The installer makes two
+  trips to GitHub for the source — the commits, then the new commit's files —
+  and a resolver that dropped the second ended the update on git's
+  `could not fetch … from promisor remote` and nothing else. Both trips are
+  now tried three times, and a failure says what failed and that nothing was
+  changed.
+
 ### Torrents
 
 - **Remove several torrents at once.** With more than one torrent in the list,
