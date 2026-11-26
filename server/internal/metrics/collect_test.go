@@ -17,6 +17,7 @@ yes
 @@tools
 virtualbox
 ollama
+sleep
 @@pagesize
 4096
 @@cpu1
@@ -72,6 +73,9 @@ func TestParseProbe(t *testing.T) {
 	}
 	if !p.Facts.Ollama {
 		t.Error("ollama = false, want true: the tools section named it")
+	}
+	if !p.Facts.CanSleep {
+		t.Error("canSleep = false, want true: the tools section named it")
 	}
 
 	// busy delta 142 of 562 total jiffies.
@@ -168,6 +172,9 @@ cpu  10 0 5 100 0 0 0 0 0 0
 	}
 	if p.Facts.Ollama {
 		t.Error("ollama = true on a host whose probe had no tools section")
+	}
+	if p.Facts.CanSleep {
+		t.Error("canSleep = true on a host whose probe did not say so")
 	}
 	if p.Sample.TempC != nil {
 		t.Errorf("tempC = %v, want nil when no thermal zone", *p.Sample.TempC)

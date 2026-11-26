@@ -44,10 +44,13 @@ type Host struct {
 	// Ollama is whether the ollama command was on the host at the last probe.
 	// The UI offers a screen for its models only where it was.
 	Ollama bool `json:"ollama"`
+	// CanSleep is whether the host's kernel offered a suspend state at the
+	// last probe. The UI disables Sleep where it did not.
+	CanSleep bool `json:"canSleep"`
 }
 
 const hostColumns = `id, name, address, port, username, host_key, status, last_error,
-	last_seen_at, hostname, os, kernel, arch, sudo_ok, created_at, is_self, machine_id, virtualbox, ollama`
+	last_seen_at, hostname, os, kernel, arch, sudo_ok, created_at, is_self, machine_id, virtualbox, ollama, can_sleep`
 
 func scanHost(row interface{ Scan(...any) error }) (*Host, error) {
 	var h Host
@@ -55,7 +58,7 @@ func scanHost(row interface{ Scan(...any) error }) (*Host, error) {
 	var created string
 	err := row.Scan(&h.ID, &h.Name, &h.Address, &h.Port, &h.Username, &h.HostKey,
 		&h.Status, &h.LastError, &lastSeen, &h.Hostname, &h.OS, &h.Kernel, &h.Arch,
-		&h.SudoOK, &created, &h.IsSelf, &h.MachineID, &h.VirtualBox, &h.Ollama)
+		&h.SudoOK, &created, &h.IsSelf, &h.MachineID, &h.VirtualBox, &h.Ollama, &h.CanSleep)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -163,6 +166,9 @@ type HostFacts struct {
 	// Ollama is whether the ollama command is installed, which decides
 	// whether the host gets a models screen at all.
 	Ollama bool
+	// CanSleep is whether the kernel lists a suspend state, which decides
+	// whether the host can be put to sleep.
+	CanSleep bool
 }
 
 // MarkHostOnline records a successful connection along with the host's facts.
@@ -170,10 +176,10 @@ func (d *DB) MarkHostOnline(ctx context.Context, id int64, f HostFacts) error {
 	_, err := d.sql.ExecContext(ctx, `
 		UPDATE hosts SET status = ?, last_error = '', last_seen_at = datetime('now'),
 			hostname = ?, os = ?, kernel = ?, arch = ?, sudo_ok = ?, machine_id = ?, is_self = ?,
-			virtualbox = ?, ollama = ?
+			virtualbox = ?, ollama = ?, can_sleep = ?
 		WHERE id = ?`,
 		StatusOnline, f.Hostname, f.OS, f.Kernel, f.Arch, f.SudoOK, f.MachineID, f.IsSelf,
-		f.VirtualBox, f.Ollama, id)
+		f.VirtualBox, f.Ollama, f.CanSleep, id)
 	return err
 }
 

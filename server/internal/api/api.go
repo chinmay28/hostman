@@ -30,7 +30,7 @@ type Server struct {
 	Poller *hosts.Poller
 	Runner *deploy.Runner
 	Health *deploy.Checker
-	// Ops runs administrative work on a host: files, crontabs, restarts.
+	// Ops runs administrative work on a host: files, crontabs, power.
 	Ops *hostops.Service
 	// Transfers holds the copies, moves and sends under way. They outlive
 	// the requests that started them, which is why they live on the server.
@@ -80,7 +80,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/hosts/{id}/test", s.handleTestHost)
 	mux.HandleFunc("POST /api/hosts/{id}/provision", s.handleProvisionHost)
 	mux.HandleFunc("GET /api/hosts/{id}/metrics", s.handleHostMetrics)
-	mux.HandleFunc("POST /api/hosts/{id}/reboot", s.handleHostReboot)
+	mux.HandleFunc("POST /api/hosts/{id}/power", s.handleHostPower)
 	mux.HandleFunc("GET /api/hosts/{id}/boot", s.handleHostBoot)
 	mux.HandleFunc("POST /api/hosts/{id}/boot/journal", s.handleKeepJournal)
 

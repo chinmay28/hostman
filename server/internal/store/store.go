@@ -111,6 +111,9 @@ var migrations = []string{
 	// Whether ollama is on the host, for the same reason: the host's page
 	// offers a screen for its models only where there is something to show.
 	`ALTER TABLE hosts ADD COLUMN ollama INTEGER NOT NULL DEFAULT 0`,
+	// Whether the host's kernel can suspend, which decides whether the Sleep
+	// button on its page is one that can be pressed.
+	`ALTER TABLE hosts ADD COLUMN can_sleep INTEGER NOT NULL DEFAULT 0`,
 	// Port forwarding: HostMan listens on forward_port on its own machine and
 	// relays to forward_target_port on the host the app is installed on. Zero
 	// means the app is not forwarded.
