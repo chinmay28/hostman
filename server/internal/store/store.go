@@ -127,6 +127,11 @@ var migrations = []string{
 	// wake-on-LAN packet names. It has to be learned while the host is up,
 	// because the moment it is wanted is the moment the host cannot be asked.
 	`ALTER TABLE hosts ADD COLUMN wake_mac TEXT NOT NULL DEFAULT ''`,
+	// Why a host that HostMan itself sent down is not answering, and when it
+	// was sent. The poller's failures would otherwise replace "put to sleep
+	// from HostMan" with a dial error within one round; see MarkHostSentDown.
+	`ALTER TABLE hosts ADD COLUMN down_notice TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE hosts ADD COLUMN down_noted_at TEXT`,
 }
 
 // DB wraps the SQLite handle.

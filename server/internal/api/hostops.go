@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"errors"
-	"github.com/chinmay28/hostman/server/internal/wol"
 	"net"
 	"net/http"
 	"strconv"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/chinmay28/hostman/server/internal/hostops"
 	"github.com/chinmay28/hostman/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/wol"
 )
 
 // Managing a host — its files, its services, its crontab, its power — is
@@ -60,7 +60,9 @@ func (s *Server) writeOpError(w http.ResponseWriter, err error, action string) {
 // --- power ---
 
 // powerNotice is what a host's status says once it has accepted a power
-// action, until the poller finds out for itself. Only the first of them is a
+// action, and goes on saying while it does not answer: the store keeps it
+// through the poller's failures (store.MarkHostSentDown), which would
+// otherwise replace it with a dial error. Only the first of them is a
 // promise: HostMan can watch a machine come back from a reboot, and cannot
 // bring one back from off or wake one that is asleep.
 var powerNotice = map[hostops.PowerAction]string{
@@ -104,11 +106,23 @@ func (s *Server) handleHostPower(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Log.Info("api: host power", "host", h.Name, "action", string(action))
 
-	reason := powerNotice[action]
-	if err := s.DB.MarkHostFailed(r.Context(), h.ID, store.StatusOffline, reason); err != nil {
+	writeJSON(w, http.StatusOK, powerResult{Status: s.hostSentDown(r.Context(), h, action), WakeArmed: wakeArmed})
+}
+
+// hostSentDown records that a host accepted a power action, and returns the
+// notice it now carries. Two things follow from the host having agreed to go:
+// it is offline from now, with the notice as the reason for as long as it
+// stays silent; and any wake packets still queued for it from an earlier Wake
+// are dropped, since they would bring it straight back.
+func (s *Server) hostSentDown(ctx context.Context, h *store.Host, action hostops.PowerAction) string {
+	if mac, err := wol.ParseMAC(h.WakeMAC); err == nil {
+		s.waker().Cancel(mac)
+	}
+	notice := powerNotice[action]
+	if err := s.DB.MarkHostSentDown(ctx, h.ID, notice); err != nil {
 		s.Log.Error("api: mark host going down", "host", h.Name, "err", err)
 	}
-	writeJSON(w, http.StatusOK, powerResult{Status: reason, WakeArmed: wakeArmed})
+	return notice
 }
 
 // powerResult is what a host said on its way down.
@@ -121,18 +135,40 @@ type powerResult struct {
 
 // --- wake ---
 
-// Waker sends a wake-on-LAN packet for one hardware address. wol.Sender is the
-// real one.
+// Waker wakes the machine with one hardware address. wol.Repeater is the real
+// one: Wake reports on the first packet and more follow by themselves, for a
+// machine that had not finished going down when it was asked.
 type Waker interface {
 	Wake(ctx context.Context, mac net.HardwareAddr) error
+	// Cancel drops whatever Wake still means to send to mac.
+	Cancel(mac net.HardwareAddr)
+}
+
+// waker is s.Wake, or the real thing where that was left nil. The real thing
+// holds the packets it still owes, so there is one for the server's lifetime.
+func (s *Server) waker() Waker {
+	if s.Wake != nil {
+		return s.Wake
+	}
+	s.wakeOnce.Do(func() {
+		s.wakeDefault = &wol.Repeater{OnRepeat: func(mac net.HardwareAddr, err error) {
+			if err != nil {
+				s.Log.Debug("api: repeat wake packet", "mac", mac.String(), "err", err)
+			}
+		}}
+	})
+	return s.wakeDefault
 }
 
 // handleHostWake sends a wake-on-LAN packet for a host that is asleep or off.
 // Nothing is dialled: the host is the one thing that cannot be asked, which is
 // why the address used is the one the probe recorded while it was up.
 //
-// A 200 means the packet left this machine. Whether the host woke is for the
-// poller to find out — it needs a wired card with wake-on-LAN enabled in its
+// A 200 means the packet left this machine, and that it will be sent again a
+// few times over the next minute (wol.Repeats): the button appears the moment
+// a host accepts a sleep or a shutdown, seconds before the machine has gone,
+// and a packet that arrives in between wakes nothing. Whether the host woke is
+// for the poller to find out — it needs a wired card with wake-on-LAN enabled in its
 // firmware, on the same network as HostMan — so the host's status is left
 // exactly as it was.
 func (s *Server) handleHostWake(w http.ResponseWriter, r *http.Request) {
@@ -151,13 +187,9 @@ func (s *Server) handleHostWake(w http.ResponseWriter, r *http.Request) {
 			"HostMan has not seen a wired network card on "+h.Name+", so it has no address to send a wake packet to")
 		return
 	}
-	waker := s.Wake
-	if waker == nil {
-		waker = wol.Sender{}
-	}
 	ctx, cancel := opContext(r)
 	defer cancel()
-	if err := waker.Wake(ctx, mac); err != nil {
+	if err := s.waker().Wake(ctx, mac); err != nil {
 		s.Log.Debug("api: wake host", "host", h.Name, "err", err)
 		writeError(w, http.StatusBadGateway, err.Error())
 		return

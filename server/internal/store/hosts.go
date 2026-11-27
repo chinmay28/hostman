@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -178,22 +179,58 @@ type HostFacts struct {
 	WakeMAC string
 }
 
+// DownNoticeGrace is how long a host that accepted a power action may go on
+// answering before its notice is taken to be stale. A host goes a few seconds
+// after it accepts, and one shutting down keeps its SSH server up while its
+// services stop, so a probe can succeed in between; that success must not wipe
+// the explanation for the failures about to follow.
+const DownNoticeGrace = 2 * time.Minute
+
 // MarkHostOnline records a successful connection along with the host's facts.
+//
+// It also ends a notice left by MarkHostSentDown — the host is back — unless
+// the host has not yet been seen down and DownNoticeGrace has not passed, which
+// is a host still on its way.
 func (d *DB) MarkHostOnline(ctx context.Context, id int64, f HostFacts) error {
+	grace := fmt.Sprintf("-%d seconds", int(DownNoticeGrace.Seconds()))
 	_, err := d.sql.ExecContext(ctx, `
 		UPDATE hosts SET status = ?, last_error = '', last_seen_at = datetime('now'),
 			hostname = ?, os = ?, kernel = ?, arch = ?, sudo_ok = ?, machine_id = ?, is_self = ?,
-			virtualbox = ?, ollama = ?, can_sleep = ?, wake_mac = ?
+			virtualbox = ?, ollama = ?, can_sleep = ?, wake_mac = ?,
+			down_notice = CASE WHEN down_noted_at > datetime('now', ?) THEN down_notice ELSE '' END,
+			down_noted_at = CASE WHEN down_noted_at > datetime('now', ?) THEN down_noted_at END
 		WHERE id = ?`,
 		StatusOnline, f.Hostname, f.OS, f.Kernel, f.Arch, f.SudoOK, f.MachineID, f.IsSelf,
-		f.VirtualBox, f.Ollama, f.CanSleep, f.WakeMAC, id)
+		f.VirtualBox, f.Ollama, f.CanSleep, f.WakeMAC, grace, grace, id)
 	return err
 }
 
 // MarkHostFailed records a failed connection attempt.
+//
+// A host that is offline because HostMan sent it there keeps the notice from
+// MarkHostSentDown as its error: that it was put to sleep explains the silence,
+// and the dial error that silence produces does not. Any other status records
+// the reason given — a changed host key is news whatever came before it.
+//
+// The failure also counts as having seen the host down, so the next successful
+// connection ends the notice however soon it comes.
 func (d *DB) MarkHostFailed(ctx context.Context, id int64, status, reason string) error {
-	_, err := d.sql.ExecContext(ctx,
-		`UPDATE hosts SET status = ?, last_error = ? WHERE id = ?`, status, reason, id)
+	_, err := d.sql.ExecContext(ctx, `
+		UPDATE hosts SET status = ?,
+			last_error = CASE WHEN ? = ? AND down_notice != '' THEN down_notice ELSE ? END,
+			down_noted_at = NULL
+		WHERE id = ?`, status, status, StatusOffline, reason, id)
+	return err
+}
+
+// MarkHostSentDown records that a host accepted a reboot, a shutdown or a
+// sleep: it is offline from now, and notice says why. The notice stays the
+// host's error through the failed connections that follow, until the host
+// answers again (see MarkHostOnline and MarkHostFailed for exactly when).
+func (d *DB) MarkHostSentDown(ctx context.Context, id int64, notice string) error {
+	_, err := d.sql.ExecContext(ctx, `
+		UPDATE hosts SET status = ?, last_error = ?, down_notice = ?, down_noted_at = datetime('now')
+		WHERE id = ?`, StatusOffline, notice, notice, id)
 	return err
 }
 

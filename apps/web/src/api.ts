@@ -169,8 +169,10 @@ export const api = {
       ...json({ action }),
     }),
   /** Send a wake-on-LAN packet for a host that is asleep or off, to the
-   *  address the probe recorded while it was up. Success means the packet
-   *  left, not that the machine woke: its coming back online says that. */
+   *  address the probe recorded while it was up. The server sends it again
+   *  a few times over the next minute, for a host that had not finished
+   *  going down. Success means the first packet left, not that the machine
+   *  woke: its coming back online says that. */
   wake: (id: number) => request<{ status: string; mac: string }>(`/api/hosts/${id}/wake`, { method: 'POST' }),
 
   /** Why the machine restarted last: HostMan's best guess and the evidence

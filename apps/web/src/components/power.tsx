@@ -100,7 +100,7 @@ export function PowerCard({
             </button>
             <p className="sub" style={{ marginTop: 10 }}>
               {wake.unavailable ??
-                'Sends a wake-on-LAN packet. It reaches a machine on the same network as HostMan, with a wired card and wake-on-LAN enabled in its firmware.'}
+                'Sends a wake-on-LAN packet, and again a few times over the next minute. It reaches a machine on the same network as HostMan, with a wired card and wake-on-LAN enabled in its firmware.'}
             </p>
           </>
         )}

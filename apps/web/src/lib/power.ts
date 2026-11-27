@@ -105,7 +105,8 @@ export interface WakeChoice {
   offered: boolean
   /** Why it cannot be pressed, or null where it can. */
   unavailable: string | null
-  /** What the screen says once the packet has gone. */
+  /** What the screen says once the packet has gone. The server repeats it
+   *  for a minute, so a press that beat the machine to sleep still lands. */
   done: string
 }
 
@@ -117,6 +118,6 @@ export function wakeChoice(host: PowerHost): WakeChoice {
   return {
     offered: host.status !== 'online',
     unavailable,
-    done: `Wake packet sent to ${host.name}. If it is listening it will show as online within a minute.`,
+    done: `Wake packet sent to ${host.name}, and HostMan sends it again over the next minute in case the machine was still going down. If it is listening it will show as online soon after.`,
   }
 }
