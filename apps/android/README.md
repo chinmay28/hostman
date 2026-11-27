@@ -163,6 +163,7 @@ make android                                       # from the repo root, version
 The icons are cut from `art/hostman-logo.png` by `make icons`
 ([tools/icongen](../../tools/icongen/README.md)). The version is the
 repository's: `-PappVersionName`/`-PappVersionCode` (the commit count) from
-`scripts/version.mjs`, `dev`/`1` unstamped. The release build is signed with
-the debug key so it sideloads as it stands; a store build would sign with its
-own.
+`scripts/version.mjs`, `dev`/`1` unstamped. Releases are signed with one fixed key, read from the `ANDROID_KEYSTORE_BASE64`
+and `ANDROID_KEYSTORE_PASSWORD` repository secrets (a PKCS12 keystore, alias
+`harbor`, shared by every Harbor app), so each release installs over the last.
+A build without them, any local build included, falls back to the debug key.

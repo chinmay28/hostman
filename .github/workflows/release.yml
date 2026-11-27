@@ -115,6 +115,23 @@ jobs:
               -o "../dist/hostman-${VERSION}-linux-${arch}" ./cmd/hostman
           done
 
+      # The release key, so every release installs over the last one. Without
+      # the secrets the APK falls back to this runner's debug key, which no
+      # earlier release was signed with, so it warns instead of failing.
+      - name: Release signing key
+        if: steps.notes.outputs.release == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::warning::no ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD secrets: the APK is signed with this runner's debug key and will not install over an earlier release"
+            exit 0
+          fi
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.p12"
+          echo "ANDROID_KEYSTORE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
+          echo "ANDROID_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+
       # The Android app, which carries this release's server for its
       # full-stack mode. Attached under a name that never changes.
       - name: Build hostman.apk
