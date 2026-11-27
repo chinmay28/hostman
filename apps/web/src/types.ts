@@ -96,6 +96,38 @@ export interface Host {
   latest: Sample | null
 }
 
+/** One thing a host's sleep and wake schedule does or did. */
+export interface PowerScheduleEvent {
+  action: 'sleep' | 'wake'
+  /** When, as HostMan's own clock reads it: the offset is the server's. */
+  at: string
+  /** Why a past event did not happen. Absent where it did. */
+  error?: string
+}
+
+/** When a host sleeps and wakes by itself. */
+export interface PowerSchedule {
+  /** HH:MM on a 24-hour clock, on the machine HostMan runs on. */
+  sleepAt: string
+  wakeAt: string
+  /** Weekday numbers, 0 for Sunday to 6 for Saturday. Each time is taken on
+   *  its own calendar day. */
+  days: number[]
+  next: PowerScheduleEvent | null
+  /** Null where the schedule has not run since it was set. */
+  last: PowerScheduleEvent | null
+}
+
+/** The answer to every schedule request. */
+export interface PowerScheduleView {
+  /** Null for a host with no schedule. */
+  schedule: PowerSchedule | null
+  /** The time of day on the machine HostMan runs on, and its zone's name —
+   *  the clock the schedule's times are read on. */
+  clock: string
+  zone: string
+}
+
 export interface HostTestResult {
   ok: boolean
   error?: string

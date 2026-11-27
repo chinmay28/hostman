@@ -638,3 +638,84 @@ func TestMarkHostFailedWithoutANoticeRecordsTheReason(t *testing.T) {
 		}
 	}
 }
+
+func TestPowerScheduleSetChangeAndUnset(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	h, err := db.CreateHost(ctx, &Host{Name: "tower", Address: "a", Port: 22, Username: "u"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.GetPowerSchedule(ctx, h.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a host with no schedule: err = %v, want ErrNotFound", err)
+	}
+	if err := db.DeletePowerSchedule(ctx, h.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unsetting nothing: err = %v, want ErrNotFound", err)
+	}
+
+	if err := db.SetPowerSchedule(ctx, &PowerSchedule{HostID: h.ID, SleepAt: 23 * 60, WakeAt: 7 * 60, Days: 0b0111110}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := db.GetPowerSchedule(ctx, h.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SleepAt != 23*60 || got.WakeAt != 7*60 || got.Days != 0b0111110 || got.LastAction != "" || got.LastAt != nil {
+		t.Fatalf("after set: %+v", got)
+	}
+
+	ran := time.Date(2026, 11, 23, 23, 0, 0, 0, time.UTC)
+	if err := db.RecordPowerScheduleRun(ctx, h.ID, "sleep", ran, "needs sudo"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = db.GetPowerSchedule(ctx, h.ID)
+	if got.LastAction != "sleep" || got.LastError != "needs sudo" || got.LastAt == nil || !got.LastAt.Equal(ran) {
+		t.Fatalf("after a run: %+v", got)
+	}
+
+	// Changing it replaces the one row, and what the old one did goes with it.
+	if err := db.SetPowerSchedule(ctx, &PowerSchedule{HostID: h.ID, SleepAt: 60, WakeAt: 6 * 60, Days: 1}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = db.GetPowerSchedule(ctx, h.ID)
+	if got.SleepAt != 60 || got.WakeAt != 6*60 || got.Days != 1 || got.LastAction != "" || got.LastAt != nil || got.LastError != "" {
+		t.Fatalf("after change: %+v", got)
+	}
+	if list, err := db.ListPowerSchedules(ctx); err != nil || len(list) != 1 {
+		t.Fatalf("ListPowerSchedules = %v, %v, want the one schedule", list, err)
+	}
+
+	if err := db.DeletePowerSchedule(ctx, h.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.GetPowerSchedule(ctx, h.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("after unset: err = %v, want ErrNotFound", err)
+	}
+	// A run that finishes after the schedule was removed is not an error.
+	if err := db.RecordPowerScheduleRun(ctx, h.ID, "wake", ran, ""); err != nil {
+		t.Errorf("recording a run for a removed schedule: %v", err)
+	}
+}
+
+// A schedule goes with its host, and a host that does not exist cannot have one.
+func TestPowerScheduleBelongsToItsHost(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	h, err := db.CreateHost(ctx, &Host{Name: "tower", Address: "a", Port: 22, Username: "u"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetPowerSchedule(ctx, &PowerSchedule{HostID: h.ID + 100, SleepAt: 1, WakeAt: 2, Days: 1}); err == nil {
+		t.Error("a schedule was stored for a host that does not exist")
+	}
+	if err := db.SetPowerSchedule(ctx, &PowerSchedule{HostID: h.ID, SleepAt: 1, WakeAt: 2, Days: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.DeleteHost(ctx, h.ID); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := db.ListPowerSchedules(ctx); len(list) != 0 {
+		t.Errorf("the schedule outlived its host: %+v", list)
+	}
+}

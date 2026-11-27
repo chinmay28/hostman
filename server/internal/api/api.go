@@ -87,6 +87,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/hosts/{id}/metrics", s.handleHostMetrics)
 	mux.HandleFunc("POST /api/hosts/{id}/power", s.handleHostPower)
 	mux.HandleFunc("POST /api/hosts/{id}/wake", s.handleHostWake)
+	mux.HandleFunc("GET /api/hosts/{id}/power/schedule", s.handleGetPowerSchedule)
+	mux.HandleFunc("PUT /api/hosts/{id}/power/schedule", s.handleSetPowerSchedule)
+	mux.HandleFunc("DELETE /api/hosts/{id}/power/schedule", s.handleDeletePowerSchedule)
 	mux.HandleFunc("GET /api/hosts/{id}/boot", s.handleHostBoot)
 	mux.HandleFunc("POST /api/hosts/{id}/boot/journal", s.handleKeepJournal)
 

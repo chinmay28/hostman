@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { Page } from '../components/Layout'
 import { PowerCard } from '../components/power'
+import { PowerScheduleCard } from '../components/powerSchedule'
 import { SetupSheet } from '../components/provision'
 import { DeploymentBadge, HomeBadge, HostBadge } from '../components/status'
 import {
@@ -32,6 +33,10 @@ export default function HostDetail() {
   const { data: host, error, offline, reload } = useLoader(() => api.host(hostId), [hostId], 5000)
   const { data: metrics } = useLoader(() => api.hostMetrics(hostId, 60), [hostId], 5000)
   const { data: deployments } = useLoader(() => api.deployments({ hostId, limit: 8 }), [hostId], 10000)
+
+  // The schedule changes only when someone changes it; the slow refresh is
+  // for "next" and "last", which move when it runs.
+  const { data: schedule, reload: reloadSchedule } = useLoader(() => api.powerSchedule(hostId), [hostId], 30000)
 
   const [testing, setTesting] = useState(false)
   const [result, setResult] = useState<HostTestResult | null>(null)
@@ -476,6 +481,21 @@ export default function HostDetail() {
           </Link>
 
           <PowerCard host={host} username={host.username} sudoOk={host.sudoOk} onConfirm={power} onWake={wake} />
+
+          {schedule && (
+            <PowerScheduleCard
+              host={host}
+              view={schedule}
+              onSave={async (draft) => {
+                await api.setPowerSchedule(hostId, draft)
+                reloadSchedule()
+              }}
+              onRemove={async () => {
+                await api.removePowerSchedule(hostId)
+                reloadSchedule()
+              }}
+            />
+          )}
 
           <SectionTitle>Danger zone</SectionTitle>
           <Card>
