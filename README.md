@@ -837,12 +837,18 @@ wake-on-LAN packet to the hardware address the probe recorded while the host
 was up — that of the wired card carrying its default route. A host on its way
 to sleep or off has wake-on-LAN switched on for that card first (`ethtool`,
 where it is installed), since most cards forget the setting, and the page says
-whether that took. A packet sent is not a machine woken: it needs a wired card,
+whether that took. The packet is sent again a few times over the following
+minute, because Wake appears the moment a host accepts a sleep or a shutdown —
+seconds before the machine has gone — and a card whose machine is still up
+ignores it; putting the host down again from HostMan cancels what is left. A
+packet sent is not a machine woken: it needs a wired card,
 wake-on-LAN enabled in the firmware — which HostMan can neither see nor change
 — and HostMan on the same network, because the packet is a broadcast that
 routers do not pass on. So a HostMan on a Pi at home wakes the PC beside it,
 and one reached over a VPN still does, but nothing wakes the machine HostMan
-itself runs on. The host shows as online again when it answers.
+itself runs on. The host shows as online again when it answers; until then it
+goes on saying how it went — "put to sleep from HostMan" — rather than the
+connection error its silence produces.
 
 The power command is scheduled a few
 seconds ahead and detached, so HostMan gets a clean answer instead of the

@@ -58,6 +58,17 @@ it to the version when cutting the release.
   it took. It works for a host on the same network as HostMan, on a wired card,
   with wake-on-LAN enabled in its firmware; the button is disabled, with the
   reason, for a host on Wi-Fi or one HostMan has not probed since this release.
+- **Wake pressed straight after Sleep now works.** The Wake button appears the
+  moment a host accepts a sleep or a shutdown, a few seconds before the machine
+  has gone, and a packet sent in between woke nothing and said nothing. The
+  packet is now sent again 5, 15, 30 and 60 seconds after the first. Sending
+  the host down again from HostMan, or removing it, cancels the ones not yet
+  sent.
+- **A host sent down from HostMan goes on saying so.** "Put to sleep from
+  HostMan" used to be replaced by the poller's connection error within about
+  twenty seconds. The notice now stays as the host's error until it answers
+  again, across a restart of HostMan too. A changed host key is still reported
+  as that.
 
 ## v2026.11.85
 

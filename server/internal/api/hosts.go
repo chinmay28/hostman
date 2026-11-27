@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/chinmay28/hostman/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/wol"
 )
 
 // summaryWindow is how far back the CPU and memory ranges reach. It matches
@@ -132,9 +133,17 @@ func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid host id")
 		return
 	}
+	// Read before it goes: its wake address is the key to what is owed it.
+	h, _ := s.DB.GetHost(r.Context(), id)
 	if err := s.DB.DeleteHost(r.Context(), id); err != nil {
 		s.writeStoreError(w, err, "delete host")
 		return
+	}
+	// A forgotten host is not woken: drop the packets an earlier Wake queued.
+	if h != nil {
+		if mac, err := wol.ParseMAC(h.WakeMAC); err == nil {
+			s.waker().Cancel(mac)
+		}
 	}
 	// SQLite reuses row ids, so what is held in memory about this host goes
 	// with it rather than waiting to be inherited by the next one. A shell is

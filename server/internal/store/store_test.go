@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -471,7 +472,7 @@ func TestUpgradesFromEveryShippedOrder(t *testing.T) {
 			defer db.Close()
 
 			for table, columns := range map[string][]string{
-				"hosts": {"ollama", "can_sleep", "wake_mac"},
+				"hosts": {"ollama", "can_sleep", "wake_mac", "down_notice", "down_noted_at"},
 				"apps":  {"forward_port", "forward_target_port"},
 			} {
 				for _, column := range columns {
@@ -486,5 +487,154 @@ func TestUpgradesFromEveryShippedOrder(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// sentDownHost is a host that was online and has just accepted a power action.
+func sentDownHost(t *testing.T, db *DB, notice string) int64 {
+	t.Helper()
+	ctx := context.Background()
+	h, err := db.CreateHost(ctx, &Host{Name: "tower", Address: "a", Port: 22, Username: "u"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.MarkHostOnline(ctx, h.ID, HostFacts{Hostname: "tower"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.MarkHostSentDown(ctx, h.ID, notice); err != nil {
+		t.Fatal(err)
+	}
+	return h.ID
+}
+
+func hostState(t *testing.T, db *DB, id int64) (status, lastError string) {
+	t.Helper()
+	h, err := db.GetHost(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h.Status, h.LastError
+}
+
+// The reason this exists: a host put to sleep from HostMan goes on saying so
+// through every failed poll, instead of a dial error taking its place within
+// one round.
+func TestASentDownNoticeSurvivesThePollsThatFail(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	id := sentDownHost(t, db, "put to sleep from HostMan")
+
+	if status, lastError := hostState(t, db, id); status != StatusOffline || lastError != "put to sleep from HostMan" {
+		t.Fatalf("after MarkHostSentDown: %s %q, want offline with the notice", status, lastError)
+	}
+	for i := 0; i < 3; i++ {
+		if err := db.MarkHostFailed(ctx, id, StatusOffline, "dial tcp: i/o timeout"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if status, lastError := hostState(t, db, id); status != StatusOffline || lastError != "put to sleep from HostMan" {
+		t.Errorf("after failed polls: %s %q, want the notice kept", status, lastError)
+	}
+}
+
+// Once the host has been seen down and then answers, the episode is over: the
+// next time it fails, the failure speaks for itself.
+func TestASentDownNoticeEndsWhenTheHostComesBack(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	id := sentDownHost(t, db, "rebooting")
+
+	if err := db.MarkHostFailed(ctx, id, StatusOffline, "dial tcp: connection refused"); err != nil {
+		t.Fatal(err)
+	}
+	// Back well inside the grace period, as a quick reboot is.
+	if err := db.MarkHostOnline(ctx, id, HostFacts{Hostname: "tower"}); err != nil {
+		t.Fatal(err)
+	}
+	if status, lastError := hostState(t, db, id); status != StatusOnline || lastError != "" {
+		t.Fatalf("back online: %s %q, want online with no error", status, lastError)
+	}
+	if err := db.MarkHostFailed(ctx, id, StatusOffline, "dial tcp: no route to host"); err != nil {
+		t.Fatal(err)
+	}
+	if _, lastError := hostState(t, db, id); lastError != "dial tcp: no route to host" {
+		t.Errorf("a later failure reads %q, want its own reason and not the old notice", lastError)
+	}
+}
+
+// A host goes a few seconds after it accepts, so a poll can still reach it in
+// between. That success must not cost the explanation for what follows.
+func TestASentDownNoticeSurvivesAPollThatCatchesTheHostStillUp(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	id := sentDownHost(t, db, "shut down from HostMan")
+
+	if err := db.MarkHostOnline(ctx, id, HostFacts{Hostname: "tower"}); err != nil {
+		t.Fatal(err)
+	}
+	if status, lastError := hostState(t, db, id); status != StatusOnline || lastError != "" {
+		t.Fatalf("caught still up: %s %q, want online with no error", status, lastError)
+	}
+	if err := db.MarkHostFailed(ctx, id, StatusOffline, "dial tcp: i/o timeout"); err != nil {
+		t.Fatal(err)
+	}
+	if status, lastError := hostState(t, db, id); status != StatusOffline || lastError != "shut down from HostMan" {
+		t.Errorf("once it went: %s %q, want the notice back", status, lastError)
+	}
+}
+
+// A host that accepted and then never went — a suspend that failed, say — does
+// not carry the notice forever, to be shown for an unrelated outage next week.
+func TestASentDownNoticeGoesStaleOnAHostThatNeverWent(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	id := sentDownHost(t, db, "put to sleep from HostMan")
+
+	// Age the notice past the grace period.
+	past := fmt.Sprintf("-%d seconds", int(DownNoticeGrace.Seconds())+1)
+	if _, err := db.sql.Exec(`UPDATE hosts SET down_noted_at = datetime('now', ?) WHERE id = ?`, past, id); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.MarkHostOnline(ctx, id, HostFacts{Hostname: "tower"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.MarkHostFailed(ctx, id, StatusOffline, "dial tcp: i/o timeout"); err != nil {
+		t.Fatal(err)
+	}
+	if _, lastError := hostState(t, db, id); lastError != "dial tcp: i/o timeout" {
+		t.Errorf("a failure long after reads %q, want its own reason", lastError)
+	}
+}
+
+// A host that answers with a different key is not asleep. That is reported as
+// what it is, whatever HostMan last did to the machine.
+func TestASentDownNoticeDoesNotHideAChangedHostKey(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	id := sentDownHost(t, db, "rebooting")
+
+	if err := db.MarkHostFailed(ctx, id, StatusError, "host key changed"); err != nil {
+		t.Fatal(err)
+	}
+	if status, lastError := hostState(t, db, id); status != StatusError || lastError != "host key changed" {
+		t.Errorf("after a key change: %s %q, want the error and its reason", status, lastError)
+	}
+}
+
+// Without a notice nothing changes: a failure records its reason.
+func TestMarkHostFailedWithoutANoticeRecordsTheReason(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	h, err := db.CreateHost(ctx, &Host{Name: "pi", Address: "a", Port: 22, Username: "u"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, reason := range []string{"connection refused", "i/o timeout"} {
+		if err := db.MarkHostFailed(ctx, h.ID, StatusOffline, reason); err != nil {
+			t.Fatal(err)
+		}
+		if _, lastError := hostState(t, db, h.ID); lastError != reason {
+			t.Errorf("lastError = %q, want %q", lastError, reason)
+		}
 	}
 }

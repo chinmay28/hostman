@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/chinmay28/hostman/server/internal/hostops"
 	"github.com/chinmay28/hostman/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/wol"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -269,8 +270,13 @@ func TestHostOperationsNeedTheSession(t *testing.T) {
 // recordingWaker stands in for the network: it remembers who it was asked to
 // wake, and fails where told to.
 type recordingWaker struct {
-	woke []string
-	err  error
+	woke      []string
+	cancelled []string
+	err       error
+}
+
+func (r *recordingWaker) Cancel(mac net.HardwareAddr) {
+	r.cancelled = append(r.cancelled, mac.String())
 }
 
 func (r *recordingWaker) Wake(_ context.Context, mac net.HardwareAddr) error {
@@ -289,7 +295,7 @@ func TestWakeSendsToTheAddressTheProbeRecorded(t *testing.T) {
 	if err := s.DB.MarkHostOnline(ctx, id, store.HostFacts{Hostname: "tower", WakeMAC: "a8:a1:59:0c:1f:2e"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DB.MarkHostFailed(ctx, id, store.StatusOffline, "put to sleep from HostMan"); err != nil {
+	if err := s.DB.MarkHostSentDown(ctx, id, "put to sleep from HostMan"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -353,5 +359,105 @@ func TestWakeReportsAPacketThatCouldNotBeSent(t *testing.T) {
 	w := do(t, h, "POST", fmt.Sprintf("/api/hosts/%d/wake", id), "")
 	if w.Code != http.StatusBadGateway || !strings.Contains(w.Body.String(), "unreachable") {
 		t.Fatalf("wake = %d %s, want 502 with the reason", w.Code, w.Body)
+	}
+}
+
+// A host that accepts a power action is offline from that moment, says why,
+// and goes on saying why when the poller's next attempt fails — which is what
+// used to replace the notice with a dial error some twenty seconds later.
+func TestAHostSentDownKeepsItsNoticeThroughAFailedPoll(t *testing.T) {
+	for _, action := range []hostops.PowerAction{hostops.PowerReboot, hostops.PowerShutdown, hostops.PowerSleep} {
+		t.Run(string(action), func(t *testing.T) {
+			s, h := testServer(t, "")
+			s.Wake = &recordingWaker{}
+			id := newHost(t, h)
+			ctx := context.Background()
+			if err := s.DB.MarkHostOnline(ctx, id, store.HostFacts{Hostname: "tower"}); err != nil {
+				t.Fatal(err)
+			}
+			host, _ := s.DB.GetHost(ctx, id)
+
+			notice := s.hostSentDown(ctx, host, action)
+			if notice != powerNotice[action] {
+				t.Fatalf("notice = %q, want %q", notice, powerNotice[action])
+			}
+			// What the poller records when its dial goes unanswered.
+			if err := s.DB.MarkHostFailed(ctx, id, store.StatusOffline, "dial tcp 192.0.2.7:22: i/o timeout"); err != nil {
+				t.Fatal(err)
+			}
+			got := decode[store.Host](t, do(t, h, "GET", fmt.Sprintf("/api/hosts/%d", id), ""))
+			if got.Status != store.StatusOffline || got.LastError != notice {
+				t.Errorf("host reads %s %q, want offline with %q", got.Status, got.LastError, notice)
+			}
+		})
+	}
+}
+
+// Wake packets still queued from an earlier press would undo a sleep or a
+// shutdown seconds after it happened, so sending a host down drops them.
+func TestSendingAHostDownCancelsItsQueuedWakePackets(t *testing.T) {
+	s, h := testServer(t, "")
+	waker := &recordingWaker{}
+	s.Wake = waker
+	id := newHost(t, h)
+	ctx := context.Background()
+	if err := s.DB.MarkHostOnline(ctx, id, store.HostFacts{WakeMAC: "a8:a1:59:0c:1f:2e"}); err != nil {
+		t.Fatal(err)
+	}
+	host, _ := s.DB.GetHost(ctx, id)
+
+	s.hostSentDown(ctx, host, hostops.PowerSleep)
+	if len(waker.cancelled) != 1 || waker.cancelled[0] != "a8:a1:59:0c:1f:2e" {
+		t.Errorf("cancelled %v, want the host's recorded address once", waker.cancelled)
+	}
+}
+
+// A host with no recorded address has nothing queued, and going down is not
+// held up by that.
+func TestSendingAHostDownWithoutAWakeAddress(t *testing.T) {
+	s, h := testServer(t, "")
+	waker := &recordingWaker{}
+	s.Wake = waker
+	id := newHost(t, h)
+	ctx := context.Background()
+	host, _ := s.DB.GetHost(ctx, id)
+
+	s.hostSentDown(ctx, host, hostops.PowerShutdown)
+	if len(waker.cancelled) != 0 {
+		t.Errorf("cancelled %v for a host with no address", waker.cancelled)
+	}
+	if got, _ := s.DB.GetHost(ctx, id); got.Status != store.StatusOffline {
+		t.Errorf("status = %q, want offline", got.Status)
+	}
+}
+
+// Removing a host drops the wake packets queued for it along with everything
+// else held in memory about it.
+func TestDeletingAHostCancelsItsQueuedWakePackets(t *testing.T) {
+	s, h := testServer(t, "")
+	waker := &recordingWaker{}
+	s.Wake = waker
+	id := newHost(t, h)
+	if err := s.DB.MarkHostOnline(context.Background(), id, store.HostFacts{WakeMAC: "a8:a1:59:0c:1f:2e"}); err != nil {
+		t.Fatal(err)
+	}
+	if w := do(t, h, "DELETE", fmt.Sprintf("/api/hosts/%d", id), ""); w.Code != http.StatusNoContent {
+		t.Fatalf("delete = %d %s, want 204", w.Code, w.Body)
+	}
+	if len(waker.cancelled) != 1 || waker.cancelled[0] != "a8:a1:59:0c:1f:2e" {
+		t.Errorf("cancelled %v, want the host's recorded address once", waker.cancelled)
+	}
+}
+
+// Left alone, the server wakes with the real thing, and it is one thing: the
+// packets a Wake queued have to be there for a later Cancel to find.
+func TestTheDefaultWakerIsOneRepeater(t *testing.T) {
+	s, _ := testServer(t, "")
+	first, ok := s.waker().(*wol.Repeater)
+	if !ok {
+		t.Fatalf("default waker is %T, want *wol.Repeater", s.waker())
+	}
+	if s.waker() != Waker(first) {
+		t.Error("each call built a new waker")
 	}
 }
