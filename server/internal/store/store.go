@@ -132,6 +132,20 @@ var migrations = []string{
 	// from HostMan" with a dial error within one round; see MarkHostSentDown.
 	`ALTER TABLE hosts ADD COLUMN down_notice TEXT NOT NULL DEFAULT ''`,
 	`ALTER TABLE hosts ADD COLUMN down_noted_at TEXT`,
+	// When a host sleeps and wakes by itself: times of day as minutes after
+	// midnight on HostMan's own clock, and the weekdays as a bit set. One row
+	// a host at most; no row means no schedule. The last_ columns are what
+	// became of the most recent run, for the host's page to show.
+	`CREATE TABLE power_schedules (
+		host_id     INTEGER PRIMARY KEY REFERENCES hosts(id) ON DELETE CASCADE,
+		sleep_at    INTEGER NOT NULL,
+		wake_at     INTEGER NOT NULL,
+		days        INTEGER NOT NULL,
+		last_action TEXT NOT NULL DEFAULT '',
+		last_at     TEXT,
+		last_error  TEXT NOT NULL DEFAULT '',
+		updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+	)`,
 }
 
 // DB wraps the SQLite handle.

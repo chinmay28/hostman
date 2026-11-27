@@ -177,25 +177,53 @@ func (s *Server) handleHostWake(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, err, "wake")
 		return
 	}
-	if h.IsSelf {
-		writeError(w, http.StatusBadRequest, "HostMan runs on "+h.Name+": if it were asleep, this would be too")
-		return
-	}
-	mac, err := wol.ParseMAC(h.WakeMAC)
-	if err != nil {
-		writeError(w, http.StatusBadRequest,
-			"HostMan has not seen a wired network card on "+h.Name+", so it has no address to send a wake packet to")
-		return
-	}
 	ctx, cancel := opContext(r)
 	defer cancel()
-	if err := s.waker().Wake(ctx, mac); err != nil {
+	mac, err := s.wakeHost(ctx, h)
+	if errors.As(err, new(noWake)) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err != nil {
 		s.Log.Debug("api: wake host", "host", h.Name, "err", err)
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 	s.Log.Info("api: sent wake packet", "host", h.Name, "mac", mac.String())
 	writeJSON(w, http.StatusOK, map[string]string{"status": "sent", "mac": mac.String()})
+}
+
+// noWake is why there is no point sending a packet for a host, as opposed to
+// a packet that could not be sent.
+type noWake string
+
+func (e noWake) Error() string { return string(e) }
+
+// cannotWake is why HostMan has nothing to send a host, or nil where it has.
+// It is the one statement of who can be woken: the Wake button and the
+// schedule both ask it.
+func cannotWake(h *store.Host) error {
+	if h.IsSelf {
+		return noWake("HostMan runs on " + h.Name + ": if it were asleep, this would be too")
+	}
+	if _, err := wol.ParseMAC(h.WakeMAC); err != nil {
+		return noWake("HostMan has not seen a wired network card on " + h.Name + ", so it has no address to send a wake packet to")
+	}
+	return nil
+}
+
+// wakeHost sends the wake packet for a host and returns the address it went
+// to. An error is a noWake where there was nothing to send, and the
+// network's own where the packet could not leave.
+func (s *Server) wakeHost(ctx context.Context, h *store.Host) (net.HardwareAddr, error) {
+	if err := cannotWake(h); err != nil {
+		return nil, err
+	}
+	mac, _ := wol.ParseMAC(h.WakeMAC)
+	if err := s.waker().Wake(ctx, mac); err != nil {
+		return nil, err
+	}
+	return mac, nil
 }
 
 // --- why it restarted ---

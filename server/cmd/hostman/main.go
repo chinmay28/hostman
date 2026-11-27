@@ -25,6 +25,7 @@ import (
 	"github.com/chinmay28/hostman/server/internal/hostenv"
 	"github.com/chinmay28/hostman/server/internal/hostops"
 	"github.com/chinmay28/hostman/server/internal/hosts"
+	"github.com/chinmay28/hostman/server/internal/powersched"
 	"github.com/chinmay28/hostman/server/internal/selfhost"
 	"github.com/chinmay28/hostman/server/internal/shell"
 	"github.com/chinmay28/hostman/server/internal/sshx"
@@ -145,6 +146,11 @@ func run() error {
 		Self: self, Version: appVersion(), SelfRef: *ref, ManagedBy: *managedBy,
 		Forwards: forwards, Port: portNumber(*addr),
 	}
+
+	// Hosts with a sleep and wake schedule are sent down and brought back as
+	// their times come round, by the same means as the buttons on their page.
+	schedules := &powersched.Runner{DB: db, Actor: apiSrv.ScheduledPower(), Log: log}
+	go schedules.Run(ctx)
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiSrv.Routes())

@@ -850,6 +850,28 @@ itself runs on. The host shows as online again when it answers; until then it
 goes on saying how it went — "put to sleep from HostMan" — rather than the
 connection error its silence produces.
 
+Below Power, **Sleep and wake schedule** puts the host to sleep and wakes it at
+set times: a sleep time, a wake time and the days of the week, set, changed or
+removed from the card. One schedule a host. It does what the buttons do, at the
+minute — the sleep is the Sleep button, the wake is the Wake button — and the
+card says what it will do next and what it last did, with the reason where it
+could not. Three things to know about it:
+
+- **The times are on HostMan's clock**, not the host's and not your phone's;
+  the form says what that clock reads. On the Android app's own server that is
+  the phone's zone (`HOSTMAN_TZ`).
+- **Each time is taken on its own day.** "23:00 and 07:00 on weekdays" sleeps
+  the host on those five nights and wakes it on those five mornings, so it
+  sleeps from Friday night to Monday morning.
+- **It is offered only where both halves can work**: a host that can sleep, has
+  a wired card HostMan has seen, and is not the machine HostMan runs on. A
+  wake still depends on wake-on-LAN in the firmware, as the button does.
+
+HostMan has to be running at the minute. An event it missed by more than five
+minutes — it was off, or updating — is dropped rather than run late, a host
+that is not answering is not asked to sleep, and one already awake is not sent
+a wake packet.
+
 The power command is scheduled a few
 seconds ahead and detached, so HostMan gets a clean answer instead of the
 connection dying mid-command and having to guess what that meant — the same
@@ -1127,6 +1149,9 @@ Quoting is tested the same way — every path a person could type is handed to
 | `GET`    | `/api/hosts/{id}/metrics`           | samples, `?minutes=` up to 1440, the day's ranges, and the top five consumers of CPU and memory |
 | `POST`   | `/api/hosts/{id}/power`             | `{action}`: `reboot`, `shutdown` or `sleep` the machine |
 | `POST`   | `/api/hosts/{id}/wake`              | send a wake-on-LAN packet to a host that is asleep or off |
+| `GET`    | `/api/hosts/{id}/power/schedule`    | the host's sleep and wake schedule (`schedule` is `null` where it has none), with what it does next and did last, and HostMan's own `clock` and `zone` |
+| `PUT`    | `/api/hosts/{id}/power/schedule`    | `{"sleepAt":"23:00","wakeAt":"07:00","days":[1,2,3,4,5]}`: set or change it; days are 0 (Sunday) to 6 |
+| `DELETE` | `/api/hosts/{id}/power/schedule`    | remove it |
 | `GET`    | `/api/hosts/{id}/boot`              | why it last restarted, and the evidence |
 | `POST`   | `/api/hosts/{id}/boot/journal`      | keep the journal across restarts, so the next one is explainable |
 | `GET`    | `/api/hosts/{id}/cron`              | a crontab, `?user=` (default: the SSH user) |
@@ -1214,6 +1239,10 @@ server/
   internal/hostops/  managing a host: files, services, crontab, power state,
                      the remote browser session, the torrent downloader, and
                      guessing why it last restarted
+  internal/wol/      wake-on-LAN: the magic packet, and sending it again for a
+                     machine that had not finished going down
+  internal/powersched/ a host's sleep and wake schedule: the arithmetic, and
+                     the loop that acts on it
   internal/shell/    login shells held open between visits, and their scrollback
   internal/claudecli/ the Claude Code CLI's streaming protocol: the command line,
                      what goes in, and what comes out as events

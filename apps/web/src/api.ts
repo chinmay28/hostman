@@ -1,4 +1,5 @@
 import type { PowerAction } from './lib/power'
+import type { ScheduleDraft } from './lib/powerSchedule'
 import type {
   App,
   BootReport,
@@ -21,6 +22,7 @@ import type {
   OllamaAction,
   OllamaHost,
   Overview,
+  PowerScheduleView,
   ProvisionResult,
   RemoteSession,
   Sample,
@@ -174,6 +176,15 @@ export const api = {
    *  going down. Success means the first packet left, not that the machine
    *  woke: its coming back online says that. */
   wake: (id: number) => request<{ status: string; mac: string }>(`/api/hosts/${id}/wake`, { method: 'POST' }),
+  /** When a host sleeps and wakes by itself, if it does, and the clock those
+   *  times are read on: HostMan's, not the browser's. */
+  powerSchedule: (id: number) => request<PowerScheduleView>(`/api/hosts/${id}/power/schedule`),
+  /** Give a host a schedule, or replace the one it has. Refused for a host
+   *  that cannot sleep or that HostMan could not wake again. */
+  setPowerSchedule: (id: number, schedule: ScheduleDraft) =>
+    request<PowerScheduleView>(`/api/hosts/${id}/power/schedule`, { method: 'PUT', ...json(schedule) }),
+  /** Take a host's schedule away. */
+  removePowerSchedule: (id: number) => request<void>(`/api/hosts/${id}/power/schedule`, { method: 'DELETE' }),
 
   /** Why the machine restarted last: HostMan's best guess and the evidence
    *  behind it. One SSH session that reads wtmp, the previous boot's log and

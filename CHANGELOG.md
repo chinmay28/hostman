@@ -58,6 +58,17 @@ it to the version when cutting the release.
   it took. It works for a host on the same network as HostMan, on a wired card,
   with wake-on-LAN enabled in its firmware; the button is disabled, with the
   reason, for a host on Wi-Fi or one HostMan has not probed since this release.
+- **A sleep and wake schedule.** A host's page has a **Sleep and wake
+  schedule** card under Power: a sleep time, a wake time and the days of the
+  week, which can be set, changed and removed. HostMan then does what the Sleep
+  and Wake buttons do, at those minutes, and the card says what comes next and
+  what it last did — or why it could not. The times are on HostMan's own clock,
+  which the form shows, and each is taken on its own day, so a weekday schedule
+  leaves the host asleep over the weekend. It is offered for a host that can
+  sleep and that HostMan can wake: not a Raspberry Pi, not a host on Wi-Fi, and
+  not the machine HostMan runs on. An event missed by more than five minutes
+  because HostMan was not running is dropped, not run late.
+  `GET`, `PUT` and `DELETE /api/hosts/{id}/power/schedule`.
 - **Wake pressed straight after Sleep now works.** The Wake button appears the
   moment a host accepts a sleep or a shutdown, a few seconds before the machine
   has gone, and a packet sent in between woke nothing and said nothing. The
