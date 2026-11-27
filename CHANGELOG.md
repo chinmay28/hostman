@@ -12,6 +12,105 @@ has a `## <version>` heading naming that commit's own version exactly. A push to
 yet released sits under `## Unreleased`, which never matches a version — rename
 it to the version when cutting the release.
 
+## Unreleased
+
+### Installing and updating
+
+- **Updating an older install no longer fails on its database.** The sleep and
+  wake-on-LAN changes each added a database migration above the
+  port-forwarding ones instead of after them. An install that already had port
+  forwarding was handed that migration a second time, stopped with
+  `duplicate column name: forward_port`, and was rolled back. The migrations
+  are back in the order they first shipped, with the two new ones last, so
+  every install from before, between and after those changes upgrades.
+- **An update no longer dies on one failed lookup.** The installer makes two
+  trips to GitHub for the source — the commits, then the new commit's files —
+  and a resolver that dropped the second ended the update on git's
+  `could not fetch … from promisor remote` and nothing else. Both trips are
+  now tried three times, and a failure says what failed and that nothing was
+  changed.
+
+### Torrents
+
+- **Remove several torrents at once.** With more than one torrent in the list,
+  **Select torrents to remove** puts a tick on every card and a bar under the
+  header with the count, **Select all** and **Remove N**. The sheet asks the
+  same question a single removal does — keep the files or delete them too,
+  saying how much is downloaded across the selection — once for all of them.
+  Deluge is handed the whole selection in one go rather than a torrent at a
+  time.
+
+### Hosts
+
+- **Power: reboot, shut down or sleep.** The host page's Restart card is now
+  **Power**, with a button for each. Every one asks before it does anything —
+  the question says what will and will not bring the machine back, since
+  HostMan can only watch a host return from a reboot — so a stray tap costs a
+  Cancel. Sleep works where the host's kernel offers a suspend state (an x86 PC
+  running Linux); where it does not, as on a Raspberry Pi, the button is
+  disabled and says why. `POST /api/hosts/{id}/reboot` is replaced by
+  `POST /api/hosts/{id}/power` with `{"action": "reboot" | "shutdown" | "sleep"}`.
+- **Wake a host that is asleep or off.** Once a host stops answering, its
+  Power card offers **Wake**, which sends a wake-on-LAN packet
+  (`POST /api/hosts/{id}/wake`) to the address of its wired network card,
+  recorded while it was up. Sleep and Shut down switch wake-on-LAN on for that
+  card before the machine goes, where `ethtool` is installed, and say whether
+  it took. It works for a host on the same network as HostMan, on a wired card,
+  with wake-on-LAN enabled in its firmware; the button is disabled, with the
+  reason, for a host on Wi-Fi or one HostMan has not probed since this release.
+- **A sleep and wake schedule.** A host's page has a **Sleep and wake
+  schedule** card under Power: a sleep time, a wake time and the days of the
+  week, which can be set, changed and removed. HostMan then does what the Sleep
+  and Wake buttons do, at those minutes, and the card says what comes next and
+  what it last did — or why it could not. The times are on HostMan's own clock,
+  which the form shows, and each is taken on its own day, so a weekday schedule
+  leaves the host asleep over the weekend. It is offered for a host that can
+  sleep and that HostMan can wake: not a Raspberry Pi, not a host on Wi-Fi, and
+  not the machine HostMan runs on. An event missed by more than five minutes
+  because HostMan was not running is dropped, not run late.
+  `GET`, `PUT` and `DELETE /api/hosts/{id}/power/schedule`.
+- **Wake pressed straight after Sleep now works.** The Wake button appears the
+  moment a host accepts a sleep or a shutdown, a few seconds before the machine
+  has gone, and a packet sent in between woke nothing and said nothing. The
+  packet is now sent again 5, 15, 30 and 60 seconds after the first. Sending
+  the host down again from HostMan, or removing it, cancels the ones not yet
+  sent.
+- **A host sent down from HostMan goes on saying so.** "Put to sleep from
+  HostMan" used to be replaced by the poller's connection error within about
+  twenty seconds. The notice now stays as the host's error until it answers
+  again, across a restart of HostMan too. A changed host key is still reported
+  as that.
+
+## v2026.11.85
+
+### Torrents
+
+- **A list of picked `.torrent` files is added several at a time.** Files went
+  to the host one after another, and each add was followed by a full read of
+  the downloader — two SSH sessions and two runs of `deluge-console` per file,
+  which on a Pi made a season take minutes. Now four go at once, each add
+  answers only whether deluge took the torrent, and the downloader is read
+  once when the list has gone. The first file still goes alone, so a stopped
+  daemon is started once.
+
+## v2026.11.84
+
+### Torrents
+
+- **Add several `.torrent` files in one go.** Picking files on the Torrents
+  screen now puts them on a list, and each further pick adds to it; **Add N
+  files** hands every one to deluge as a torrent of its own, saying which is
+  going (`Adding 2 of 5…`). The list is there because a phone's picker cannot
+  be relied on for several files at once — some hand over one, some hand over
+  nothing when several were ticked — so picking one at a time builds the same
+  list. One that is not a torrent, or that deluge will not take, does not cost
+  the rest: the others are added, and the screen names the ones that were not
+  and why.
+- **Pick a folder of `.torrent` files.** For a phone whose picker gives up one
+  file at a time, **Pick a folder of .torrent files** takes every `.torrent`
+  under the folder, subfolders included, onto the list in one go. Whatever else
+  is in the folder is left out rather than reported.
+
 ## v2026.11.79
 
 **Downloads:** `hostman-<version>-linux-arm64` and `-linux-amd64` (the server,

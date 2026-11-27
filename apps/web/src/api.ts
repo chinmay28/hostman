@@ -1,3 +1,5 @@
+import type { PowerAction } from './lib/power'
+import type { ScheduleDraft } from './lib/powerSchedule'
 import type {
   App,
   BootReport,
@@ -20,6 +22,7 @@ import type {
   OllamaAction,
   OllamaHost,
   Overview,
+  PowerScheduleView,
   ProvisionResult,
   RemoteSession,
   Sample,
@@ -157,10 +160,31 @@ export const api = {
       summary: MetricSummary
       processes: HostProcesses | null
     }>(`/api/hosts/${id}/metrics?minutes=${minutes}`),
-  /** Restart the machine. It goes down a few seconds after this returns.
-   *  There is no shutdown: HostMan cannot turn a host back on. */
-  reboot: (id: number) =>
-    request<{ status: string }>(`/api/hosts/${id}/reboot`, { method: 'POST' }),
+  /** Reboot the machine, shut it down or put it to sleep. It goes a few
+   *  seconds after this returns. Only a reboot is something HostMan sees the
+   *  end of. `wakeArmed` is whether a host going to sleep or off left its
+   *  network card listening for `wake`. The page asks the user first — this
+   *  is what a confirmed press calls. */
+  power: (id: number, action: PowerAction) =>
+    request<{ status: string; wakeArmed: boolean }>(`/api/hosts/${id}/power`, {
+      method: 'POST',
+      ...json({ action }),
+    }),
+  /** Send a wake-on-LAN packet for a host that is asleep or off, to the
+   *  address the probe recorded while it was up. The server sends it again
+   *  a few times over the next minute, for a host that had not finished
+   *  going down. Success means the first packet left, not that the machine
+   *  woke: its coming back online says that. */
+  wake: (id: number) => request<{ status: string; mac: string }>(`/api/hosts/${id}/wake`, { method: 'POST' }),
+  /** When a host sleeps and wakes by itself, if it does, and the clock those
+   *  times are read on: HostMan's, not the browser's. */
+  powerSchedule: (id: number) => request<PowerScheduleView>(`/api/hosts/${id}/power/schedule`),
+  /** Give a host a schedule, or replace the one it has. Refused for a host
+   *  that cannot sleep or that HostMan could not wake again. */
+  setPowerSchedule: (id: number, schedule: ScheduleDraft) =>
+    request<PowerScheduleView>(`/api/hosts/${id}/power/schedule`, { method: 'PUT', ...json(schedule) }),
+  /** Take a host's schedule away. */
+  removePowerSchedule: (id: number) => request<void>(`/api/hosts/${id}/power/schedule`, { method: 'DELETE' }),
 
   /** Why the machine restarted last: HostMan's best guess and the evidence
    *  behind it. One SSH session that reads wtmp, the previous boot's log and
@@ -238,6 +262,11 @@ export const api = {
     id: number,
     input: { source?: string; file?: string; name?: string; path?: string },
   ) => request<TorrentDaemon>(`/api/hosts/${id}/torrents`, { method: 'POST', ...json(input) }),
+  /** The same, for one of a list of picked files: it answers only that the
+   *  torrent was taken, without the look at the downloader that costs the host
+   *  a second session. The screen asks once when the list has gone. */
+  handTorrent: (id: number, input: { file: string; name: string }) =>
+    request<void>(`/api/hosts/${id}/torrents?status=none`, { method: 'POST', ...json(input) }),
   /** Runs the daemon, or acts on one torrent. Removing takes the files with it
    *  only when asked — that is the one thing here that cannot be undone.
    *  "update" starts updating deluge itself, which runs on for minutes after
@@ -251,6 +280,14 @@ export const api = {
     request<TorrentDaemon>(`/api/hosts/${id}/torrents/action`, {
       method: 'POST',
       ...json({ action, id: torrentId, data }),
+    }),
+  /** Removes a selection of torrents in one go, and their files with them only
+   *  when asked — the same choice a single removal offers, made once for all
+   *  of them. It answers once every one of them has left deluge's list. */
+  removeTorrentList: (id: number, torrentIds: string[], data = false) =>
+    request<TorrentDaemon>(`/api/hosts/${id}/torrents/action`, {
+      method: 'POST',
+      ...json({ action: 'remove', ids: torrentIds, data }),
     }),
   /** Tells deluge what to do with a torrent once it has finished: how much to
    *  upload before it stops seeding, and whether the entry then goes from the

@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/chinmay28/hostman/server/internal/store"
 )
@@ -1440,14 +1441,37 @@ exit 0
 // one thing here that needs root, and it goes through the same systemctl path
 // every other service on this host does.
 func (s *Service) AddTorrent(ctx context.Context, h *store.Host, in TorrentAdd) (*TorrentDaemon, error) {
+	if err := s.HandTorrent(ctx, h, in); err != nil {
+		return nil, err
+	}
+	return s.TorrentStatus(ctx, h)
+}
+
+// HandTorrent is AddTorrent without the look at the downloader afterwards: it
+// answers only whether deluge took the torrent.
+//
+// It exists for a list of picked files. Each one is a request of its own, the
+// status is a second SSH session and a second deluge-console on top of the
+// add, and a screen adding eleven torrents has no use for eleven pictures of
+// the queue — it asks once, at the end. Several of these may run at the same
+// time for the same host, which is why a picked file is written under a name
+// nothing else is using.
+func (s *Service) HandTorrent(ctx context.Context, h *store.Host, in TorrentAdd) error {
 	source, name, body, err := cleanTorrentAdd(in)
 	if err != nil {
-		return nil, err
+		return err
+	}
+	if name != "" {
+		token, err := newJobID()
+		if err != nil {
+			return err
+		}
+		name = incomingName(name, token)
 	}
 	path := ""
 	if strings.TrimSpace(in.Path) != "" {
 		if path, err = cleanDownloads(in.Path); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	script := fmt.Sprintf(torrentAddScript, torrentStateDir, consoleScript(), TorrentUnit)
@@ -1455,31 +1479,28 @@ func (s *Service) AddTorrent(ctx context.Context, h *store.Host, in TorrentAdd) 
 
 	res, err := s.run(ctx, h, cmd, body)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if res.ExitCode == 4 {
 		// The daemon is stopped. Start it, then say the same thing again.
 		if err := s.Act(ctx, h, TorrentUnit, "start"); err != nil {
-			return nil, err
+			return err
 		}
 		if res, err = s.run(ctx, h, cmd, body); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	switch res.ExitCode {
 	case 0:
 	case 3:
-		return nil, invalid("this host has no downloader set up yet")
+		return invalid("this host has no downloader set up yet")
 	case 8:
-		return nil, invalid("deluge is not installed on %s. Install it there first: apt install %s",
+		return invalid("deluge is not installed on %s. Install it there first: apt install %s",
 			h.Name, TorrentPackages)
 	default:
-		return nil, failure(res, "could not add the torrent on "+h.Name)
+		return failure(res, "could not add the torrent on "+h.Name)
 	}
-	if err := torrentConsoleError(res.Stdout); err != nil {
-		return nil, err
-	}
-	return s.TorrentStatus(ctx, h)
+	return torrentConsoleError(res.Stdout)
 }
 
 // torrentActionScript pauses, resumes or removes one torrent.
@@ -1572,6 +1593,108 @@ func (s *Service) TorrentAction(ctx context.Context, h *store.Host, id, action s
 		}
 	}
 	return daemon, nil
+}
+
+// MaxTorrentRemoval is how many torrents one request may remove. The ids reach
+// deluge on one command line, and a list longer than this is not a selection
+// somebody ticked — it is a mistake or an attack, and either way not one to
+// run.
+const MaxTorrentRemoval = 500
+
+// cleanTorrentIDs checks a selection of torrents and returns it lower-cased
+// with repeats gone, in the order given. Every id has to be an info hash: one
+// that is not could be anything, and they are all headed for a command line.
+func cleanTorrentIDs(ids []string) ([]string, error) {
+	seen := map[string]bool{}
+	clean := make([]string, 0, len(ids))
+	for _, id := range ids {
+		id = strings.ToLower(strings.TrimSpace(id))
+		if !torrentIDPattern.MatchString(id) {
+			return nil, invalid("that is not a torrent id")
+		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		clean = append(clean, id)
+	}
+	if len(clean) == 0 {
+		return nil, invalid("no torrent was named")
+	}
+	if len(clean) > MaxTorrentRemoval {
+		return nil, invalid("no more than %d torrents can be removed at once", MaxTorrentRemoval)
+	}
+	return clean, nil
+}
+
+// torrentsLeft is which of the torrents that were to go are still in the list.
+func torrentsLeft(ids []string, listed []Torrent) []string {
+	there := map[string]bool{}
+	for _, torrent := range listed {
+		there[torrent.ID] = true
+	}
+	var left []string
+	for _, id := range ids {
+		if there[id] {
+			left = append(left, id)
+		}
+	}
+	return left
+}
+
+// RemoveTorrents takes several torrents out of the list at once, and their
+// files with them only when asked — the same choice a single removal offers,
+// made once for the whole selection.
+//
+// They go in one deluge-console rather than one each: its rm takes any number
+// of ids, and a console is a second of python on the host before it has done
+// anything. As with one torrent, what deluge-console says about a removal is
+// worth nothing, so the list is read back and that is the answer. A long
+// selection can still be going when it is first read, so it is read again a
+// couple of times before anything still listed is called a failure.
+func (s *Service) RemoveTorrents(ctx context.Context, h *store.Host, ids []string, withData bool) (*TorrentDaemon, error) {
+	ids, err := cleanTorrentIDs(ids)
+	if err != nil {
+		return nil, err
+	}
+	script := fmt.Sprintf(torrentActionScript, torrentStateDir, consoleScript())
+	res, err := s.run(ctx, h, asUser(script, "", strings.Join(ids, " "), "remove", boolArg(withData)), "")
+	if err != nil {
+		return nil, err
+	}
+	if res.ExitCode == 3 {
+		return nil, invalid("this host has no downloader set up yet")
+	}
+	if res.ExitCode != 0 {
+		return nil, failure(res, "could not remove those torrents on "+h.Name)
+	}
+
+	var daemon *TorrentDaemon
+	var left []string
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(2 * time.Second):
+			}
+		}
+		if daemon, err = s.TorrentStatus(ctx, h); err != nil {
+			return nil, err
+		}
+		// A daemon that did not answer has not said the torrents are gone.
+		if left = torrentsLeft(ids, daemon.Torrents); len(left) == 0 && daemon.Asked {
+			return daemon, nil
+		}
+	}
+	if len(left) == 0 {
+		return nil, failure(res, "deluge did not say whether it removed those torrents on "+h.Name)
+	}
+	if len(ids) == 1 {
+		return nil, failure(res, "deluge did not remove that torrent on "+h.Name)
+	}
+	return nil, failure(res, fmt.Sprintf("deluge removed %d of %d torrents on %s and left the rest",
+		len(ids)-len(left), len(ids), h.Name))
 }
 
 // torrentSeedingScript tells deluge what to do with a torrent that has
@@ -1888,6 +2011,15 @@ func torrentFileName(name string) string {
 		name = "picked"
 	}
 	return name + ".torrent"
+}
+
+// incomingName makes a picked file's name on the host its own. Two files added
+// at the same moment can reduce to the same safe name — the same file name in
+// two folders, or two names that differ only in what was stripped — and each
+// add writes its file, hands it to deluge and removes it, so sharing a name
+// would have one add reading or deleting the other's torrent.
+func incomingName(name, token string) string {
+	return strings.TrimSuffix(name, ".torrent") + "-" + token + ".torrent"
 }
 
 // CleanTorrentSource checks a link. It reaches deluge as an argument, so a

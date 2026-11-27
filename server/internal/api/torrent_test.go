@@ -29,6 +29,8 @@ func TestTorrentRequestsAreValidatedBeforeConnecting(t *testing.T) {
 		{"a file that is not a torrent", "POST", "/api/hosts/%d/torrents",
 			`{"file":"` + base64.StdEncoding.EncodeToString([]byte("just a photo")) + `"}`},
 		{"a file that did not arrive intact", "POST", "/api/hosts/%d/torrents", `{"file":"!!!not base64!!!"}`},
+		{"a file that is not a torrent, without the status", "POST", "/api/hosts/%d/torrents?status=none",
+			`{"file":"` + base64.StdEncoding.EncodeToString([]byte("just a photo")) + `"}`},
 		{"a folder that is not a path", "POST", "/api/hosts/%d/torrents",
 			`{"source":"magnet:?xt=urn:btih:` + strings.Repeat("a", 40) + `","path":"srv/media"}`},
 		{"an unknown field", "POST", "/api/hosts/%d/torrents", `{"source":"magnet:?xt=urn:btih:` + strings.Repeat("a", 40) + `","seed":true}`},
@@ -44,6 +46,13 @@ func TestTorrentRequestsAreValidatedBeforeConnecting(t *testing.T) {
 		{"an id that is not a hash", "POST", "/api/hosts/%d/torrents/action", `{"action":"pause","id":"all"}`},
 		{"an id carrying a command", "POST", "/api/hosts/%d/torrents/action",
 			`{"action":"remove","id":"` + strings.Repeat("a", 40) + ` ; reboot"}`},
+
+		{"a selection with a name in it", "POST", "/api/hosts/%d/torrents/action",
+			`{"action":"remove","ids":["` + strings.Repeat("a", 40) + `","all"]}`},
+		{"a selection carrying a command", "POST", "/api/hosts/%d/torrents/action",
+			`{"action":"remove","ids":["` + strings.Repeat("a", 40) + ` ; reboot"]}`},
+		{"one torrent and a selection at once", "POST", "/api/hosts/%d/torrents/action",
+			`{"action":"remove","id":"` + strings.Repeat("a", 40) + `","ids":["` + strings.Repeat("b", 40) + `"]}`},
 
 		{"a seeding ratio below anything useful", "POST", "/api/hosts/%d/torrents/action", `{"action":"seeding","ratio":0.01}`},
 		{"a seeding ratio nobody meant", "POST", "/api/hosts/%d/torrents/action", `{"action":"seeding","ratio":1000}`},

@@ -1,7 +1,13 @@
 package api
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"github.com/chinmay28/hostman/server/internal/hostops"
+	"github.com/chinmay28/hostman/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/wol"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -139,8 +145,8 @@ func TestServiceRequestsValidateTheUnitName(t *testing.T) {
 	}
 }
 
-// HostMan asks systemd to start, stop and restart things. Masking a unit,
-// isolating a target or powering the machine off from here are not on offer,
+// HostMan asks systemd to start, stop and restart things. Masking a unit
+// or isolating a target is not on offer, power has an endpoint of its own,
 // and the API is where that stops rather than the UI.
 func TestServiceActionsAreLimitedToWhatTheUIOffers(t *testing.T) {
 	_, h := testServer(t, "")
@@ -155,16 +161,35 @@ func TestServiceActionsAreLimitedToWhatTheUIOffers(t *testing.T) {
 	}
 }
 
-// Restarting is the only power state there is: a host can be brought back from
-// a reboot, and HostMan cannot bring one back from off.
-func TestThereIsNoShutdownRoute(t *testing.T) {
+// Reboot, shutdown and sleep are everything a host's power can be asked to do.
+// Anything else is refused here, before the host is dialled — and the routes
+// that an older HostMan had, or that a guess might try, do not exist.
+func TestPowerActionsAreLimitedToTheThree(t *testing.T) {
 	_, h := testServer(t, "")
 	id := newHost(t, h)
 
-	for _, path := range []string{"/api/hosts/%d/power", "/api/hosts/%d/shutdown"} {
-		w := do(t, h, "POST", fmt.Sprintf(path, id), `{"action":"shutdown"}`)
+	for _, body := range []string{
+		``, `{}`, `{"action":""}`, `{"action":"halt"}`, `{"action":"hibernate"}`,
+		`{"action":"Reboot"}`, `{"action":"sleep;reboot"}`, `{"action":"reboot","force":true}`,
+	} {
+		w := do(t, h, "POST", fmt.Sprintf("/api/hosts/%d/power", id), body)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("POST power %s = %d, want 400 — it should never reach the host", body, w.Code)
+		}
+	}
+	for _, path := range []string{"/api/hosts/%d/reboot", "/api/hosts/%d/shutdown", "/api/hosts/%d/sleep"} {
+		w := do(t, h, "POST", fmt.Sprintf(path, id), "")
 		if w.Code != http.StatusNotFound {
-			t.Errorf("POST %s = %d, want 404 — there is no such endpoint", path, w.Code)
+			t.Errorf("POST %s = %d, want 404 — power has one endpoint", path, w.Code)
+		}
+	}
+}
+
+// Every action has something to say for itself once the host has gone.
+func TestEveryPowerActionHasANotice(t *testing.T) {
+	for _, a := range []hostops.PowerAction{hostops.PowerReboot, hostops.PowerShutdown, hostops.PowerSleep} {
+		if powerNotice[a] == "" {
+			t.Errorf("no notice for %q", a)
 		}
 	}
 }
@@ -174,7 +199,10 @@ func TestThereIsNoShutdownRoute(t *testing.T) {
 func TestHostOperationsOnAMissingHost(t *testing.T) {
 	_, h := testServer(t, "")
 	cases := []struct{ method, path, body string }{
-		{"POST", "/api/hosts/999/reboot", ""},
+		{"POST", "/api/hosts/999/power", `{"action":"reboot"}`},
+		{"POST", "/api/hosts/999/power", `{"action":"shutdown"}`},
+		{"POST", "/api/hosts/999/power", `{"action":"sleep"}`},
+		{"POST", "/api/hosts/999/wake", ""},
 		{"GET", "/api/hosts/999/boot", ""},
 		{"POST", "/api/hosts/999/boot/journal", ""},
 		{"GET", "/api/hosts/999/cron", ""},
@@ -217,8 +245,11 @@ func TestHostOperationsNeedTheSession(t *testing.T) {
 			t.Errorf("GET %s without a session = %d, want 401", path, w.Code)
 		}
 	}
-	if w := do(t, h, "POST", "/api/hosts/1/reboot", ""); w.Code != http.StatusUnauthorized {
-		t.Errorf("reboot without a session = %d, want 401", w.Code)
+	if w := do(t, h, "POST", "/api/hosts/1/power", `{"action":"shutdown"}`); w.Code != http.StatusUnauthorized {
+		t.Errorf("shutting a host down without a session = %d, want 401", w.Code)
+	}
+	if w := do(t, h, "POST", "/api/hosts/1/wake", ""); w.Code != http.StatusUnauthorized {
+		t.Errorf("waking a host without a session = %d, want 401", w.Code)
 	}
 	if w := do(t, h, "POST", "/api/hosts/1/boot/journal", ""); w.Code != http.StatusUnauthorized {
 		t.Errorf("turning on persistent logging without a session = %d, want 401", w.Code)
@@ -233,5 +264,200 @@ func TestHostOperationsNeedTheSession(t *testing.T) {
 	}
 	if w := do(t, h, "DELETE", "/api/hosts/1/services?name=photos.service", ""); w.Code != http.StatusUnauthorized {
 		t.Errorf("deleting a service without a session = %d, want 401", w.Code)
+	}
+}
+
+// recordingWaker stands in for the network: it remembers who it was asked to
+// wake, and fails where told to.
+type recordingWaker struct {
+	woke      []string
+	cancelled []string
+	err       error
+}
+
+func (r *recordingWaker) Cancel(mac net.HardwareAddr) {
+	r.cancelled = append(r.cancelled, mac.String())
+}
+
+func (r *recordingWaker) Wake(_ context.Context, mac net.HardwareAddr) error {
+	r.woke = append(r.woke, mac.String())
+	return r.err
+}
+
+// A wake packet goes to the address the probe recorded, and the host is left
+// as it was: sending a packet is not the same as the machine coming back.
+func TestWakeSendsToTheAddressTheProbeRecorded(t *testing.T) {
+	s, h := testServer(t, "")
+	waker := &recordingWaker{}
+	s.Wake = waker
+	id := newHost(t, h)
+	ctx := context.Background()
+	if err := s.DB.MarkHostOnline(ctx, id, store.HostFacts{Hostname: "tower", WakeMAC: "a8:a1:59:0c:1f:2e"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DB.MarkHostSentDown(ctx, id, "put to sleep from HostMan"); err != nil {
+		t.Fatal(err)
+	}
+
+	w := do(t, h, "POST", fmt.Sprintf("/api/hosts/%d/wake", id), "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("wake = %d %s, want 200", w.Code, w.Body)
+	}
+	if len(waker.woke) != 1 || waker.woke[0] != "a8:a1:59:0c:1f:2e" {
+		t.Errorf("woke %v, want the host's recorded address once", waker.woke)
+	}
+	got, _ := s.DB.GetHost(ctx, id)
+	if got.Status != store.StatusOffline {
+		t.Errorf("status = %q after a wake packet, want it left offline until the host answers", got.Status)
+	}
+}
+
+// With no address there is nothing to send, and saying so is the caller's
+// answer — not a packet to nowhere.
+func TestWakeNeedsARecordedAddress(t *testing.T) {
+	s, h := testServer(t, "")
+	waker := &recordingWaker{}
+	s.Wake = waker
+	id := newHost(t, h)
+
+	w := do(t, h, "POST", fmt.Sprintf("/api/hosts/%d/wake", id), "")
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("wake with no address = %d, want 400", w.Code)
+	}
+	if len(waker.woke) != 0 {
+		t.Errorf("a packet was sent anyway: %v", waker.woke)
+	}
+}
+
+// The machine HostMan runs on cannot be woken by HostMan.
+func TestWakeRefusesTheMachineHostManRunsOn(t *testing.T) {
+	s, h := testServer(t, "")
+	waker := &recordingWaker{}
+	s.Wake = waker
+	id := newHost(t, h)
+	facts := store.HostFacts{Hostname: "tower", WakeMAC: "a8:a1:59:0c:1f:2e", IsSelf: true}
+	if err := s.DB.MarkHostOnline(context.Background(), id, facts); err != nil {
+		t.Fatal(err)
+	}
+	if w := do(t, h, "POST", fmt.Sprintf("/api/hosts/%d/wake", id), ""); w.Code != http.StatusBadRequest {
+		t.Fatalf("waking the home host = %d, want 400", w.Code)
+	}
+	if len(waker.woke) != 0 {
+		t.Errorf("a packet was sent anyway: %v", waker.woke)
+	}
+}
+
+// A packet that could not leave is this machine's network failing, and is
+// reported as such.
+func TestWakeReportsAPacketThatCouldNotBeSent(t *testing.T) {
+	s, h := testServer(t, "")
+	s.Wake = &recordingWaker{err: errors.New("network is unreachable")}
+	id := newHost(t, h)
+	if err := s.DB.MarkHostOnline(context.Background(), id, store.HostFacts{WakeMAC: "a8:a1:59:0c:1f:2e"}); err != nil {
+		t.Fatal(err)
+	}
+	w := do(t, h, "POST", fmt.Sprintf("/api/hosts/%d/wake", id), "")
+	if w.Code != http.StatusBadGateway || !strings.Contains(w.Body.String(), "unreachable") {
+		t.Fatalf("wake = %d %s, want 502 with the reason", w.Code, w.Body)
+	}
+}
+
+// A host that accepts a power action is offline from that moment, says why,
+// and goes on saying why when the poller's next attempt fails — which is what
+// used to replace the notice with a dial error some twenty seconds later.
+func TestAHostSentDownKeepsItsNoticeThroughAFailedPoll(t *testing.T) {
+	for _, action := range []hostops.PowerAction{hostops.PowerReboot, hostops.PowerShutdown, hostops.PowerSleep} {
+		t.Run(string(action), func(t *testing.T) {
+			s, h := testServer(t, "")
+			s.Wake = &recordingWaker{}
+			id := newHost(t, h)
+			ctx := context.Background()
+			if err := s.DB.MarkHostOnline(ctx, id, store.HostFacts{Hostname: "tower"}); err != nil {
+				t.Fatal(err)
+			}
+			host, _ := s.DB.GetHost(ctx, id)
+
+			notice := s.hostSentDown(ctx, host, action)
+			if notice != powerNotice[action] {
+				t.Fatalf("notice = %q, want %q", notice, powerNotice[action])
+			}
+			// What the poller records when its dial goes unanswered.
+			if err := s.DB.MarkHostFailed(ctx, id, store.StatusOffline, "dial tcp 192.0.2.7:22: i/o timeout"); err != nil {
+				t.Fatal(err)
+			}
+			got := decode[store.Host](t, do(t, h, "GET", fmt.Sprintf("/api/hosts/%d", id), ""))
+			if got.Status != store.StatusOffline || got.LastError != notice {
+				t.Errorf("host reads %s %q, want offline with %q", got.Status, got.LastError, notice)
+			}
+		})
+	}
+}
+
+// Wake packets still queued from an earlier press would undo a sleep or a
+// shutdown seconds after it happened, so sending a host down drops them.
+func TestSendingAHostDownCancelsItsQueuedWakePackets(t *testing.T) {
+	s, h := testServer(t, "")
+	waker := &recordingWaker{}
+	s.Wake = waker
+	id := newHost(t, h)
+	ctx := context.Background()
+	if err := s.DB.MarkHostOnline(ctx, id, store.HostFacts{WakeMAC: "a8:a1:59:0c:1f:2e"}); err != nil {
+		t.Fatal(err)
+	}
+	host, _ := s.DB.GetHost(ctx, id)
+
+	s.hostSentDown(ctx, host, hostops.PowerSleep)
+	if len(waker.cancelled) != 1 || waker.cancelled[0] != "a8:a1:59:0c:1f:2e" {
+		t.Errorf("cancelled %v, want the host's recorded address once", waker.cancelled)
+	}
+}
+
+// A host with no recorded address has nothing queued, and going down is not
+// held up by that.
+func TestSendingAHostDownWithoutAWakeAddress(t *testing.T) {
+	s, h := testServer(t, "")
+	waker := &recordingWaker{}
+	s.Wake = waker
+	id := newHost(t, h)
+	ctx := context.Background()
+	host, _ := s.DB.GetHost(ctx, id)
+
+	s.hostSentDown(ctx, host, hostops.PowerShutdown)
+	if len(waker.cancelled) != 0 {
+		t.Errorf("cancelled %v for a host with no address", waker.cancelled)
+	}
+	if got, _ := s.DB.GetHost(ctx, id); got.Status != store.StatusOffline {
+		t.Errorf("status = %q, want offline", got.Status)
+	}
+}
+
+// Removing a host drops the wake packets queued for it along with everything
+// else held in memory about it.
+func TestDeletingAHostCancelsItsQueuedWakePackets(t *testing.T) {
+	s, h := testServer(t, "")
+	waker := &recordingWaker{}
+	s.Wake = waker
+	id := newHost(t, h)
+	if err := s.DB.MarkHostOnline(context.Background(), id, store.HostFacts{WakeMAC: "a8:a1:59:0c:1f:2e"}); err != nil {
+		t.Fatal(err)
+	}
+	if w := do(t, h, "DELETE", fmt.Sprintf("/api/hosts/%d", id), ""); w.Code != http.StatusNoContent {
+		t.Fatalf("delete = %d %s, want 204", w.Code, w.Body)
+	}
+	if len(waker.cancelled) != 1 || waker.cancelled[0] != "a8:a1:59:0c:1f:2e" {
+		t.Errorf("cancelled %v, want the host's recorded address once", waker.cancelled)
+	}
+}
+
+// Left alone, the server wakes with the real thing, and it is one thing: the
+// packets a Wake queued have to be there for a later Cancel to find.
+func TestTheDefaultWakerIsOneRepeater(t *testing.T) {
+	s, _ := testServer(t, "")
+	first, ok := s.waker().(*wol.Repeater)
+	if !ok {
+		t.Fatalf("default waker is %T, want *wol.Repeater", s.waker())
+	}
+	if s.waker() != Waker(first) {
+		t.Error("each call built a new waker")
 	}
 }

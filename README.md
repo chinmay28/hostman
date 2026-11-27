@@ -537,7 +537,8 @@ server itself only ever listens on the host's loopback interface — the one doo
 in is the noVNC port, which is `6080` unless you change it.
 
 **Torrents** hands a torrent to the host and lets it do the downloading. Paste a
-magnet link, or pick a `.torrent` file on the phone, and the files land on the
+magnet link, or pick `.torrent` files on the phone, or a whole folder of them — each pick adds to a list,
+and the whole list is added at once, a torrent per file — and the files land on the
 host's own disk. That is the whole point of it: a torrent opened on a phone
 downloads over the phone's connection, onto the phone's storage, and then has to
 be moved to the machine that was always supposed to have it. The phone is the
@@ -824,7 +825,54 @@ what validates it: a crontab it refuses to parse is not installed, the old one
 stays, and its complaint is what you see. A user with no crontab yet is an empty
 editor, not an error.
 
-**Power** reboots or shuts the machine down. The command is scheduled a few
+**Power** reboots the machine, shuts it down or puts it to sleep, and asks
+before each: every one of them takes the host away, and only a reboot brings it
+back by itself — HostMan cannot press a power button or wake a sleeping
+machine. Sleep is offered where the kernel lists a suspend state in
+`/sys/power/state`, which an x86 PC does and a Raspberry Pi does not; elsewhere
+the button is there but disabled, and says why.
+
+Once a host has stopped answering, the same card offers **Wake**, which sends a
+wake-on-LAN packet to the hardware address the probe recorded while the host
+was up — that of the wired card carrying its default route. A host on its way
+to sleep or off has wake-on-LAN switched on for that card first (`ethtool`,
+where it is installed), since most cards forget the setting, and the page says
+whether that took. The packet is sent again a few times over the following
+minute, because Wake appears the moment a host accepts a sleep or a shutdown —
+seconds before the machine has gone — and a card whose machine is still up
+ignores it; putting the host down again from HostMan cancels what is left. A
+packet sent is not a machine woken: it needs a wired card,
+wake-on-LAN enabled in the firmware — which HostMan can neither see nor change
+— and HostMan on the same network, because the packet is a broadcast that
+routers do not pass on. So a HostMan on a Pi at home wakes the PC beside it,
+and one reached over a VPN still does, but nothing wakes the machine HostMan
+itself runs on. The host shows as online again when it answers; until then it
+goes on saying how it went — "put to sleep from HostMan" — rather than the
+connection error its silence produces.
+
+Below Power, **Sleep and wake schedule** puts the host to sleep and wakes it at
+set times: a sleep time, a wake time and the days of the week, set, changed or
+removed from the card. One schedule a host. It does what the buttons do, at the
+minute — the sleep is the Sleep button, the wake is the Wake button — and the
+card says what it will do next and what it last did, with the reason where it
+could not. Three things to know about it:
+
+- **The times are on HostMan's clock**, not the host's and not your phone's;
+  the form says what that clock reads. On the Android app's own server that is
+  the phone's zone (`HOSTMAN_TZ`).
+- **Each time is taken on its own day.** "23:00 and 07:00 on weekdays" sleeps
+  the host on those five nights and wakes it on those five mornings, so it
+  sleeps from Friday night to Monday morning.
+- **It is offered only where both halves can work**: a host that can sleep, has
+  a wired card HostMan has seen, and is not the machine HostMan runs on. A
+  wake still depends on wake-on-LAN in the firmware, as the button does.
+
+HostMan has to be running at the minute. An event it missed by more than five
+minutes — it was off, or updating — is dropped rather than run late, a host
+that is not answering is not asked to sleep, and one already awake is not sent
+a wake packet.
+
+The power command is scheduled a few
 seconds ahead and detached, so HostMan gets a clean answer instead of the
 connection dying mid-command and having to guess what that meant — the same
 reason a self-update runs detached. The host is marked offline as soon as it
@@ -1099,7 +1147,11 @@ Quoting is tested the same way — every path a person could type is handed to
 | `POST`   | `/api/hosts/{id}/test`              | check reachability, key auth, sudo   |
 | `POST`   | `/api/hosts/{id}/provision`         | one-time password setup, not stored  |
 | `GET`    | `/api/hosts/{id}/metrics`           | samples, `?minutes=` up to 1440, the day's ranges, and the top five consumers of CPU and memory |
-| `POST`   | `/api/hosts/{id}/reboot`            | restart the machine (there is no shutdown) |
+| `POST`   | `/api/hosts/{id}/power`             | `{action}`: `reboot`, `shutdown` or `sleep` the machine |
+| `POST`   | `/api/hosts/{id}/wake`              | send a wake-on-LAN packet to a host that is asleep or off |
+| `GET`    | `/api/hosts/{id}/power/schedule`    | the host's sleep and wake schedule (`schedule` is `null` where it has none), with what it does next and did last, and HostMan's own `clock` and `zone` |
+| `PUT`    | `/api/hosts/{id}/power/schedule`    | `{"sleepAt":"23:00","wakeAt":"07:00","days":[1,2,3,4,5]}`: set or change it; days are 0 (Sunday) to 6 |
+| `DELETE` | `/api/hosts/{id}/power/schedule`    | remove it |
 | `GET`    | `/api/hosts/{id}/boot`              | why it last restarted, and the evidence |
 | `POST`   | `/api/hosts/{id}/boot/journal`      | keep the journal across restarts, so the next one is explainable |
 | `GET`    | `/api/hosts/{id}/cron`              | a crontab, `?user=` (default: the SSH user) |
@@ -1140,8 +1192,8 @@ Quoting is tested the same way — every path a person could type is handed to
 | `DELETE` | `/api/hosts/{id}/remote`            | remove it, `?purge=true` to delete the browser profile too |
 | `POST`   | `/api/hosts/{id}/remote/action`     | start it (with the page to open) or stop it |
 | `GET`    | `/api/hosts/{id}/torrents`          | the downloader: whether deluge is installed and new enough, what is set up, and what it is downloading |
-| `POST`   | `/api/hosts/{id}/torrents`          | add one: a magnet link, the address of a `.torrent`, or the file itself, base64 |
-| `POST`   | `/api/hosts/{id}/torrents/action`   | start or stop the daemon; pause, resume or remove a torrent (`"data":true` deletes what it downloaded); `"seeding"` with a `ratio` and `remove` to set what happens after a torrent finishes; `"limit"` to set how many run at once; or `"update"` to give the daemon a deluge of at least 2.2 (detached; followed through `GET`) |
+| `POST`   | `/api/hosts/{id}/torrents`          | add one: a magnet link, the address of a `.torrent`, or the file itself, base64; `?status=none` answers `204` without reading the downloader back, for one of many |
+| `POST`   | `/api/hosts/{id}/torrents/action`   | start or stop the daemon; pause, resume or remove a torrent (`"data":true` deletes what it downloaded), or remove several with `"ids":[…]` in place of `"id"`; `"seeding"` with a `ratio` and `remove` to set what happens after a torrent finishes; `"limit"` to set how many run at once; or `"update"` to give the daemon a deluge of at least 2.2 (detached; followed through `GET`) |
 | `POST`   | `/api/hosts/{id}/torrents/setup`    | write the daemon onto the host, or change where it downloads |
 | `DELETE` | `/api/hosts/{id}/torrents/setup`    | take it off; the host's deluge and the downloaded files stay |
 | `GET`    | `/api/hosts/{id}/vms`               | the SSH user's VirtualBox machines, with their state; `installed` says whether VirtualBox is there at all |
@@ -1187,6 +1239,10 @@ server/
   internal/hostops/  managing a host: files, services, crontab, power state,
                      the remote browser session, the torrent downloader, and
                      guessing why it last restarted
+  internal/wol/      wake-on-LAN: the magic packet, and sending it again for a
+                     machine that had not finished going down
+  internal/powersched/ a host's sleep and wake schedule: the arithmetic, and
+                     the loop that acts on it
   internal/shell/    login shells held open between visits, and their scrollback
   internal/claudecli/ the Claude Code CLI's streaming protocol: the command line,
                      what goes in, and what comes out as events

@@ -3,15 +3,17 @@ package api
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/chinmay28/hostman/server/internal/hostops"
 	"github.com/chinmay28/hostman/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/wol"
 )
 
-// Managing a host — its files, its services, its crontab, restarting it — is
+// Managing a host — its files, its services, its crontab, its power — is
 // work HostMan asks the host to do. So the failures worth telling apart are
 // "you asked for something impossible" (400) and "the host refused" (502): a
 // missing file or a read-only filesystem is not a bug in this API, and saying
@@ -55,34 +57,173 @@ func (s *Server) writeOpError(w http.ResponseWriter, err error, action string) {
 	}
 }
 
-// --- reboot ---
+// --- power ---
 
-// handleHostReboot restarts a host. The host is marked offline straight away:
-// it is about to go, and a UI that keeps calling it online until the next poll
-// fails would be lying for half a minute.
+// powerNotice is what a host's status says once it has accepted a power
+// action, and goes on saying while it does not answer: the store keeps it
+// through the poller's failures (store.MarkHostSentDown), which would
+// otherwise replace it with a dial error. Only the first of them is a
+// promise: HostMan can watch a machine come back from a reboot, and cannot
+// bring one back from off or wake one that is asleep.
+var powerNotice = map[hostops.PowerAction]string{
+	hostops.PowerReboot:   "rebooting — waiting for it to come back",
+	hostops.PowerShutdown: "shut down from HostMan — it stays off until it is turned on or woken",
+	hostops.PowerSleep:    "put to sleep from HostMan — it stays offline until something wakes it",
+}
+
+// handleHostPower reboots a host, shuts it down or puts it to sleep. The host
+// is marked offline straight away: it is about to go, and a UI that keeps
+// calling it online until the next poll fails would be lying for half a minute.
 //
-// Restarting is the only power state offered. HostMan can watch a machine come
-// back from a reboot; it cannot bring one back from off.
-func (s *Server) handleHostReboot(w http.ResponseWriter, r *http.Request) {
+// The action is checked here, before the host is looked up or dialled, so
+// nothing but the three ever reaches a machine. Asking whether the user meant
+// it is the UI's job; this is the API a confirmed press arrives at.
+func (s *Server) handleHostPower(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Action string `json:"action"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	action, ok := hostops.ParsePowerAction(req.Action)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "action must be reboot, shutdown or sleep")
+		return
+	}
 	h, err := s.hostFromPath(r)
 	if err != nil {
-		s.writeStoreError(w, err, "reboot")
+		s.writeStoreError(w, err, "power")
 		return
 	}
 	ctx, cancel := opContext(r)
 	defer cancel()
 
-	if err := s.Ops.Reboot(ctx, h); err != nil {
-		s.writeOpError(w, err, "reboot host")
+	wakeArmed, err := s.Ops.Power(ctx, h, action)
+	if err != nil {
+		s.writeOpError(w, err, string(action)+" host")
 		return
 	}
-	s.Log.Info("api: rebooting host", "host", h.Name)
+	s.Log.Info("api: host power", "host", h.Name, "action", string(action))
 
-	const reason = "rebooting — waiting for it to come back"
-	if err := s.DB.MarkHostFailed(r.Context(), h.ID, store.StatusOffline, reason); err != nil {
+	writeJSON(w, http.StatusOK, powerResult{Status: s.hostSentDown(r.Context(), h, action), WakeArmed: wakeArmed})
+}
+
+// hostSentDown records that a host accepted a power action, and returns the
+// notice it now carries. Two things follow from the host having agreed to go:
+// it is offline from now, with the notice as the reason for as long as it
+// stays silent; and any wake packets still queued for it from an earlier Wake
+// are dropped, since they would bring it straight back.
+func (s *Server) hostSentDown(ctx context.Context, h *store.Host, action hostops.PowerAction) string {
+	if mac, err := wol.ParseMAC(h.WakeMAC); err == nil {
+		s.waker().Cancel(mac)
+	}
+	notice := powerNotice[action]
+	if err := s.DB.MarkHostSentDown(ctx, h.ID, notice); err != nil {
 		s.Log.Error("api: mark host going down", "host", h.Name, "err", err)
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": reason})
+	return notice
+}
+
+// powerResult is what a host said on its way down.
+type powerResult struct {
+	Status string `json:"status"`
+	// WakeArmed is whether the host's network card was left listening for a
+	// wake-on-LAN packet. Never true after a reboot, which needs none.
+	WakeArmed bool `json:"wakeArmed"`
+}
+
+// --- wake ---
+
+// Waker wakes the machine with one hardware address. wol.Repeater is the real
+// one: Wake reports on the first packet and more follow by themselves, for a
+// machine that had not finished going down when it was asked.
+type Waker interface {
+	Wake(ctx context.Context, mac net.HardwareAddr) error
+	// Cancel drops whatever Wake still means to send to mac.
+	Cancel(mac net.HardwareAddr)
+}
+
+// waker is s.Wake, or the real thing where that was left nil. The real thing
+// holds the packets it still owes, so there is one for the server's lifetime.
+func (s *Server) waker() Waker {
+	if s.Wake != nil {
+		return s.Wake
+	}
+	s.wakeOnce.Do(func() {
+		s.wakeDefault = &wol.Repeater{OnRepeat: func(mac net.HardwareAddr, err error) {
+			if err != nil {
+				s.Log.Debug("api: repeat wake packet", "mac", mac.String(), "err", err)
+			}
+		}}
+	})
+	return s.wakeDefault
+}
+
+// handleHostWake sends a wake-on-LAN packet for a host that is asleep or off.
+// Nothing is dialled: the host is the one thing that cannot be asked, which is
+// why the address used is the one the probe recorded while it was up.
+//
+// A 200 means the packet left this machine, and that it will be sent again a
+// few times over the next minute (wol.Repeats): the button appears the moment
+// a host accepts a sleep or a shutdown, seconds before the machine has gone,
+// and a packet that arrives in between wakes nothing. Whether the host woke is
+// for the poller to find out — it needs a wired card with wake-on-LAN enabled in its
+// firmware, on the same network as HostMan — so the host's status is left
+// exactly as it was.
+func (s *Server) handleHostWake(w http.ResponseWriter, r *http.Request) {
+	h, err := s.hostFromPath(r)
+	if err != nil {
+		s.writeStoreError(w, err, "wake")
+		return
+	}
+	ctx, cancel := opContext(r)
+	defer cancel()
+	mac, err := s.wakeHost(ctx, h)
+	if errors.As(err, new(noWake)) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err != nil {
+		s.Log.Debug("api: wake host", "host", h.Name, "err", err)
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	s.Log.Info("api: sent wake packet", "host", h.Name, "mac", mac.String())
+	writeJSON(w, http.StatusOK, map[string]string{"status": "sent", "mac": mac.String()})
+}
+
+// noWake is why there is no point sending a packet for a host, as opposed to
+// a packet that could not be sent.
+type noWake string
+
+func (e noWake) Error() string { return string(e) }
+
+// cannotWake is why HostMan has nothing to send a host, or nil where it has.
+// It is the one statement of who can be woken: the Wake button and the
+// schedule both ask it.
+func cannotWake(h *store.Host) error {
+	if h.IsSelf {
+		return noWake("HostMan runs on " + h.Name + ": if it were asleep, this would be too")
+	}
+	if _, err := wol.ParseMAC(h.WakeMAC); err != nil {
+		return noWake("HostMan has not seen a wired network card on " + h.Name + ", so it has no address to send a wake packet to")
+	}
+	return nil
+}
+
+// wakeHost sends the wake packet for a host and returns the address it went
+// to. An error is a noWake where there was nothing to send, and the
+// network's own where the packet could not leave.
+func (s *Server) wakeHost(ctx context.Context, h *store.Host) (net.HardwareAddr, error) {
+	if err := cannotWake(h); err != nil {
+		return nil, err
+	}
+	mac, _ := wol.ParseMAC(h.WakeMAC)
+	if err := s.waker().Wake(ctx, mac); err != nil {
+		return nil, err
+	}
+	return mac, nil
 }
 
 // --- why it restarted ---

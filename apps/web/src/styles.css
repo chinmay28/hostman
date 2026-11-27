@@ -1246,6 +1246,17 @@ button.block {
   margin-bottom: 0;
 }
 
+/* ---------- choosing torrents ---------- */
+
+/* The count and the button that acts on it stay under the header while the
+   list scrolls beneath them: a torrent's card is most of a screen tall, so a
+   bar that scrolled away would be a scroll back up after every few ticks. */
+.select-bar {
+  position: sticky;
+  top: calc(env(safe-area-inset-top) + 62px);
+  z-index: 10;
+}
+
 /* ---------- uploads ---------- */
 
 /* The pickers are buttons; the inputs behind them stay out of sight, because

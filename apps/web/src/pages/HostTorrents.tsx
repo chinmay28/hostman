@@ -16,17 +16,28 @@ import {
   useLoader,
 } from '../components/ui'
 import { bytes, uptime } from '../lib/format'
+import {
+  addPicked,
+  mergePicks,
+  torrentsIn,
+  troubles,
+  type TorrentProgress,
+} from '../lib/torrentPick'
+import {
+  NOTHING,
+  chosen,
+  downloaded,
+  everything,
+  prune,
+  toggle,
+  type Selection,
+} from '../lib/torrentSelect'
 import type { Torrent, TorrentDaemon, TorrentSeeding } from '../types'
 
 /** What a host without deluge needs run on it once. HostMan will not do it: a
  *  BitTorrent client is a decision about what a machine does on a network, and
  *  on plenty of machines somebody has already made it. */
 const INSTALL = 'sudo apt install -y deluged deluge-console'
-
-/** The largest file worth carrying to a host, matching what the server will
- *  accept. A torrent file is a list of hashes: a few kilobytes is ordinary and
- *  a megabyte is a very large one. */
-const MAX_TORRENT_BYTES = 4 * 1024 * 1024
 
 /** How often to ask while something is downloading. Every other host screen
  *  answers when you ask it to, because each answer is an SSH session — but a
@@ -82,7 +93,12 @@ export default function HostTorrents() {
 
   const [busy, setBusy] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
-  const [removing, setRemoving] = useState<Torrent | null>(null)
+  const [adding, setAdding] = useState<TorrentProgress | null>(null)
+  /** What the sheet is asking about: one torrent from its own button, or a
+   *  selection of several. */
+  const [removing, setRemoving] = useState<Torrent[] | null>(null)
+  /** Null until Select is tapped; then the torrents ticked so far. */
+  const [selection, setSelection] = useState<Selection | null>(null)
   const [dropping, setDropping] = useState(false)
   const [folder, setFolder] = useState('')
 
@@ -152,12 +168,40 @@ export default function HostTorrents() {
   const start = () => act('start', () => api.torrentAction(hostId, 'start'))
   const update = () => act('update', () => api.torrentAction(hostId, 'update'))
   const stop = () => act('stop', () => api.torrentAction(hostId, 'stop'))
-  const add = (input: { source?: string; file?: string; name?: string }) =>
-    act('add', () => api.addTorrent(hostId, input))
-  const remove = (torrent: Torrent, data: boolean) =>
+  const add = (source: string) => act('add', () => api.addTorrent(hostId, { source }))
+  // Picked files go one request each, a few at a time, so one that deluge
+  // will not take costs that file and not the rest. What went is shown by the list; what did not
+  // is said, by name.
+  const addFiles = async (files: File[]) => {
+    setBusy('add')
+    setFailure(null)
+    try {
+      const outcomes = await addPicked(
+        files,
+        async (file) => new Uint8Array(await file.arrayBuffer()),
+        (file, base64) => api.handTorrent(hostId, { file: base64, name: file.name }),
+        setAdding,
+      )
+      setFailure(troubles(outcomes))
+      if (outcomes.some((o) => o.state === 'added')) reload()
+    } finally {
+      setAdding(null)
+      setBusy(null)
+    }
+  }
+  // One torrent or a selection, it is one request: deluge is handed every id
+  // at once, and answers when the last of them has left its list.
+  const remove = (gone: Torrent[], data: boolean) =>
     act('remove', async () => {
-      await api.torrentAction(hostId, 'remove', torrent.id, data)
-      setRemoving(null)
+      try {
+        if (gone.length === 1) await api.torrentAction(hostId, 'remove', gone[0].id, data)
+        else await api.removeTorrentList(hostId, gone.map((t) => t.id), data)
+        setSelection(null)
+      } finally {
+        // Some may have gone even where not all did, and the list says which.
+        setRemoving(null)
+        reload()
+      }
     })
   const drop = () =>
     act('drop', async () => {
@@ -215,7 +259,14 @@ export default function HostTorrents() {
                 </Card>
               )}
 
-              <AddTorrent daemon={daemon} busy={busy} onAdd={add} onFail={setFailure} />
+              <AddTorrent
+                daemon={daemon}
+                busy={busy}
+                adding={adding}
+                onAdd={add}
+                onFiles={addFiles}
+                onFail={setFailure}
+              />
 
               {daemon.trouble && !stale && (
                 <Banner tone="bad">
@@ -234,7 +285,10 @@ export default function HostTorrents() {
                 busy={busy}
                 onPause={(t) => act('pause', () => api.torrentAction(hostId, 'pause', t.id))}
                 onResume={(t) => act('resume', () => api.torrentAction(hostId, 'resume', t.id))}
-                onRemove={setRemoving}
+                onRemove={(t) => setRemoving([t])}
+                selection={selection}
+                onSelection={setSelection}
+                onRemoveSelected={() => selection && setRemoving(chosen(selection, torrents))}
               />
 
               <Where daemon={daemon} hostId={hostId} />
@@ -322,15 +376,20 @@ export default function HostTorrents() {
         </>
       )}
 
-      {removing && (
+      {removing && removing.length > 0 && (
         <Sheet
-          title="Remove this torrent?"
-          subtitle={removing.name}
+          title={removing.length === 1 ? 'Remove this torrent?' : `Remove ${removing.length} torrents?`}
+          subtitle={
+            removing.length === 1
+              ? removing[0].name
+              : `${removing[0].name} and ${removing.length - 1} more`
+          }
           onClose={() => setRemoving(null)}
         >
           <p className="sub">
-            Deluge stops working on it either way. What is being asked is whether the part already
-            downloaded goes too — {bytes(removing.done)} of it — which cannot be undone.
+            Deluge stops working on {removing.length === 1 ? 'it' : 'them'} either way. What is being
+            asked is whether the part already downloaded goes too — {bytes(downloaded(removing))} of
+            it — which cannot be undone.
           </p>
           <p className="sub">
             It takes a few seconds: deluge's own client does the work and then refuses to exit, so
@@ -551,54 +610,50 @@ function SetUp({
  * .torrent file is something you were given — mailed, or downloaded by the
  * browser on the host itself — and picking it hands its bytes over as they are,
  * rather than asking the host to go and fetch a link that may need a login.
+ * Files come in handfuls — a season, a discography — so what is picked goes
+ * onto a list and the list is what is added, each file a torrent of its own.
+ * The list is there because a phone's picker cannot be relied on for several
+ * files at once: some hand over one, and some hand over nothing when several
+ * were ticked. Picking again adds to it, so every phone has a way to add
+ * several in one go.
  */
 function AddTorrent({
   daemon,
   busy,
+  adding,
   onAdd,
+  onFiles,
   onFail,
 }: {
   daemon: TorrentDaemon
   busy: string | null
-  onAdd: (input: { source?: string; file?: string; name?: string }) => void
+  /** Which picked file is going, while more than a link is being added. */
+  adding: TorrentProgress | null
+  onAdd: (source: string) => void
+  /** Adds what was picked, and settles when every file has been tried. */
+  onFiles: (files: File[]) => Promise<void>
   onFail: (message: string) => void
 }) {
   const [source, setSource] = useState('')
   const picker = useRef<HTMLInputElement>(null)
-
-  const addLink = () => {
-    onAdd({ source: source.trim() })
-    setSource('')
+  const folderPicker = useRef<HTMLInputElement>(null)
+  const [picks, setPicks] = useState<File[]>([])
+  // The picker is remade rather than emptied, and only once nothing is left
+  // that could still need it: on a phone the files are the picker's own, and
+  // one emptied while they are waiting to be read takes them away.
+  const [generation, setGeneration] = useState(0)
+  const clear = () => {
+    setPicks([])
+    setGeneration((g) => g + 1)
+  }
+  const addPicks = async () => {
+    await onFiles(picks)
+    clear()
   }
 
-  const addFile = async (file: File) => {
-    // A picker that still holds last time's file will not fire for the same one
-    // again, and picking the same torrent twice is a reasonable thing to do.
-    const done = () => {
-      if (picker.current) picker.current.value = ''
-    }
-    // Nothing that size is a torrent file, and a phone should not spend a
-    // minute uploading a video to be told so by the host.
-    if (file.size > MAX_TORRENT_BYTES) {
-      onFail(`${file.name} is too large to be a .torrent file.`)
-      done()
-      return
-    }
-    let picked: { text: string; base64: string }
-    try {
-      picked = await readFile(file)
-    } catch {
-      onFail(`${file.name} could not be read.`)
-      done()
-      return
-    }
-    if (!looksLikeATorrent(picked.text)) {
-      onFail(`${file.name} is not a .torrent file.`)
-      done()
-      return
-    }
-    onAdd({ file: picked.base64, name: file.name })
-    done()
+  const addLink = () => {
+    onAdd(source.trim())
+    setSource('')
   }
 
   return (
@@ -621,12 +676,60 @@ function AddTorrent({
       </Field>
       <div className="actions" style={{ marginTop: 0 }}>
         <button className="primary" onClick={addLink} disabled={!!busy || source.trim() === ''}>
-          {busy === 'add' ? 'Adding…' : 'Add'}
+          {busy === 'add' && !adding ? 'Adding…' : 'Add'}
         </button>
         <button className="secondary" onClick={() => picker.current?.click()} disabled={!!busy}>
-          Pick a file
+          {picks.length === 0 ? 'Pick files' : 'Pick more'}
         </button>
       </div>
+      {/* A folder is the way to hand over many at once on a phone whose
+          picker will only give up one file at a time: everything under it
+          comes back in one answer, and the torrents are taken out of that. */}
+      <button
+        className="secondary block"
+        style={{ marginTop: 8 }}
+        onClick={() => folderPicker.current?.click()}
+        disabled={!!busy}
+      >
+        Pick a folder of .torrent files
+      </button>
+      {picks.length > 0 && (
+        <>
+          <div className="upload-list">
+            {picks.slice(0, PICKS_SHOWN).map((file, index) => (
+              <div key={`${file.name}-${file.size}-${file.lastModified}`}>
+                <span className="name">{file.name}</span>
+                <span className="size">{bytes(file.size)}</span>
+                <button
+                  className="remove"
+                  onClick={() => setPicks((current) => current.filter((_, i) => i !== index))}
+                  disabled={!!busy}
+                  aria-label={`Remove ${file.name}`}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            {picks.length > PICKS_SHOWN && (
+              <div>
+                <span className="name sub">and {picks.length - PICKS_SHOWN} more</span>
+              </div>
+            )}
+          </div>
+          <div className="actions">
+            <button className="primary" onClick={() => void addPicks()} disabled={!!busy}>
+              {adding
+                ? adding.total === 1
+                  ? 'Adding…'
+                  : `Adding ${adding.current} of ${adding.total}…`
+                : `Add ${picks.length} file${picks.length === 1 ? '' : 's'}`}
+            </button>
+            <button className="ghost" onClick={clear} disabled={!!busy}>
+              Clear
+            </button>
+          </div>
+        </>
+      )}
       {/* No accept list on purpose. It is the obvious thing to write and it
           makes the picker useless: iOS Files and Android's picker both filter
           by the type the system knows a file as, ".torrent" maps to nothing
@@ -634,17 +737,49 @@ function AddTorrent({
           file is greyed out and the one you want cannot be chosen. So anything
           can be picked, and what it is is decided by reading it. */}
       <input
-        ref={picker}
+        key={`folder-${generation}`}
+        ref={folderPicker}
         type="file"
         hidden
+        {...FOLDER_PICKER}
         onChange={(e) => {
-          const file = e.target.files?.[0]
-          if (file) void addFile(file)
+          const found = torrentsIn(Array.from(e.target.files ?? []))
+          if (found.length === 0) {
+            onFail('There are no .torrent files in that folder, or the browser would not hand it over.')
+            return
+          }
+          setPicks((current) => mergePicks(current, found))
+        }}
+      />
+      <input
+        key={`files-${generation}`}
+        ref={picker}
+        type="file"
+        multiple
+        hidden
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? [])
+          // A picker that answers with nothing has still answered, and saying
+          // so beats a screen that looks as though it was never asked.
+          if (files.length === 0) {
+            onFail('The picker handed back no files. Pick them again — one at a time works on every phone.')
+            return
+          }
+          setPicks((current) => mergePicks(current, files))
         }}
       />
     </Card>
   )
 }
+
+/** How many picked files are listed by name before the rest are a number: a
+ *  folder can hold hundreds, and the button under the list has to stay in
+ *  reach. */
+const PICKS_SHOWN = 8
+
+/** What makes a file input pick a folder and everything under it. React's
+ *  types do not know the attributes, which is why they are spread on. */
+const FOLDER_PICKER = { webkitdirectory: '', directory: '' } as Record<string, string>
 
 /** What the host is working on. The bar is the point of the screen, so it is
  *  the widest thing on the card and everything else is a line under it. */
@@ -656,6 +791,9 @@ function Torrents({
   onPause,
   onResume,
   onRemove,
+  selection,
+  onSelection,
+  onRemoveSelected,
 }: {
   daemon: TorrentDaemon
   /** What deluge last said, which is not always what it said this time. */
@@ -666,13 +804,25 @@ function Torrents({
   onPause: (torrent: Torrent) => void
   onResume: (torrent: Torrent) => void
   onRemove: (torrent: Torrent) => void
+  /** The torrents ticked to remove together, or null when nobody is choosing. */
+  selection: Selection | null
+  onSelection: (selection: Selection | null) => void
+  onRemoveSelected: () => void
 }) {
+  // The list is asked for again every few seconds, and a torrent deluge has
+  // dropped in the meantime is not one that can still be removed.
+  useEffect(() => {
+    if (!selection) return
+    const kept = prune(selection, torrents)
+    if (kept !== selection) onSelection(kept)
+  }, [selection, torrents, onSelection])
+
   if (torrents.length === 0) {
     return (
       <Card>
         <div className="sub">
           {daemon.running
-            ? 'Nothing is downloading. Paste a magnet link above, or pick a .torrent file.'
+            ? 'Nothing is downloading. Paste a magnet link above, or pick .torrent files.'
             : 'Nothing is downloading, and the daemon is stopped. Adding a torrent starts it.'}
         </div>
       </Card>
@@ -683,6 +833,46 @@ function Torrents({
       <SectionTitle>
         {torrents.length} {torrents.length === 1 ? 'torrent' : 'torrents'}
       </SectionTitle>
+      {/* Clearing out a list one sheet at a time is the chore this is for, so
+          it is offered as soon as there is more than one to clear. */}
+      {torrents.length > 1 &&
+        (selection === null ? (
+          <button
+            className="secondary block"
+            style={{ marginBottom: 12 }}
+            onClick={() => onSelection(NOTHING)}
+            disabled={!!busy}
+          >
+            Select torrents to remove
+          </button>
+        ) : (
+          <Card className="select-bar">
+            <div className="row between">
+              <div className="title">{selection.size} selected</div>
+              <button
+                className="ghost"
+                onClick={() =>
+                  onSelection(selection.size === torrents.length ? NOTHING : everything(torrents))
+                }
+                disabled={!!busy}
+              >
+                {selection.size === torrents.length ? 'Select none' : 'Select all'}
+              </button>
+            </div>
+            <div className="actions">
+              <button className="secondary" onClick={() => onSelection(null)} disabled={!!busy}>
+                Cancel
+              </button>
+              <button
+                className="danger"
+                onClick={onRemoveSelected}
+                disabled={!!busy || selection.size === 0}
+              >
+                {selection.size === 0 ? 'Remove' : `Remove ${selection.size}`}
+              </button>
+            </div>
+          </Card>
+        ))}
       {stale && (
         <Banner tone="warn">
           {daemon.running
@@ -699,6 +889,8 @@ function Torrents({
           onPause={() => onPause(torrent)}
           onResume={() => onResume(torrent)}
           onRemove={() => onRemove(torrent)}
+          selected={selection === null ? null : selection.has(torrent.id)}
+          onSelect={() => selection && onSelection(toggle(selection, torrent.id))}
         />
       ))}
     </>
@@ -712,6 +904,8 @@ function TorrentCard({
   onPause,
   onResume,
   onRemove,
+  selected,
+  onSelect,
 }: {
   torrent: Torrent
   /** The folder the downloader is using now, so a torrent that was added when
@@ -721,6 +915,9 @@ function TorrentCard({
   onPause: () => void
   onResume: () => void
   onRemove: () => void
+  /** Whether it is ticked, while torrents are being chosen; null otherwise. */
+  selected: boolean | null
+  onSelect: () => void
 }) {
   const state = torrent.state.toLowerCase()
   const paused = state === 'paused'
@@ -763,14 +960,23 @@ function TorrentCard({
         <Stat label="Peers" value={`${torrent.peers} of ${torrent.peersTotal}`} />
       </div>
 
-      <div className="actions">
-        <button className="secondary" onClick={paused ? onResume : onPause} disabled={!!busy}>
-          {paused ? 'Resume' : 'Pause'}
-        </button>
-        <button className="danger" onClick={onRemove} disabled={!!busy}>
-          Remove
-        </button>
-      </div>
+      {/* While torrents are being chosen the card's own buttons give way to
+          the tick: two ways to remove on one card is how the wrong one goes. */}
+      {selected === null ? (
+        <div className="actions">
+          <button className="secondary" onClick={paused ? onResume : onPause} disabled={!!busy}>
+            {paused ? 'Resume' : 'Pause'}
+          </button>
+          <button className="danger" onClick={onRemove} disabled={!!busy}>
+            Remove
+          </button>
+        </div>
+      ) : (
+        <label className="checkbox">
+          <input type="checkbox" checked={selected} onChange={onSelect} disabled={!!busy} />
+          Remove this one
+        </label>
+      )}
     </Card>
   )
 }
@@ -1001,36 +1207,4 @@ function tone(state: string): 'good' | 'warn' | 'bad' | 'neutral' | 'accent' {
   if (state === 'error') return 'bad'
   if (state === 'paused' || state === 'queued') return 'warn'
   return 'neutral'
-}
-
-/**
- * A picked file, read once: its bytes as a string for the check above, and the
- * base64 that goes in the request body.
- *
- * The encoding is done a chunk at a time because String.fromCharCode is given
- * the bytes as arguments, and a megabyte of them in one call is how a browser
- * is made to throw "too many arguments" on a file that is otherwise perfectly
- * ordinary.
- */
-async function readFile(file: File): Promise<{ text: string; base64: string }> {
-  const bytes = new Uint8Array(await file.arrayBuffer())
-  const chunk = 8192
-  let binary = ''
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
-  }
-  return { text: binary, base64: btoa(binary) }
-}
-
-/**
- * The same rule the server applies: a torrent file is a bencoded dictionary
- * with an info dictionary inside it.
- *
- * Asking here as well is not distrust of the server — it still refuses
- * everything this does. It is that the picker now offers every file on the
- * phone, so picking the wrong one is easy, and being told which file it was
- * beats a round trip to the host to be told the same thing about none.
- */
-function looksLikeATorrent(text: string): boolean {
-  return text.startsWith('d') && text.includes('4:info')
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/chinmay28/hostman/server/internal/sshx"
 	"github.com/chinmay28/hostman/server/internal/store"
+	"github.com/chinmay28/hostman/server/internal/wol"
 )
 
 // probeScript writes marker-delimited sections so one round trip yields
@@ -42,6 +43,10 @@ cat /etc/machine-id 2>/dev/null || cat /var/lib/dbus/machine-id 2>/dev/null || t
 printf '@@tools\n'
 if command -v VBoxManage >/dev/null 2>&1 || command -v vboxmanage >/dev/null 2>&1; then echo virtualbox; fi
 if command -v ollama >/dev/null 2>&1 || [ -x /usr/local/bin/ollama ]; then echo ollama; fi
+case " $(cat /sys/power/state 2>/dev/null) " in *" mem "*) echo sleep ;; esac
+printf '@@wake\n'
+wi=$(awk '$2 == "00000000" { print $1; exit }' /proc/net/route 2>/dev/null)
+if [ -n "$wi" ] && [ ! -d "/sys/class/net/$wi/wireless" ]; then cat "/sys/class/net/$wi/address" 2>/dev/null; fi
 printf '@@pagesize\n'
 getconf PAGESIZE 2>/dev/null || echo 4096
 printf '@@cpu1\n'
@@ -109,12 +114,27 @@ func parseProbe(out string) (*Probe, error) {
 	if id := sections["machineid"]; len(id) > 0 {
 		p.Facts.MachineID = strings.TrimSpace(id[0])
 	}
+	// The address of the wired card carrying the default route, which is what
+	// a wake-on-LAN packet has to name. A Wi-Fi card is left out on the host:
+	// almost none will wake a machine. Anything that is not one card's 48-bit
+	// address — a tunnel's all-zero one, InfiniBand's twenty bytes — is not
+	// kept either, so what is stored is always something that can be sent to.
+	if w := sections["wake"]; len(w) > 0 {
+		if mac, err := wol.ParseMAC(w[0]); err == nil {
+			p.Facts.WakeMAC = mac.String()
+		}
+	}
 	for _, tool := range sections["tools"] {
 		switch tool {
 		case "virtualbox":
 			p.Facts.VirtualBox = true
 		case "ollama":
 			p.Facts.Ollama = true
+		case "sleep":
+			// Not a tool, but the same kind of fact: something the machine
+			// either has or has not, which decides what the UI offers. The
+			// kernel lists "mem" where it can suspend — hostops.PowerStateFile.
+			p.Facts.CanSleep = true
 		}
 	}
 

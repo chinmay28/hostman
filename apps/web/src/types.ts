@@ -86,7 +86,46 @@ export interface Host {
   /** Whether the ollama command was on the host at the last probe. The
    *  host's page offers its models only where it was. */
   ollama: boolean
+  /** Whether the host's kernel offered a suspend state at the last probe —
+   *  an x86 PC does, a Raspberry Pi does not. Sleep is disabled without it. */
+  canSleep: boolean
+  /** The hardware address of the host's wired network card, as last probed —
+   *  what a wake-on-LAN packet names. Empty where it is on Wi-Fi or has not
+   *  been seen yet, and then it cannot be woken. */
+  wakeMac: string
   latest: Sample | null
+}
+
+/** One thing a host's sleep and wake schedule does or did. */
+export interface PowerScheduleEvent {
+  action: 'sleep' | 'wake'
+  /** When, as HostMan's own clock reads it: the offset is the server's. */
+  at: string
+  /** Why a past event did not happen. Absent where it did. */
+  error?: string
+}
+
+/** When a host sleeps and wakes by itself. */
+export interface PowerSchedule {
+  /** HH:MM on a 24-hour clock, on the machine HostMan runs on. */
+  sleepAt: string
+  wakeAt: string
+  /** Weekday numbers, 0 for Sunday to 6 for Saturday. Each time is taken on
+   *  its own calendar day. */
+  days: number[]
+  next: PowerScheduleEvent | null
+  /** Null where the schedule has not run since it was set. */
+  last: PowerScheduleEvent | null
+}
+
+/** The answer to every schedule request. */
+export interface PowerScheduleView {
+  /** Null for a host with no schedule. */
+  schedule: PowerSchedule | null
+  /** The time of day on the machine HostMan runs on, and its zone's name —
+   *  the clock the schedule's times are read on. */
+  clock: string
+  zone: string
 }
 
 export interface HostTestResult {

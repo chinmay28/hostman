@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -44,10 +45,17 @@ type Host struct {
 	// Ollama is whether the ollama command was on the host at the last probe.
 	// The UI offers a screen for its models only where it was.
 	Ollama bool `json:"ollama"`
+	// CanSleep is whether the host's kernel offered a suspend state at the
+	// last probe. The UI disables Sleep where it did not.
+	CanSleep bool `json:"canSleep"`
+	// WakeMAC is the hardware address of the wired card that carried the
+	// host's default route at the last probe, or empty where there was none.
+	// It outlives the host going offline, which is when it is used.
+	WakeMAC string `json:"wakeMac"`
 }
 
 const hostColumns = `id, name, address, port, username, host_key, status, last_error,
-	last_seen_at, hostname, os, kernel, arch, sudo_ok, created_at, is_self, machine_id, virtualbox, ollama`
+	last_seen_at, hostname, os, kernel, arch, sudo_ok, created_at, is_self, machine_id, virtualbox, ollama, can_sleep, wake_mac`
 
 func scanHost(row interface{ Scan(...any) error }) (*Host, error) {
 	var h Host
@@ -55,7 +63,7 @@ func scanHost(row interface{ Scan(...any) error }) (*Host, error) {
 	var created string
 	err := row.Scan(&h.ID, &h.Name, &h.Address, &h.Port, &h.Username, &h.HostKey,
 		&h.Status, &h.LastError, &lastSeen, &h.Hostname, &h.OS, &h.Kernel, &h.Arch,
-		&h.SudoOK, &created, &h.IsSelf, &h.MachineID, &h.VirtualBox, &h.Ollama)
+		&h.SudoOK, &created, &h.IsSelf, &h.MachineID, &h.VirtualBox, &h.Ollama, &h.CanSleep, &h.WakeMAC)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -163,24 +171,66 @@ type HostFacts struct {
 	// Ollama is whether the ollama command is installed, which decides
 	// whether the host gets a models screen at all.
 	Ollama bool
+	// CanSleep is whether the kernel lists a suspend state, which decides
+	// whether the host can be put to sleep.
+	CanSleep bool
+	// WakeMAC is the wired card's hardware address, for wake-on-LAN; empty
+	// where the host is on Wi-Fi or would not say.
+	WakeMAC string
 }
 
+// DownNoticeGrace is how long a host that accepted a power action may go on
+// answering before its notice is taken to be stale. A host goes a few seconds
+// after it accepts, and one shutting down keeps its SSH server up while its
+// services stop, so a probe can succeed in between; that success must not wipe
+// the explanation for the failures about to follow.
+const DownNoticeGrace = 2 * time.Minute
+
 // MarkHostOnline records a successful connection along with the host's facts.
+//
+// It also ends a notice left by MarkHostSentDown — the host is back — unless
+// the host has not yet been seen down and DownNoticeGrace has not passed, which
+// is a host still on its way.
 func (d *DB) MarkHostOnline(ctx context.Context, id int64, f HostFacts) error {
+	grace := fmt.Sprintf("-%d seconds", int(DownNoticeGrace.Seconds()))
 	_, err := d.sql.ExecContext(ctx, `
 		UPDATE hosts SET status = ?, last_error = '', last_seen_at = datetime('now'),
 			hostname = ?, os = ?, kernel = ?, arch = ?, sudo_ok = ?, machine_id = ?, is_self = ?,
-			virtualbox = ?, ollama = ?
+			virtualbox = ?, ollama = ?, can_sleep = ?, wake_mac = ?,
+			down_notice = CASE WHEN down_noted_at > datetime('now', ?) THEN down_notice ELSE '' END,
+			down_noted_at = CASE WHEN down_noted_at > datetime('now', ?) THEN down_noted_at END
 		WHERE id = ?`,
 		StatusOnline, f.Hostname, f.OS, f.Kernel, f.Arch, f.SudoOK, f.MachineID, f.IsSelf,
-		f.VirtualBox, f.Ollama, id)
+		f.VirtualBox, f.Ollama, f.CanSleep, f.WakeMAC, grace, grace, id)
 	return err
 }
 
 // MarkHostFailed records a failed connection attempt.
+//
+// A host that is offline because HostMan sent it there keeps the notice from
+// MarkHostSentDown as its error: that it was put to sleep explains the silence,
+// and the dial error that silence produces does not. Any other status records
+// the reason given — a changed host key is news whatever came before it.
+//
+// The failure also counts as having seen the host down, so the next successful
+// connection ends the notice however soon it comes.
 func (d *DB) MarkHostFailed(ctx context.Context, id int64, status, reason string) error {
-	_, err := d.sql.ExecContext(ctx,
-		`UPDATE hosts SET status = ?, last_error = ? WHERE id = ?`, status, reason, id)
+	_, err := d.sql.ExecContext(ctx, `
+		UPDATE hosts SET status = ?,
+			last_error = CASE WHEN ? = ? AND down_notice != '' THEN down_notice ELSE ? END,
+			down_noted_at = NULL
+		WHERE id = ?`, status, status, StatusOffline, reason, id)
+	return err
+}
+
+// MarkHostSentDown records that a host accepted a reboot, a shutdown or a
+// sleep: it is offline from now, and notice says why. The notice stays the
+// host's error through the failed connections that follow, until the host
+// answers again (see MarkHostOnline and MarkHostFailed for exactly when).
+func (d *DB) MarkHostSentDown(ctx context.Context, id int64, notice string) error {
+	_, err := d.sql.ExecContext(ctx, `
+		UPDATE hosts SET status = ?, last_error = ?, down_notice = ?, down_noted_at = datetime('now')
+		WHERE id = ?`, StatusOffline, notice, notice, id)
 	return err
 }
 

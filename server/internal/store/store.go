@@ -12,7 +12,11 @@ import (
 )
 
 // migrations are append-only. Never edit a migration that has shipped; add a
-// new one instead.
+// new one instead — and add it at the end. A database records how many it has
+// run, not which, so one slipped in above the last shifts every later
+// migration down a place: an install that had already run them is handed one
+// of them a second time and refuses to start. TestUpgradesFromEveryShippedOrder
+// holds the orders that have been out.
 var migrations = []string{
 	`CREATE TABLE settings (
 		key        TEXT PRIMARY KEY,
@@ -116,6 +120,32 @@ var migrations = []string{
 	// means the app is not forwarded.
 	`ALTER TABLE apps ADD COLUMN forward_port INTEGER NOT NULL DEFAULT 0`,
 	`ALTER TABLE apps ADD COLUMN forward_target_port INTEGER NOT NULL DEFAULT 0`,
+	// Whether the host's kernel can suspend, which decides whether the Sleep
+	// button on its page is one that can be pressed.
+	`ALTER TABLE hosts ADD COLUMN can_sleep INTEGER NOT NULL DEFAULT 0`,
+	// The hardware address of the host's wired network card, which is what a
+	// wake-on-LAN packet names. It has to be learned while the host is up,
+	// because the moment it is wanted is the moment the host cannot be asked.
+	`ALTER TABLE hosts ADD COLUMN wake_mac TEXT NOT NULL DEFAULT ''`,
+	// Why a host that HostMan itself sent down is not answering, and when it
+	// was sent. The poller's failures would otherwise replace "put to sleep
+	// from HostMan" with a dial error within one round; see MarkHostSentDown.
+	`ALTER TABLE hosts ADD COLUMN down_notice TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE hosts ADD COLUMN down_noted_at TEXT`,
+	// When a host sleeps and wakes by itself: times of day as minutes after
+	// midnight on HostMan's own clock, and the weekdays as a bit set. One row
+	// a host at most; no row means no schedule. The last_ columns are what
+	// became of the most recent run, for the host's page to show.
+	`CREATE TABLE power_schedules (
+		host_id     INTEGER PRIMARY KEY REFERENCES hosts(id) ON DELETE CASCADE,
+		sleep_at    INTEGER NOT NULL,
+		wake_at     INTEGER NOT NULL,
+		days        INTEGER NOT NULL,
+		last_action TEXT NOT NULL DEFAULT '',
+		last_at     TEXT,
+		last_error  TEXT NOT NULL DEFAULT '',
+		updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+	)`,
 }
 
 // DB wraps the SQLite handle.

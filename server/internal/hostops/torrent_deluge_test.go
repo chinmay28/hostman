@@ -70,16 +70,20 @@ func waitForDeluge(t *testing.T, conf string) {
 	t.Fatal("deluged never answered on its port")
 }
 
-func TestRealDelugeTakesWhatHostManSends(t *testing.T) {
+// realDeluge sets the downloader up under a temporary root and runs the daemon
+// the way its unit would, returning the root, a scratch folder and the stubbed
+// bin directory the scripts are to run with.
+func realDeluge(t *testing.T) (root, work, bin string) {
+	t.Helper()
 	requireDeluge(t)
-	root := t.TempDir()
-	work := t.TempDir()
+	root = t.TempDir()
+	work = t.TempDir()
 	conf := stateDir(root)
 
 	// systemd is the one thing still stubbed: this test is about deluge, and a
 	// unit file under a temporary root is not something to hand the machine's
 	// own init. is-active answers yes, because the daemon below really is.
-	bin := stubBin(t, map[string]string{
+	bin = stubBin(t, map[string]string{
 		"systemctl": `case "$1" in is-active) exit 0;; esac; exit 0`,
 	})
 
@@ -117,6 +121,141 @@ func TestRealDelugeTakesWhatHostManSends(t *testing.T) {
 		}
 	})
 	waitForDeluge(t, conf)
+	return root, work, bin
+}
+
+// Several files picked at once arrive as one add after another, with nothing
+// between them but the status HostMan reads back. Every one of them has to be
+// there afterwards.
+func TestRealDelugeTakesSeveralFilesInARow(t *testing.T) {
+	root, work, bin := realDeluge(t)
+	folder := filepath.Join(work, "downloads")
+
+	names := []string{"hostman-first", "hostman-second", "hostman-third", "hostman-fourth"}
+	for _, name := range names {
+		body := base64.StdEncoding.EncodeToString(aTorrentFile(name))
+		out, code := runScript(t, torrentAddFor(root, name+".torrent", "", folder), body, bin)
+		if code != 0 {
+			t.Fatalf("adding %s exited %d: %s", name, code, out)
+		}
+		if err := torrentConsoleError(out); err != nil {
+			t.Fatalf("deluge would not take %s: %v\n%s", name, err, out)
+		}
+		if out, code := runScript(t, torrentStatusFor(root, currentUser(t)), "", bin); code != 0 {
+			t.Fatalf("status after %s exited %d: %s", name, code, out)
+		}
+	}
+
+	got := map[string]bool{}
+	for _, torrent := range waitForTorrent(t, root, bin, len(names)).Torrents {
+		got[torrent.Name] = true
+	}
+	for _, name := range names {
+		if !got[name] {
+			t.Errorf("%s was handed over and is not in the list: %v", name, got)
+		}
+	}
+}
+
+// A list of picked files is sent a few at a time, so several adds reach the
+// daemon at once — each its own deluge-console, sharing one config directory.
+// Every one of them has to be there afterwards, including two whose files were
+// picked under the same name.
+func TestRealDelugeTakesSeveralFilesAtOnce(t *testing.T) {
+	root, work, bin := realDeluge(t)
+	folder := filepath.Join(work, "downloads")
+
+	names := []string{"hostman-a", "hostman-b", "hostman-c", "hostman-d", "hostman-e", "hostman-f"}
+	type result struct {
+		name, out string
+		code      int
+	}
+	results := make(chan result, len(names))
+	for i, name := range names {
+		go func() {
+			// The first two share a picked name, as the same file name in two
+			// folders would; the token is what keeps them apart on the host.
+			picked := name + ".torrent"
+			if i < 2 {
+				picked = "same.torrent"
+			}
+			body := base64.StdEncoding.EncodeToString(aTorrentFile(name))
+			script := torrentAddFor(root, incomingName(picked, fmt.Sprintf("t%d", i)), "", folder)
+			cmd := exec.Command("/bin/sh", "-c", script)
+			cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
+			cmd.Stdin = strings.NewReader(body)
+			out, err := cmd.Output()
+			code := 0
+			if err != nil {
+				code = 1
+			}
+			results <- result{name, string(out), code}
+		}()
+	}
+	for range names {
+		r := <-results
+		if r.code != 0 {
+			t.Errorf("adding %s failed: %s", r.name, r.out)
+			continue
+		}
+		if err := torrentConsoleError(r.out); err != nil {
+			t.Errorf("deluge would not take %s: %v\n%s", r.name, err, r.out)
+		}
+	}
+
+	got := map[string]bool{}
+	for _, torrent := range waitForTorrent(t, root, bin, len(names)).Torrents {
+		got[torrent.Name] = true
+	}
+	for _, name := range names {
+		if !got[name] {
+			t.Errorf("%s was handed over and is not in the list: %v", name, got)
+		}
+	}
+	if left, _ := filepath.Glob(filepath.Join(stateDir(root), "incoming", "*")); len(left) != 0 {
+		t.Errorf("picked files were left behind on the host: %v", left)
+	}
+}
+
+// A selection is removed in one deluge-console: its rm is handed every id at
+// once. The ones named have to go, and the one that was not has to stay.
+func TestRealDelugeRemovesASelectionAtOnce(t *testing.T) {
+	root, work, bin := realDeluge(t)
+	folder := filepath.Join(work, "downloads")
+
+	names := []string{"hostman-keep", "hostman-go-1", "hostman-go-2", "hostman-go-3"}
+	for _, name := range names {
+		body := base64.StdEncoding.EncodeToString(aTorrentFile(name))
+		out, code := runScript(t, torrentAddFor(root, name+".torrent", "", folder), body, bin)
+		if code != 0 {
+			t.Fatalf("adding %s exited %d: %s", name, code, out)
+		}
+	}
+	var going []string
+	for _, torrent := range waitForTorrent(t, root, bin, len(names)).Torrents {
+		if torrent.Name != "hostman-keep" {
+			going = append(going, torrent.ID)
+		}
+	}
+	ids, err := cleanTorrentIDs(going)
+	if err != nil || len(ids) != 3 {
+		t.Fatalf("the selection came out as %v (%v)", ids, err)
+	}
+
+	if out, code := runScript(t, torrentActionFor(root, strings.Join(ids, " "), "remove", "1"), "", bin); code != 0 {
+		t.Fatalf("remove exited %d: %s", code, out)
+	}
+	left := waitForTorrent(t, root, bin, 1)
+	if left.Torrents[0].Name != "hostman-keep" {
+		t.Errorf("the torrent that was not selected is the one that went: %+v", left.Torrents)
+	}
+	if still := torrentsLeft(ids, left.Torrents); len(still) != 0 {
+		t.Errorf("selected torrents are still listed: %v", still)
+	}
+}
+
+func TestRealDelugeTakesWhatHostManSends(t *testing.T) {
+	root, work, bin := realDeluge(t)
 
 	// A daemon with nothing in it is an empty list, not trouble.
 	out, code := runScript(t, torrentStatusFor(root, currentUser(t)), "", bin)
