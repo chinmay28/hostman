@@ -41,9 +41,20 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Signed with the debug key so the release build sideloads as it
-            // stands. Anybody publishing to a store signs it with their own.
-            signingConfig = signingConfigs.getByName("debug")
+            // Signed with the release key when the build is handed one (the
+            // release workflow decodes it from the ANDROID_KEYSTORE_* secrets),
+            // so every release installs over the last. Without one, the debug
+            // key: it sideloads, but it differs from machine to machine, so an
+            // APK signed with it never installs over one built elsewhere.
+            signingConfig = System.getenv("ANDROID_KEYSTORE")?.takeIf { it.isNotEmpty() }?.let { path ->
+                signingConfigs.create("release") {
+                    storeFile = file(path)
+                    storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                    keyAlias = System.getenv("ANDROID_KEY_ALIAS")?.takeIf { it.isNotEmpty() } ?: "harbor"
+                    keyPassword = System.getenv("ANDROID_KEY_PASSWORD")?.takeIf { it.isNotEmpty() }
+                        ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                }
+            } ?: signingConfigs.getByName("debug")
         }
     }
 
